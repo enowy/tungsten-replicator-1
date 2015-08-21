@@ -2147,15 +2147,18 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
 
   def validate
     info("Checking for MySQL MyISAM tables")
-    if get_applier_datasource.get_value("select count(*) from information_schema.TABLES where table_schema not in ('mysql','information_schema','performance_schema') and lcase(engine) in ('myisam','maria', 'aria')").to_i > 0
+    datadir = get_applier_datasource.get_value("SHOW VARIABLES LIKE 'datadir'", "Value")
+    if datadir == nil
+      raise "Unable to determine datadir"
+    end
+    myisam_count = cmd_result("sudo -n find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' -prune -o -name '*.MYD' -print -quit 2>/dev/null | wc -l")
+    if myisam_count.to_i > 0
       warning("MyISAM tables exist within this instance - These tables are not crash safe and may lead to data loss in a failover")
     end
   end
-  
+
   def enabled?
-    has_is = get_applier_datasource.get_value("show schemas like 'information_schema'");
-    
-    super() && (has_is == "information_schema")
+    super()
   end
 end
 
