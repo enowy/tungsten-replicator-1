@@ -885,6 +885,7 @@ class Configurator
       ip_addresses = Timeout.timeout(5) {
         Resolv.getaddresses(hostname)
       }
+      ip_addresses.delete_if{|ip| ip.to_s() == ""}
       
       if ip_addresses.length == 0
         begin
@@ -915,6 +916,7 @@ class Configurator
       ip_addresses = Timeout.timeout(5) {
         Resolv.getaddresses(hostname)
       }
+      ip_addresses.delete_if{|ip| ip.to_s() == ""}
 
       if ip_addresses.length == 0
         begin
