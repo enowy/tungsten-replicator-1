@@ -492,7 +492,7 @@ module ConfigureDeploymentStepServices
         end
       
         notice("Provision the #{svc} replication service on #{@config.getProperty(HOST)}")
-        info(cmd_result("#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-replicator/scripts/tungsten_provision_slave #{args.join(' ')}"))
+        info(cmd_result("#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-replicator/bin/tungsten_provision_slave #{args.join(' ')}"))
         is_first = false
       }
     

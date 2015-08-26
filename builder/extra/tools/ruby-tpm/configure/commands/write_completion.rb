@@ -82,14 +82,14 @@ EOF
         "cluster-home/bin/tungsten_health_check",
         "cluster-home/bin/check_tungsten_backups",
         "cluster-home/bin/cluster_backup",
-        "tungsten-replicator/scripts/tungsten_provision_slave",
-        "tungsten-replicator/scripts/tungsten_provision_thl",
-        "tungsten-replicator/scripts/tungsten_read_master_events",
-        "tungsten-replicator/scripts/tungsten_get_position",
-        "tungsten-replicator/scripts/tungsten_set_position",
-        "tungsten-replicator/scripts/xtrabackup_to_slave",
-        "tungsten-replicator/scripts/mysqldump_to_slave",
-        "tungsten-replicator/scripts/multi_trepctl"
+        "tungsten-replicator/bin/tungsten_provision_slave",
+        "tungsten-replicator/bin/tungsten_provision_thl",
+        "tungsten-replicator/bin/tungsten_read_master_events",
+        "tungsten-replicator/bin/tungsten_get_position",
+        "tungsten-replicator/bin/tungsten_set_position",
+        "tungsten-replicator/bin/xtrabackup_to_slave",
+        "tungsten-replicator/bin/mysqldump_to_slave",
+        "tungsten-replicator/bin/multi_trepctl"
         ]
       scripts.each{
         |path|
