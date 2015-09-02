@@ -26,6 +26,14 @@ class TungstenReplicatorProvisionTHL
   end
   
   def provision_thl
+    @starting_master_position = nil
+    
+    if opt(:require_master_position) == false && opt(:provision_from_slave) == false
+      warn_on_master_position_change = true
+    else
+      warn_on_master_position_change = false
+    end
+    
     # Create a clean working space
     cleanup_sandbox()
     TU.mkdir_if_absent(opt(:working_dir))
@@ -114,8 +122,23 @@ class TungstenReplicatorProvisionTHL
     # Run the mysqldump command and load the contents directly into mysql
     # The output is parsed by egrep to find the CHANGE MASTER statement
     # and write it to another file
-    begin      
-      cmd = "#{mysqldump} --opt --single-transaction --master-data=2 --no-create-db --no-create-info #{opt(:schemas)}"
+    begin
+      if warn_on_master_position_change == true
+        begin
+          @starting_master_position = TI.sql_result_from_url("SHOW MASTER STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+        rescue => e
+          TU.debug("Ignoring exception while collecting starting master status")
+          TU.debug(e)
+        end
+      end
+      
+      if opt(:require_master_position) == false
+        master_data_argument = ""
+      else
+        master_data_argument = " --master-data=2"
+      end
+      
+      cmd = "#{mysqldump} --opt --single-transaction #{master_data_argument} --no-create-db --no-create-info #{opt(:schemas)}"
       script = File.open("#{opt(:tmp_dir)}/mysqldump.sh", "w")
       script.puts("#!/bin/bash")
       script.puts("#{cmd} | tee >(egrep \"^-- CHANGE MASTER\" > #{opt(:change_master_file)}) | #{mysql}")
@@ -166,7 +189,7 @@ class TungstenReplicatorProvisionTHL
           end
         end
       }
-    else
+    elsif opt(:require_master_position) == true
       # Parse the CHANGE MASTER information for the file number and position
       change_master_line = TU.cmd_result("cat #{opt(:change_master_file)}")
       if change_master_line != nil
@@ -307,6 +330,24 @@ class TungstenReplicatorProvisionTHL
       :required => false
     })
     
+    add_option(:extraction_type, {
+      :on => "--extract-from String",
+      :help => "The type of server you are going to extract from. Accepted values are: tungsten-master, tungsten-slave, mysql-native-slave, rds, rds-read-replica"
+    })
+    
+    add_option(:extraction_host, {
+      :on => "--extract-from-host String",
+      :help => "The hostname of a different MySQL server that will be used as the source for mysqldump. When given, the script will use 'SHOW SLAVE STATUS' to determine the binary log position on the master server. You must run 'STOP SLAVE' prior to executing tungsten_provision_thl.",
+      :required => false
+    })
+    
+    add_option(:extraction_port, {
+      :on => "--extract-from-port String",
+      :help => "The listening port of a different MySQL server that will be used as the source for mysqldump.",
+      :parse => method(:parse_integer_option),
+      :required => false
+    })
+    
     add_option(:tungsten_replicator_package, {
       :on => "--tungsten-replicator-package String",
       :help => "The location of a fresh Tungsten Replicator tar.gz package",
@@ -338,8 +379,16 @@ class TungstenReplicatorProvisionTHL
     
     add_option(:provision_from_slave, {
       :on => "--provision-from-slave String",
-      :parse => method(:parse_boolean_option),
+      :help => "Use this when provisioning from a Tungsten Replicator slave. The --sandbox-thl-port option must be given because the sandbox replicator will be started and create a listener for all other slaves to read from. The sandbox replicator will stay running after the command fixes. Run `tungsten_provision_thl cleanup` to stop it.",
+      :parse => method(:parse_boolean_option_blank_is_true),
       :default => false
+    })
+    
+    add_option(:require_master_position, {
+      :on => "--require-master-position [String]",
+      :help => "Set this to false on hosts where the replication user isn't able to run mysqldump with the '--master-data' option.",
+      :parse => method(:parse_boolean_option_blank_is_true),
+      :default => true
     })
     
     add_command(:provision, {
@@ -383,6 +432,12 @@ class TungstenReplicatorProvisionTHL
       @option_definitions[:schemas][:required] = false
     end
     
+    if opt(:provision_from_slave) == true && opt(:extraction_type) != nil && opt(:extraction_type) != "tungsten-slave"
+      TU.error("The --extracton-type and --provision-from-slave arguments should not be used together. Use --extraction-type=tungsten-slave.")
+    elsif opt(:provision_from_slave) == true
+      opt(:extraction_type, "tungsten-slave")
+    end
+    
     super()
     
     unless TU.is_valid?()
@@ -400,9 +455,20 @@ class TungstenReplicatorProvisionTHL
       unless TI.is_running?("replicator")
         TU.error("The replicator must be running with the #{opt(:service)} service OFFLINE. Try running `#{TI.service_path("replicator")} start offline`.")
       else
-        unless opt(:provision_from_slave) == true
-          unless ["master", "direct"].include?(TI.trepctl_value(opt(:service), "role"))
-            TU.error("The #{script_name()} script may only be run on a master replication service.")
+        service_role = TI.trepctl_value(opt(:service), "role")
+        if opt(:extraction_type) == nil
+          if ["master", "direct"].include?(service_role)
+            opt(:extraction_type, "tungsten-master")
+          elsif ["relay", "slave"].include?(service_role)
+            opt(:extraction_type, "tungsten-slave")
+          end
+        elsif opt(:extraction_type) == "tungsten-master"
+          unless ["master", "direct"].include?(service_role)
+            TU.error("The #{script_name()} script may not run on a #{service_role} service with --extraction-type=#{opt(:extraction_type)}")
+          end
+        elsif opt(:extraction_type) == "tungsten-slave"
+          unless ["relay", "slave"].include?(service_role)
+            TU.error("The #{script_name()} script may not run on a #{service_role} service with --extraction-type=#{opt(:extraction_type)}")
           end
         end
       end
@@ -457,8 +523,20 @@ class TungstenReplicatorProvisionTHL
     # File to store the CHANGE MASTER statement from mysqldump
     opt(:change_master_file, "#{opt(:tmp_dir)}/change_master.sql")
     
-    opt(:extraction_host, TI.setting(TI.setting_key(REPL_SERVICES, opt(:service), "repl_direct_datasource_host")))
-    opt(:extraction_port, TI.setting(TI.setting_key(REPL_SERVICES, opt(:service), "repl_direct_datasource_port")))
+    @extraction_ds = TI.datasource(opt(:service), true)
+    opt(:extraction_url, @extraction_ds.url())
+
+    if opt(:extraction_host) != nil
+      opt(:extraction_url, opt(:extraction_url).sub("#{@extraction_ds.host()}:", "#{opt(:extraction_host)}:"))
+    else
+      opt(:extraction_host, @extraction_ds.host())
+    end
+    
+    if opt(:extraction_port) != nil
+      opt(:extraction_url, opt(:extraction_url).sub(":#{@extraction_ds.port()}", ":#{opt(:extraction_port)}"))
+    else
+      opt(:extraction_port, @extraction_ds.port())
+    end
   end
   
   def get_mysql_options
@@ -583,6 +661,30 @@ class TungstenReplicatorProvisionTHL
   
   def cleanup(code = 0)
     cleanup = false
+    
+    if code == 0 && @starting_master_position != nil
+      begin
+        ending_master_position = TI.sql_result(opt(:service), "SHOW MASTER STATUS")
+        
+        starting_file = @starting_master_position[0]["File"]
+        starting_position = @starting_master_position[0]["Position"]
+        ending_file = ending_master_position[0]["File"]
+        ending_position =ending_master_position[0]["Position"]
+        different_positions = false
+        if starting_file != ending_file
+          different_positions = true
+        elsif starting_position != ending_position
+          different_positions = true
+        end
+        
+        if different_positions == true
+          TU.warning("The MySQL master position has changed from #{starting_file}:#{starting_position} to #{ending_file}:#{ending_position}. This may indicate there are changes which were not represented in THL. Review the changes in this range or stop updates to MySQL before running tungsten_provision_thl.")
+        end
+      rescue => e
+        TU.debug("Ignoring exception while collecting ending master status")
+        TU.debug(e)
+      end
+    end
     
     # A succesful run includes a cleanup so the original replicator can
     # come back ONLINE

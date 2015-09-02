@@ -381,22 +381,14 @@ class TungstenInstall
       raise "Unable to run SQL command for the #{service} dataservice. The datasource type does not support SQL commands."
     end
     
+    ds = datasource(service, use_direct_extractor)      
+    sql_results_for_url(sql, ds.url(), ds.user(), ds.password())
+  end
+  
+  def sql_results_for_url(sql, url, user, password)
     cfg = nil
     command = nil
     begin
-      # Disable logging of command results so the password doesn't end up in a log file
-      TU.log_cmd_results?(false)
-      if use_direct_extractor == true
-        url= setting(setting_key(REPL_SERVICES, service, "repl_direct_datasource_jdbcqueryurl"))
-        user = setting(setting_key(REPL_SERVICES, service, "repl_direct_datasource_user"))
-        password = setting(setting_key(REPL_SERVICES, service, "repl_direct_datasource_password"))
-      else
-        url = setting(setting_key(REPL_SERVICES, service, "repl_datasource_jdbcqueryurl"))
-        user = setting(setting_key(REPL_SERVICES, service, "repl_datasource_user"))
-        password = setting(setting_key(REPL_SERVICES, service, "repl_datasource_password"))
-      end
-      TU.log_cmd_results?(true)
-      
       cfg = Tempfile.new("cnf")
       cfg.puts("url=#{url}")
       cfg.puts("user=#{user}")
@@ -443,6 +435,16 @@ class TungstenInstall
   def sql_result(service, sql, use_direct_extractor = false)
     results = sql_results(service, sql, use_direct_extractor)
     
+    return_first_result(results)
+  end
+  
+  def sql_result_for_url(sql, url, user, password)
+    results = sql_results_for_url(sql, url, user, password)
+    
+    return_first_result(results)
+  end
+  
+  def return_first_result(results)
     if results.size() == 0
       raise "No results were returned by #{sql}"
     end
