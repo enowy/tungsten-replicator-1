@@ -28,7 +28,7 @@ class TungstenReplicatorProvisionTHL
   def provision_thl
     @starting_master_position = nil
     
-    if opt(:require_master_position) == false && opt(:provision_from_slave) == false
+    if opt(:read_master_position) == false && opt(:provision_from_slave) == false
       warn_on_master_position_change = true
     else
       warn_on_master_position_change = false
@@ -132,7 +132,7 @@ class TungstenReplicatorProvisionTHL
         end
       end
       
-      if opt(:require_master_position) == false
+      if opt(:read_master_position) == false
         master_data_argument = ""
       else
         master_data_argument = " --master-data=2"
@@ -189,7 +189,7 @@ class TungstenReplicatorProvisionTHL
           end
         end
       }
-    elsif opt(:require_master_position) == true
+    elsif opt(:read_master_position) == true
       # Parse the CHANGE MASTER information for the file number and position
       change_master_line = TU.cmd_result("cat #{opt(:change_master_file)}")
       if change_master_line != nil
@@ -208,6 +208,13 @@ class TungstenReplicatorProvisionTHL
       else
         raise "Unable to find CHANGE MASTER data"
       end
+    elsif opt(:read_show_slave_position) == true
+      slave_status = TI.sql_result_from_url("SHOW SLAVE STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+      binlog_file = slave_status[0]["Master_Log_File"]
+      binlog_position = slave_status[0]["Exec_Master_Log_Pos"]
+      master_host = slave_status[0]["Master_Host"]
+      master_port = slave_status[0]["Master_Port"]
+      TU.notice("The sandbox has been provisioned to #{binlog_file}:#{binlog_position} on #{master_host}:#{master_port}")
     end
     
     old_trap = trap("INT") {
@@ -379,16 +386,8 @@ class TungstenReplicatorProvisionTHL
     
     add_option(:provision_from_slave, {
       :on => "--provision-from-slave String",
-      :help => "Use this when provisioning from a Tungsten Replicator slave. The --sandbox-thl-port option must be given because the sandbox replicator will be started and create a listener for all other slaves to read from. The sandbox replicator will stay running after the command fixes. Run `tungsten_provision_thl cleanup` to stop it.",
       :parse => method(:parse_boolean_option_blank_is_true),
       :default => false
-    })
-    
-    add_option(:require_master_position, {
-      :on => "--require-master-position [String]",
-      :help => "Set this to false on hosts where the replication user isn't able to run mysqldump with the '--master-data' option.",
-      :parse => method(:parse_boolean_option_blank_is_true),
-      :default => true
     })
     
     add_command(:provision, {
@@ -407,6 +406,9 @@ class TungstenReplicatorProvisionTHL
     add_command(:generate_schema_file, {
       :help => "Output the SQL to create the listed schemas"
     })
+    
+    opt(:read_master_position, true)
+    opt(:read_show_slave_position, false)
   end
   
   def get_offline_services_list
@@ -469,6 +471,21 @@ class TungstenReplicatorProvisionTHL
         elsif opt(:extraction_type) == "tungsten-slave"
           unless ["relay", "slave"].include?(service_role)
             TU.error("The #{script_name()} script may not run on a #{service_role} service with --extraction-type=#{opt(:extraction_type)}")
+          end
+        elsif opt(:extraction_type) == "mysql-slave"  
+          opt(:read_master_position, false)
+          opt(:read_show_slave_position, true)
+          if opt(:extraction_host) == nil && opt(:extraction_port) == nil
+            TU.error("Either --extraction-host or --extraction-port is required when --extraction-type=mysql-slave")
+          end
+        elsif opt(:extraction_type) == "rds" 
+          opt(:read_master_position, false)
+          opt(:read_show_slave_position, true)
+        elsif opt(:extraction_type) == "rds-read-replica"  
+          opt(:read_master_position, false)
+          opt(:read_show_slave_position, true)
+          if opt(:extraction_host) == nil
+            TU.error("The --extraction-host argument is required when --extraction-type=rds-read-replica")
           end
         end
       end
@@ -536,6 +553,20 @@ class TungstenReplicatorProvisionTHL
       opt(:extraction_url, opt(:extraction_url).sub(":#{@extraction_ds.port()}", ":#{opt(:extraction_port)}"))
     else
       opt(:extraction_port, @extraction_ds.port())
+    end
+    
+    if opt(:read_master_position) == true
+      master_position = TI.sql_result_from_url("SHOW MASTER STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+      if master_position.length() == 0
+        TU.error("Unable to run SHOW MASTER STATUS on #{opt(:extraction_host)}:#{opt(:extraction_port)}")
+      end
+    end
+    
+    if opt(:read_show_slave_position) == true
+      slave_status = TI.sql_result_from_url("SHOW SLAVE STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+      if slave_status[0]["Slave_SQL_Running"].downcase() == "yes"
+        TU.error("The slave SQL thread at #{opt(:extraction_host)}:#{opt(:extraction_port)} must be stopped before tungsten_provision_thl can continue.")
+      end
     end
   end
   

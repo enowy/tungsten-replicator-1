@@ -382,10 +382,10 @@ class TungstenInstall
     end
     
     ds = datasource(service, use_direct_extractor)      
-    sql_results_for_url(sql, ds.url(), ds.user(), ds.password())
+    sql_results_from_url(sql, ds.url(), ds.user(), ds.password())
   end
   
-  def sql_results_for_url(sql, url, user, password)
+  def sql_results_from_url(sql, url, user, password)
     cfg = nil
     command = nil
     begin
@@ -438,8 +438,8 @@ class TungstenInstall
     return_first_result(results)
   end
   
-  def sql_result_for_url(sql, url, user, password)
-    results = sql_results_for_url(sql, url, user, password)
+  def sql_result_from_url(sql, url, user, password)
+    results = sql_results_from_url(sql, url, user, password)
     
     return_first_result(results)
   end
