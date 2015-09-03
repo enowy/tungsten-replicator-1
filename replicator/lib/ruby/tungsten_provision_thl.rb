@@ -26,6 +26,8 @@ class TungstenReplicatorProvisionTHL
   end
   
   def provision_thl
+    @starting_master_position = nil
+    
     # Create a clean working space
     cleanup_sandbox()
     TU.mkdir_if_absent(opt(:working_dir))
@@ -115,6 +117,15 @@ class TungstenReplicatorProvisionTHL
     # The output is parsed by egrep to find the CHANGE MASTER statement
     # and write it to another file
     begin
+      if opt(:warn_on_master_position_change) == true
+        begin
+          @starting_master_position = TI.sql_result_from_url("SHOW MASTER STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+        rescue => e
+          TU.debug("Ignoring exception while collecting starting master status")
+          TU.debug(e)
+        end
+      end
+      
       if opt(:read_master_position) == false
         master_data_argument = ""
       else
@@ -391,6 +402,7 @@ class TungstenReplicatorProvisionTHL
     })
     
     opt(:read_master_position, true)
+    opt(:warn_on_master_position_change, false)
     opt(:read_show_slave_position, false)
     opt(:read_tungsten_position, false)
   end
@@ -463,16 +475,16 @@ class TungstenReplicatorProvisionTHL
           opt(:read_master_position, false)
           opt(:read_show_slave_position, true)
           if opt(:extraction_host) == nil && opt(:extraction_port) == nil
-            TU.error("Either --extraction-host or --extraction-port is required when --extraction-type=mysql-slave")
+            TU.error("Either --extract-from-host or --extraction-port is required when --extraction-type=mysql-slave")
           end
         elsif opt(:extraction_type) == "rds" 
           opt(:read_master_position, false)
-          opt(:read_show_slave_position, true)
+          opt(:warn_on_master_position_change, true)
         elsif opt(:extraction_type) == "rds-read-replica"  
           opt(:read_master_position, false)
           opt(:read_show_slave_position, true)
           if opt(:extraction_host) == nil
-            TU.error("The --extraction-host argument is required when --extraction-type=rds-read-replica")
+            TU.error("The --extract-from-host argument is required when --extraction-type=rds-read-replica")
           end
         end
         
@@ -487,13 +499,17 @@ class TungstenReplicatorProvisionTHL
           opt(:read_show_slave_position, true)
         elsif opt(:extraction_type) == "rds" 
           opt(:read_master_position, false)
-          opt(:read_show_slave_position, true)
+          opt(:read_show_slave_position, false)
         elsif opt(:extraction_type) == "rds-read-replica"  
           opt(:read_master_position, false)
           opt(:read_show_slave_position, true)
         else
           TU.error("Unable to accept #{opt(:extraction_type)} value for --extract-from")
         end
+      end
+      
+      unless TU.is_valid?()
+        return TU.is_valid?()
       end
       
       if opt(:provision_from_slave) == true
@@ -698,6 +714,30 @@ class TungstenReplicatorProvisionTHL
   
   def cleanup(code = 0)
     cleanup = false
+    
+    if code == 0 && @starting_master_position != nil
+      begin
+        ending_master_position = TI.sql_result_from_url("SHOW MASTER STATUS", opt(:extraction_url), @extraction_ds.user(), @extraction_ds.password())
+        
+        starting_file = @starting_master_position[0]["File"]
+        starting_position = @starting_master_position[0]["Position"]
+        ending_file = ending_master_position[0]["File"]
+        ending_position =ending_master_position[0]["Position"]
+        different_positions = false
+        if starting_file != ending_file
+          different_positions = true
+        elsif starting_position != ending_position
+          different_positions = true
+        end
+        
+        if different_positions == true
+          TU.warning("The MySQL master position has changed from #{starting_file}:#{starting_position} to #{ending_file}:#{ending_position}. This may indicate there are changes which were not represented in THL. Review the changes in this range or stop updates to MySQL before running tungsten_provision_thl.")
+        end
+      rescue => e
+        TU.debug("Ignoring exception while collecting ending master status")
+        TU.debug(e)
+      end
+    end
     
     # A succesful run includes a cleanup so the original replicator can
     # come back ONLINE
