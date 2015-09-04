@@ -1303,7 +1303,7 @@ module ClusterCommandModule
                 # Print a notice if we found a remote path to use since
                 # the user may not know it is there and the behavior could
                 # cause unexpected behavior.
-                if path == Configurator.instance.get_base_path()
+                if path == Configurator.instance.get_base_path() && Configurator.instance.is_localhost?(config_obj.getProperty(HOST)) != true
                   host = config_obj.getProperty(HOST)
                   
                   Configurator.instance.warning("Using #{path} package on #{host} for local installation")
