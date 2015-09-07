@@ -2147,13 +2147,33 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
 
   def validate
     info("Checking for MySQL MyISAM tables")
+
     datadir = get_applier_datasource.get_value("SHOW VARIABLES LIKE 'datadir'", "Value")
+
     if datadir == nil
-      raise "Unable to determine datadir"
-    end
-    myisam_count = cmd_result("sudo -n find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' -prune -o -name '*.MYD' -print -quit 2>/dev/null | wc -l")
-    if myisam_count.to_i > 0
-      warning("MyISAM tables exist within this instance - These tables are not crash safe and may lead to data loss in a failover")
+      warning "Unable to determine datadir"
+    else
+      test_cmd= "test -x \"#{datadir}\""
+      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' -prune -o -name '*.MYD' -print -quit"
+
+      # Check if we can run as root
+      if @config.getProperty(get_host_key(ROOT_PREFIX)) == "true"
+        test_cmd= "sudo -n " +  test_cmd
+        find_cmd = "sudo -n " + find_cmd
+      end
+
+      begin
+        # Test for the existance of a data directory with execute permissions - needed to list directory contents
+        cmd_result(test_cmd)
+        # Run the bash find command to search for MyISAM files having an extension of MYD. Quit after the first match.
+        myisam_result = cmd_result(find_cmd)
+        if myisam_result.include? ".MYD"
+          warning("MyISAM tables exist within this instance - These tables are not crash safe and may lead to data loss in a failover")
+        end
+        # If an error was raised then one of those two commands failed, indicating a lack of permissions.
+        rescue CommandError => ce
+          warning("Unable to determine if MyISAM tables exist. Check MySQL file/directory permissions or add --root-command-prefix=true to your configuration.")
+      end
     end
   end
 
@@ -2161,6 +2181,7 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     super()
   end
 end
+
 
 class MySQLDumpCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
