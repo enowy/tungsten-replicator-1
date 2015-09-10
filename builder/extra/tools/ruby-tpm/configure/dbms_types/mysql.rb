@@ -2172,7 +2172,7 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
         end
         # If an error was raised then one of those two commands failed, indicating a lack of permissions.
         rescue CommandError => ce
-          warning("Unable to determine if MyISAM tables exist. Check MySQL file/directory permissions or add --root-command-prefix=true to your configuration.")
+          warning("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories.")
       end
     end
   end
