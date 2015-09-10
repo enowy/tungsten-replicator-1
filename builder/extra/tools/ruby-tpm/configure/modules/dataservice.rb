@@ -1656,7 +1656,14 @@ class ReplicationServiceRepositionOnSourceIDChange < ConfigurePrompt
   include ReplicationServicePrompt
   
   def initialize
-    super(REPL_SVC_REPOSITION_ON_SOURCE_ID_CHANGE, "The master will come ONLINE from the current position if the stored source_id does not match the value in the static properties.", PV_BOOLEAN, "true")
+    if Configurator.instance.is_enterprise?()
+      enabled = "true"
+      msg = "The master will come ONLINE from the current position if the stored source_id does not match the value in the static properties."
+    else
+      enabled = "false"
+      msg = "The master will come ONLINE from the saved position even if the stored source_id does not match the value in the static properties."
+    end
+    super(REPL_SVC_REPOSITION_ON_SOURCE_ID_CHANGE, msg, PV_BOOLEAN, enabled)
   end
 end
 
