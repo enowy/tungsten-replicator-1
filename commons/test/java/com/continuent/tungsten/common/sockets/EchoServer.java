@@ -24,12 +24,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.security.GeneralSecurityException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+import com.continuent.tungsten.common.security.AuthenticationInfo;
 
 /**
  * Implements a simple echo server that echoes back bytes sent to it. The server
@@ -41,6 +43,8 @@ public class EchoServer implements Runnable
     private final String                 host;
     private final int                    port;
     private final boolean                useSSL;
+    private String                       keystoreAlias     = null;
+    private AuthenticationInfo           securityInfo      = null;
 
     // Latch to signal server is ready. This prevents race conditions around
     // start-up so that clients do not connect too quickly.
@@ -57,11 +61,14 @@ public class EchoServer implements Runnable
     /**
      * Create a new echo server instance.
      */
-    public EchoServer(String host, int port, boolean useSSL)
+    public EchoServer(String host, int port, boolean useSSL,
+            String serverKeystoreAlias, AuthenticationInfo securityInfo)
     {
         this.host = host;
         this.port = port;
         this.useSSL = useSSL;
+        this.keystoreAlias = serverKeystoreAlias;
+        this.securityInfo = securityInfo;
     }
 
     public Throwable getThrowable()
@@ -75,14 +82,14 @@ public class EchoServer implements Runnable
      * @throws InterruptedException Thrown if wait is interrupted.
      */
     public void start() throws IOException, ConfigurationException,
-            InterruptedException
+            InterruptedException, GeneralSecurityException
     {
         // Configure and connect.
         logger.info("Binding server: host=" + host + " port=" + port
                 + " useSSL=" + useSSL);
         socketService = new ServerSocketService();
         socketService.setAddress(new InetSocketAddress(host, port));
-        socketService.setUseSSL(useSSL);
+        socketService.setUseSSL(useSSL, keystoreAlias, securityInfo);
         socketService.bind();
 
         // Spawn ourselves in a separate server.

@@ -28,6 +28,7 @@ import java.security.KeyStore;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -36,6 +37,7 @@ import javax.net.ssl.X509KeyManager;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Implements an class to generate SSLSocketFactory instances. The author
@@ -62,12 +64,52 @@ public class SSLSocketFactoryGenerator
     {
         this.alias = alias;
         this.securityPropertiesAuthenticationInfo = securityPropertiesAuthenticationInfo;
-        this.keystoreLocation = securityPropertiesAuthenticationInfo
-                .getKeystoreLocation();
-        this.trustStoreLocation = securityPropertiesAuthenticationInfo
-                .getTruststoreLocation();
+        this.keystoreLocation = (securityPropertiesAuthenticationInfo != null)
+                ? securityPropertiesAuthenticationInfo.getKeystoreLocation()
+                : SecurityHelper.getKeyStoreLocation();
+        this.trustStoreLocation = (securityPropertiesAuthenticationInfo != null)
+                ? securityPropertiesAuthenticationInfo.getTruststoreLocation()
+                : SecurityHelper.getTrustStoreLocation();
     }
 
+    /**
+     * Creates the SSLContext to be used when creating sockets or server sockets.
+     * This uses the custom alias selector
+     * 
+     * @return
+     * @throws IOException
+     * @throws GeneralSecurityException
+     */
+    private SSLContext getSSLContext() throws IOException,
+            GeneralSecurityException
+    {
+        KeyManager[] keyManagers = getKeyManagers();
+        TrustManager[] trustManagers = getTrustManagers();
+
+        // For each key manager, check if it is a X509KeyManager (because we
+        // will override its //functionality
+        for (int i = 0; i < keyManagers.length; i++)
+        {
+            if (keyManagers[i] instanceof X509KeyManager)
+            {
+                keyManagers[i] = new AliasSelectorKeyManager(
+                        (X509KeyManager) keyManagers[i], alias);
+            }
+        }
+
+        SSLContext context = SSLContext.getInstance("SSL");
+        context.init(keyManagers, trustManagers, null);
+
+        return context;
+    }
+
+    /**
+     * Get an SSLSocketFactory with the custom alias selector
+     * 
+     * @return
+     * @throws IOException
+     * @throws GeneralSecurityException
+     */
     public SSLSocketFactory getSSLSocketFactory()
             throws IOException, GeneralSecurityException
     {
@@ -81,27 +123,35 @@ public class SSLSocketFactoryGenerator
         // --- Alias defined. Use custom alias selector ---
         else
         {
-            KeyManager[] keyManagers = getKeyManagers();
-            TrustManager[] trustManagers = getTrustManagers();
-
-            // For each key manager, check if it is a X509KeyManager (because we
-            // will override its //functionality
-            for (int i = 0; i < keyManagers.length; i++)
-            {
-                if (keyManagers[i] instanceof X509KeyManager)
-                {
-                    keyManagers[i] = new AliasSelectorKeyManager(
-                            (X509KeyManager) keyManagers[i], alias);
-                }
-            }
-
-            SSLContext context = SSLContext.getInstance("SSL");
-            context.init(keyManagers, trustManagers, null);
-
+            SSLContext context = this.getSSLContext();
             SSLSocketFactory ssf = context.getSocketFactory();
             return ssf;
         }
-
+    }
+    
+    /**
+     * Get an SSLServerSocketFactory with the custom alias selector
+     * 
+     * @return
+     * @throws IOException
+     * @throws GeneralSecurityException
+     */
+    public SSLServerSocketFactory getSSLServerSocketFactory() throws IOException,
+            GeneralSecurityException
+    {
+        // --- No alias defined. Use default SSL socket factory ---
+        if (this.alias == null)
+        {
+            logger.debug("No keystore alias entry defined. Will use default SSLServerSocketFactory selecting 1st entry in keystore !");
+            return (SSLServerSocketFactory)SSLServerSocketFactory.getDefault();
+        }
+        // --- Alias defined. Use custom alias selector ---
+        else
+        {
+            SSLContext context = this.getSSLContext();
+            SSLServerSocketFactory ssf = context.getServerSocketFactory();
+            return ssf;
+        }
     }
 
     public String getKeyStorePassword()

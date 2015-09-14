@@ -108,7 +108,7 @@ public class SecurityHelperTest extends TestCase
     /**
      * Reset system properties to null value
      */
-    private void resetSecuritySystemProperties()
+    public static void resetSecuritySystemProperties()
     {
         System.clearProperty("javax.net.ssl.keyStore");
         System.clearProperty("javax.net.ssl.keyStorePassword");

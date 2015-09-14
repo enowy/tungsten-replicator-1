@@ -31,7 +31,17 @@ import java.text.MessageFormat;
 import java.util.Enumeration;
 import java.util.HashMap;
 
+import javax.xml.bind.annotation.XmlRootElement;
+
 import org.apache.log4j.Logger;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.ObjectWriter;
+import org.codehaus.jackson.map.SerializationConfig.Feature;
+import org.codehaus.jackson.map.annotate.JsonSerialize;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
@@ -48,6 +58,8 @@ import com.continuent.tungsten.common.utils.CLUtils;
  * @author <a href="mailto:ludovic.launer@continuent.com">Ludovic Launer</a>
  * @version 1.0
  */
+@XmlRootElement
+@JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public final class AuthenticationInfo
 {
     private static final Logger     logger                                   = Logger.getLogger(AuthenticationInfo.class);
@@ -78,16 +90,16 @@ public final class AuthenticationInfo
     // application
     private HashMap<String, String> mapKeystoreAliasesForTungstenApplication = new HashMap<String, String>();
 
-    public final static String      AUTHENTICATION_INFO_PROPERTY             = "authenticationInfo";
-    public final static String      TUNGSTEN_AUTHENTICATION_REALM            = "tungstenAutenthicationRealm";
+    public transient final static String      SECURITY_INFO_PROPERTY             = "securityInfo";
+    public transient final static String      TUNGSTEN_AUTHENTICATION_REALM            = "tungstenAutenthicationRealm";
     // Possible command line parameters
-    public final static String      USERNAME                                 = "-username";
-    public final static String      PASSWORD                                 = "-password";
-    public final static String      KEYSTORE_LOCATION                        = "-keystoreLocation";
-    public final static String      KEYSTORE_PASSWORD                        = "-keystorePassword";
-    public final static String      TRUSTSTORE_LOCATION                      = "-truststoreLocation";
-    public final static String      TRUSTSTORE_PASSWORD                      = "-truststorePassword";
-    public final static String      SECURITY_CONFIG_FILE_LOCATION            = "-securityProperties";
+    public transient final static String      USERNAME                                 = "-username";
+    public transient final static String      PASSWORD                                 = "-password";
+    public transient final static String      KEYSTORE_LOCATION                        = "-keystoreLocation";
+    public transient final static String      KEYSTORE_PASSWORD                        = "-keystorePassword";
+    public transient final static String      TRUSTSTORE_LOCATION                      = "-truststoreLocation";
+    public transient final static String      TRUSTSTORE_PASSWORD                      = "-truststorePassword";
+    public transient final static String      SECURITY_CONFIG_FILE_LOCATION            = "-securityProperties";
 
     /**
      * Creates a new <code>AuthenticationInfo</code> object
@@ -99,7 +111,7 @@ public final class AuthenticationInfo
 
     public AuthenticationInfo()
     {
-        this(null);
+        this((String) null);
     }
 
     /**
@@ -151,8 +163,15 @@ public final class AuthenticationInfo
         }
 
         // ---------------------- Check Keystore ----------------------------
+        String keystoreLocationProperty = (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR)
+                ? SecurityConf.CONNECTOR_SECURITY_KEYSTORE_LOCATION
+                : SecurityConf.SECURITY_KEYSTORE_LOCATION;
+        String keystorePasswordProperty = (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR)
+                ? SecurityConf.CONNECTOR_SECURITY_KEYSTORE_PASSWORD
+                : SecurityConf.SECURITY_KEYSTORE_PASSWORD;
+
         if ((this.isEncryptionNeeded() && this.keystoreLocation != null)
-                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR && this
+                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR) && this
                         .isConnectorUseSSL()))
         {
             // --- Check file location is specified ---
@@ -161,8 +180,7 @@ public final class AuthenticationInfo
                 String msg = MessageFormat.format(
                         "Configuration error: {0}={1} but: {2}={3}",
                         SecurityConf.CONNECTOR_USE_SSL,
-                        this.isConnectorUseSSL(),
-                        SecurityConf.CONNECTOR_SECURITY_KEYSTORE_LOCATION,
+                        this.isConnectorUseSSL(), keystoreLocationProperty,
                         this.keystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
                 throw new ServerRuntimeException(msg, new AssertionError(
@@ -189,14 +207,13 @@ public final class AuthenticationInfo
             // --- Check password is defined
             if (this.keystorePassword == null)
             {
-                throw new ConfigurationException(
-                        SecurityConf.CONNECTOR_SECURITY_KEYSTORE_PASSWORD);
+                throw new ConfigurationException(keystorePasswordProperty);
             }
         }
 
         // --- Check Aliases are defined in the keystore ---
         if ((this.isEncryptionNeeded() && this.keystoreLocation != null)
-                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR && this
+                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR) && this
                         .isConnectorUseSSL()))
         {
             FileInputStream is = null;
@@ -208,11 +225,15 @@ public final class AuthenticationInfo
 
                 boolean connector_alias_client_to_connector_isFound = false;
                 boolean connector_alias_connector_to_db_isFound = false;
+                boolean replicator_alias_master_to_slave_isFound = false;
 
                 String connector_alias_client_to_connector = mapAliases
                         .get(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR);
                 String connector_alias_connector_to_db = mapAliases
                         .get(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB);
+                String replicator_alias_master_to_slave = mapAliases
+                        .get(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+
 
                 // If an aliase is not defined, do not look for it...obviously
                 connector_alias_client_to_connector_isFound = (connector_alias_client_to_connector == null)
@@ -221,11 +242,15 @@ public final class AuthenticationInfo
                 connector_alias_connector_to_db_isFound = (connector_alias_connector_to_db == null)
                         ? true
                         : false;
+                replicator_alias_master_to_slave_isFound = (replicator_alias_master_to_slave == null)
+                        ? true
+                        : false;
 
                 // Load the keystore in the user's home directory
                 // Check only if there are aliases to find
                 if (!connector_alias_client_to_connector_isFound
-                        || !connector_alias_connector_to_db_isFound)
+                        || !connector_alias_connector_to_db_isFound
+                        || !replicator_alias_master_to_slave_isFound)
                 {
                     is = new FileInputStream(this.getKeystoreLocation());
                     KeyStore keystore = KeyStore.getInstance(KeyStore
@@ -253,38 +278,36 @@ public final class AuthenticationInfo
                                 || (connector_alias_connector_to_db != null && connector_alias_connector_to_db
                                         .equals(alias));
                     }
-                    // --- Throw Exception when an alias is defined but not
-                    // found
-                    String _aliasErrorMessage = "Keystore alias is defined as {0}={1} but cannot be found in {2}";
-                    // client to connector
-                    if (connector_alias_client_to_connector != null
-                            && connector_alias_client_to_connector_isFound == false)
-                    {
-                        this.closeInputStream(is);
+                    // --- Exception when an alias is defined but not found ---
 
-                        String aliasErrorMessage = MessageFormat
-                                .format(_aliasErrorMessage,
-                                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
-                                        connector_alias_client_to_connector,
-                                        this.getKeystoreLocation());
-                        throw new ServerRuntimeException(aliasErrorMessage,
-                                new AssertionError(
-                                        "Alias must exist in keystore"));
+                    // --- Connector
+                    // Client to Connector
+                    if (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR)
+                    {
+                        // Client to Connector
+                        this.buildAndThrowExceptionforMissingAlias(
+                                connector_alias_client_to_connector,
+                                connector_alias_client_to_connector_isFound,
+                                SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
+                                is);
+
+                        // Connector to DB
+                        this.buildAndThrowExceptionforMissingAlias(
+                                connector_alias_connector_to_db,
+                                connector_alias_connector_to_db_isFound,
+                                SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
+                                is);
+
                     }
-                    // Connector to DB
-                    if (connector_alias_connector_to_db != null
-                            && connector_alias_connector_to_db_isFound == false)
-                    {
-                        this.closeInputStream(is);
 
-                        String aliasErrorMessage = MessageFormat
-                                .format(_aliasErrorMessage,
-                                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
-                                        connector_alias_connector_to_db,
-                                        this.getKeystoreLocation());
-                        throw new ServerRuntimeException(aliasErrorMessage,
-                                new AssertionError(
-                                        "Alias must exist in keystore"));
+                    // --- Replicator
+                    if (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR)
+                    {
+                        this.buildAndThrowExceptionforMissingAlias(
+                                replicator_alias_master_to_slave,
+                                replicator_alias_master_to_slave_isFound,
+                                SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE,
+                                is);
                     }
                 }
 
@@ -413,14 +436,41 @@ public final class AuthenticationInfo
     }
 
     /**
+     * TODO: buildAndThrowExceptionforMissingAlias definition.
+     * 
+     * @param targetAlias
+     * @param targetAliasIsFound
+     * @param aliasDefinitionProperty
+     * @param inputStreamToClose
+     */
+    private void buildAndThrowExceptionforMissingAlias(String targetAlias,
+            boolean targetAliasIsFound, String aliasDefinitionProperty,
+            InputStream inputStreamToClose)
+    {
+        String _aliasErrorMessage = "Keystore alias is defined as {0}={1} but cannot be found in {2}";
+
+        if (targetAlias != null && targetAliasIsFound == false)
+        {
+            this.closeInputStream(inputStreamToClose);
+
+            String aliasErrorMessage = MessageFormat.format(_aliasErrorMessage,
+                    aliasDefinitionProperty, targetAlias,
+                    this.getKeystoreLocation());
+            throw new ServerRuntimeException(aliasErrorMessage,
+                    new AssertionError("Alias must exist in keystore"));
+        }
+    }
+
+    /**
      * Get the AuthenticationInfo as a TungstenProperties
      * 
      * @return TungstenProperties
      */
+    @JsonIgnore
     public TungstenProperties getAsTungstenProperties()
     {
         TungstenProperties jmxProperties = new TungstenProperties();
-        jmxProperties.put(AUTHENTICATION_INFO_PROPERTY, this);
+        jmxProperties.put(SECURITY_INFO_PROPERTY, this);
 
         return jmxProperties;
     }
@@ -685,13 +735,13 @@ public final class AuthenticationInfo
      * @return the alias defined in security.properties if it exists. null
      *         otherwise
      */
-    public String getKeystoreAliasForTungstenApplication(
-            TUNGSTEN_APPLICATION_NAME tungestenApplicationName)
+    public String getKeystoreAliasForConnectionType(
+            String aliasForConnectionType)
     {
-        this.mapKeystoreAliasesForTungstenApplication
-                .get(tungestenApplicationName);
+        String alias = this.mapKeystoreAliasesForTungstenApplication
+                .get(aliasForConnectionType);
 
-        return null;
+        return alias;
     }
 
     /**
@@ -738,6 +788,84 @@ public final class AuthenticationInfo
         }
 
         return foundFile;
+    }
+
+    /**
+     * Load values from a JSON serialized string
+     * 
+     * @param json The JSON serialized string
+     * @throws JsonParseException
+     * @throws JsonMappingException
+     * @throws IOException
+     */
+    public static AuthenticationInfo loadFromJSON(String json)
+            throws JsonParseException, JsonMappingException, IOException
+    {
+        ObjectMapper mapper = new ObjectMapper();
+        AuthenticationInfo securityInfo = mapper.readValue(json,
+                AuthenticationInfo.class);
+
+        return securityInfo;
+    }
+
+    public static AuthenticationInfo _loadFromJSON(String json)
+    {
+        AuthenticationInfo securityInfo = null;
+        try
+        {
+            ObjectMapper mapper = new ObjectMapper();
+            securityInfo = mapper.readValue(json, AuthenticationInfo.class);
+        }
+        catch (Exception e)
+        {
+            logger.error(MessageFormat.format(
+                    "Internal Error. Could not load from JSON: {0}",
+                    e.getMessage()));
+            logger.debug(MessageFormat.format("json input= {0}", json));
+        }
+
+        return securityInfo;
+    }
+
+    /**
+     * Serialize the TungstenProperties into a JSON String
+     * 
+     * @param prettyPrint Set to true to have the JSON output formatted for
+     *            easier read
+     * @return String representing JSON serialization of the TungstenProperties
+     * @throws JsonGenerationException
+     * @throws JsonMappingException
+     * @throws IOException
+     */
+    public String toJSON()
+    {
+        String json = null;
+        try
+        {
+            json = this.toJSON(false);
+        }
+        catch (Exception e)
+        {
+            logger.error("Could not Serialize into JSON:", e);
+        }
+        return json;
+    }
+
+    public String toJSON(boolean prettyPrint) throws JsonGenerationException,
+            JsonMappingException, IOException
+    {
+        String json = null;
+        ObjectMapper mapper = new ObjectMapper(); // Setup Jackson
+        mapper.configure(Feature.INDENT_OUTPUT, true);
+        mapper.configure(Feature.SORT_PROPERTIES_ALPHABETICALLY, true);
+
+        ObjectWriter writer = mapper.writer();
+        if (prettyPrint)
+            writer = writer.withDefaultPrettyPrinter();
+
+        json = writer.writeValueAsString(this);
+
+        return json;
     }
 
     /**

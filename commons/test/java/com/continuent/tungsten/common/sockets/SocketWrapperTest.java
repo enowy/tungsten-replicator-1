@@ -20,6 +20,8 @@
 
 package com.continuent.tungsten.common.sockets;
 
+import static org.junit.Assert.*;
+
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -29,6 +31,9 @@ import junit.framework.Assert;
 import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Test;
+
+import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.SecurityConf;
 
 /**
  * Implements a test of client and server socket wrappers using SSL and non-SSL
@@ -66,7 +71,7 @@ public class SocketWrapperTest
     public void testNonSSLConnection() throws Exception
     {
         logger.info("### testNonSSLConnection");
-        verifyConnection(2113, false);
+        verifyConnection(2113, false, null, null, null);
     }
 
     /**
@@ -78,7 +83,56 @@ public class SocketWrapperTest
     {
         logger.info("### testSSLConnection");
         helper.loadSecurityProperties();
-        verifyConnection(2114, true);
+        verifyConnection(2114, true, null, null, null);
+    }
+
+    /**
+     * Verify that we can connect using an SSL socket and a predefined alias
+     * inside the keystore and get a value back from a server that also speaks
+     * SSL.
+     */
+    @Test
+    public void testSSLConnection_keystoreWithAlias() throws Exception
+    {
+        logger.info("### testSSLConnection with alias selection");
+        AuthenticationInfo securityInfo = helper
+                .loadSecurityProperties_keystoreWithAlias();
+        String server_masterAlias = securityInfo
+                .getKeystoreAliasForConnectionType(
+                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+        verifyConnection(2114, true, server_masterAlias, server_masterAlias,
+                securityInfo);
+    }
+
+    /**
+     * Verify that when specifying a wrong server alias, the server cannot
+     * start. This confirms that the alias selection works
+     */
+    @Test
+    public void testSSLConnection_keystoreWithAlias_wrong_server_alias()
+            throws Exception
+    {
+        logger.info(
+                "### testSSLConnection with alias selection: wrong server alias");
+        AuthenticationInfo securityInfo = helper
+                .loadSecurityProperties_keystoreWithAlias();
+        String client_slaveAlias = securityInfo
+                .getKeystoreAliasForConnectionType(
+                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+        try
+        {
+            verifyConnection(2114, true, "alias_that_does_not_exist",
+                    client_slaveAlias, securityInfo);
+            assertTrue(
+                    "The server should not have started: we used a non existing alias in the keystore",
+                    false);
+        }
+        catch (Exception e)
+        {
+            assertTrue(
+                    "This exception is expected as we're trying to use a non existant server alias in the keystore",
+                    true);
+        }
     }
 
     /**
@@ -90,7 +144,7 @@ public class SocketWrapperTest
         // Start an SSL server.
         logger.info("### testSSLConnectionIncompatibility");
         helper.loadSecurityProperties();
-        server = new EchoServer("127.0.0.1", 2115, true);
+        server = new EchoServer("127.0.0.1", 2115, true, null, null);
         server.start();
 
         // Connect with non-SSL socket.
@@ -146,9 +200,12 @@ public class SocketWrapperTest
     /**
      * Implement verification using a simple echo server.
      */
-    private void verifyConnection(int port, boolean useSSL) throws Exception
+    private void verifyConnection(int port, boolean useSSL,
+            String serverKeystoreAlias, String clientKeystoreAlias,
+            AuthenticationInfo securityInfo) throws Exception
     {
-        server = new EchoServer("127.0.0.1", port, useSSL);
+        server = new EchoServer("127.0.0.1", port, useSSL, serverKeystoreAlias,
+                securityInfo);
         server.start();
 
         ClientSocketWrapper clientWrapper = new ClientSocketWrapper();
@@ -173,7 +230,7 @@ public class SocketWrapperTest
             throws Exception
     {
         // Start a server.
-        server = new EchoServer("127.0.0.1", port, useSSL);
+        server = new EchoServer("127.0.0.1", port, useSSL, null, null);
         server.start();
 
         // Launch echo clients with 100ms think time between
@@ -198,8 +255,10 @@ public class SocketWrapperTest
                 // Ensure we can shut down the client.
                 Assert.assertTrue("Shut down client: " + client.getName(),
                         client.shutdown());
-                Assert.assertTrue("Expect least 10 operations per client: "
-                        + client.getName(), client.getEchoCount() >= 10);
+                Assert.assertTrue(
+                        "Expect least 10 operations per client: "
+                                + client.getName(),
+                        client.getEchoCount() >= 10);
                 Assert.assertNull(
                         "Do not expect errors for client: " + client.getName(),
                         client.getThrowable());

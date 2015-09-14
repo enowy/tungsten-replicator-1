@@ -171,7 +171,15 @@ public class SecurityHelper
     public static AuthenticationInfo loadAuthenticationInformation()
             throws ConfigurationException
     {
-        return loadAuthenticationInformation(null);
+        return loadAuthenticationInformation((String) null);
+    }
+
+    public static AuthenticationInfo loadAuthenticationInformation(
+            TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
+            throws ConfigurationException
+    {
+        return loadAuthenticationInformation(null, true,
+                tungstenApplicationName);
     }
 
     /**
@@ -289,6 +297,11 @@ public class SecurityHelper
                             SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
                             SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB_DEFAULT,
                             false);
+            String replicator_alias_master_to_slave = securityProperties
+                    .getString(
+                            SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE,
+                            SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE_DEFAULT,
+                            false);
 
             // --- Populate return object ---
             authInfo.setConnectorUseSSL(connectorUseSSL);
@@ -314,6 +327,10 @@ public class SecurityHelper
                 authInfo.getMapKeystoreAliasesForTungstenApplication().put(
                         SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
                         connector_alias_connector_to_db);
+            if (replicator_alias_master_to_slave != null)
+                authInfo.getMapKeystoreAliasesForTungstenApplication().put(
+                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE,
+                        replicator_alias_master_to_slave);
 
             // --- Check information is correct ---
             // Checks authentication and encryption parameters
@@ -485,4 +502,13 @@ public class SecurityHelper
         return System.getProperty("javax.net.ssl.keyStore");
     }
 
+    /**
+     * Get the system truststore location
+     * 
+     * @return
+     */
+    public static String getTrustStoreLocation()
+    {
+        return System.getProperty("javax.net.ssl.trustStore");
+    }
 }

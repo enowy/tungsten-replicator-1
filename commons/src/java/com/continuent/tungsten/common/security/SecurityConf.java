@@ -57,6 +57,7 @@ public class SecurityConf
     /** Alias for Tungsten applications */
     static public final String KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR                          = "connector.security.keystore.alias.client.to.connector";
     static public final String KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB                              = "connector.security.keystore.alias.connector.to.db";
+    static public final String KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE                             = "replicator.security.keystore.alias.replicator.master.to.slave";
 
     /** Authentication and Encryption: DEFAULT values */
     static public final String SECURITY_USE_AUTHENTICATION_DEFAULT                                   = "false";
@@ -66,6 +67,7 @@ public class SecurityConf
 
     static public final String KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR_DEFAULT                  = null;
     static public final String KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB_DEFAULT                      = null;
+    static public final String KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE_DEFAULT                     = null;
 
     /** Application specific information */
     static public final String SECURITY_APPLICATION_RMI_JMX                                          = "rmi_jmx";
