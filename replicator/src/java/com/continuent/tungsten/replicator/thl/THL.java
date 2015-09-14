@@ -21,6 +21,7 @@
 package com.continuent.tungsten.replicator.thl;
 
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.sql.Timestamp;
 import java.util.LinkedList;
 
@@ -414,6 +415,10 @@ public class THL implements Store
             catch (IOException e)
             {
                 throw new ReplicatorException("Unable to start THL server", e);
+            }
+            catch (GeneralSecurityException e)
+            {
+                throw new ReplicatorException("Unable to start THL server. Could not establish SSL connection", e);
             }
         }
     }

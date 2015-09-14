@@ -24,11 +24,15 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
 import java.util.LinkedList;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.SecurityConf;
 import com.continuent.tungsten.common.sockets.ServerSocketService;
 import com.continuent.tungsten.common.sockets.SocketTerminationException;
 import com.continuent.tungsten.common.sockets.SocketWrapper;
@@ -226,16 +230,35 @@ public class Server implements Runnable
     }
 
     /**
-     * Start up the THL server, which spawns a service thread. 
+     * Start up the THL server, which spawns a service thread.
+     * @throws GeneralSecurityException
      */
-    public void start() throws IOException
+    public void start() throws IOException, GeneralSecurityException
     {
+        // --- Retrieve and use SecurityInfo if needed ---
+        String keystoreAlias = null;
+
+        TungstenProperties replicatorProperties = this.context.getReplicatorProperties();
+
+        // --- Get SecurityInfo
+        // Safe unmarshalling. Will retrun null if it fails
+        // TUC-2339
+        String jsonAuthenticationInfo = replicatorProperties
+                .getString(AuthenticationInfo.SECURITY_INFO_PROPERTY);
+        AuthenticationInfo securityInfo = AuthenticationInfo
+                ._loadFromJSON(jsonAuthenticationInfo);
+        if (securityInfo != null)
+        {
+            keystoreAlias = securityInfo
+                    .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+        }
+
         logger.info("Opening THL server: store name=" + storeName + " host="
                 + host + " port=" + port);
 
         socketService = new ServerSocketService();
         socketService.setAddress(new InetSocketAddress(host, port));
-        socketService.setUseSSL(useSSL);
+        socketService.setUseSSL(useSSL, keystoreAlias, securityInfo);
         socketService.bind();
         logger.info("Opened socket: host=" + socketService.getAddress()
                 + " port=" + socketService.getLocalPort() + " useSSL=" + useSSL);
