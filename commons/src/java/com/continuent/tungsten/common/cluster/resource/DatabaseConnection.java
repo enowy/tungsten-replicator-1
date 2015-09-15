@@ -24,6 +24,7 @@ import java.net.Socket;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.continuent.tungsten.common.patterns.order.Sequence;
 import com.continuent.tungsten.common.utils.CLUtils;
@@ -44,6 +45,9 @@ public class DatabaseConnection
     
     /** Last time the connection was used */
     private Date lastUsed = new Date();
+
+    /** Flag indicating if a connection is being used (processing query) */
+    private AtomicBoolean isConnectionInUse = new AtomicBoolean(false);
 
     public DatabaseConnection(ConnectionType type, String name,
             Connection connection, DataSource ds, Object context)
@@ -125,6 +129,11 @@ public class DatabaseConnection
     public void touch()
     {
         this.lastUsed = new Date();
+    }
+    
+    public AtomicBoolean getIsConnectionInUse()
+    {
+        return isConnectionInUse;
     }
 
     public String toString()
