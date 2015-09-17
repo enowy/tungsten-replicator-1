@@ -82,4 +82,70 @@ class TungstenScriptDatasource
   def sql_result(sql)
     @ti.sql_result(@service, sql, @is_direct)
   end
+  
+  def url
+    begin
+      TU.log_cmd_results?(false)
+      if @is_direct == true
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_direct_datasource_jdbcqueryurl"))
+      else
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_datasource_jdbcqueryurl"))
+      end
+    ensure
+      TU.log_cmd_results?(true)
+    end
+  end
+  
+  def host
+    begin
+      TU.log_cmd_results?(false)
+      if @is_direct == true
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_direct_datasource_host"))
+      else
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_datasource_host"))
+      end
+    ensure
+      TU.log_cmd_results?(true)
+    end
+  end
+  
+  def port
+    begin
+      TU.log_cmd_results?(false)
+      if @is_direct == true
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_direct_datasource_port"))
+      else
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_datasource_port"))
+      end
+    ensure
+      TU.log_cmd_results?(true)
+    end
+  end
+  
+  def user
+    begin
+      TU.log_cmd_results?(false)
+      if @is_direct == true
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_direct_datasource_user"))
+      else
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_datasource_user"))
+      end
+    ensure
+      TU.log_cmd_results?(true)
+    end
+  end
+  
+  def password
+    begin
+      # Disable logging of command results so the password doesn't end up in a log file
+      TU.log_cmd_results?(false)
+      if @is_direct == true
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_direct_datasource_password"))
+      else
+        return @ti.setting(@ti.setting_key(REPL_SERVICES, @service, "repl_datasource_password"))
+      end
+    ensure
+      TU.log_cmd_results?(true)
+    end
+  end
 end

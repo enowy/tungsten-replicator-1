@@ -381,6 +381,22 @@ module ConfigureDeploymentCore
         raise "Unable to connect to the manager to confirm successful start"
       end
       
+      begin
+        Timeout.timeout(60) {
+          while true
+            begin
+              remote_clusters = cmd_result("echo 'ls resources' | #{get_cctrl_cmd()} | grep CLUSTER | grep -v ONLINE | tr -d \" \" | tr -d \"|\"")
+              if remote_clusters.to_s() == ""
+                break
+              end
+            rescue CommandError
+            end
+          end
+        }
+      rescue Timeout::Error
+        debug("Unable to confirm remote clusters are ONLINE before proceeding. This can happen if the cluster is not available or the policy. This may cause a short pause in connectivity during cluster reconciliation.")
+      end
+      
       unless require_all_members == true
         return
       end
