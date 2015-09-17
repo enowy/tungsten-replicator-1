@@ -56,6 +56,7 @@ import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.RealmJMXAuthenticator;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Encapsulates JMX server start/stop and provides static utility methods to
@@ -100,6 +101,20 @@ public class JmxManager implements NotificationListener
         this.registryPort = registryPort;
         this.serviceName = serviceName;
         JmxManager.beanPort = beanPort;
+        
+        // Load security information from security.properties
+        // CONT-1069
+        if (authenticationInfo==null)
+        {
+            try
+            {
+                authenticationInfo = SecurityHelper.loadAuthenticationInformation();
+            }
+            catch (ConfigurationException e)
+            {
+               logger.error(MessageFormat.format("Could not get security information. Will use default values: {0}", e));
+            }
+        }
     }
 
     /**
