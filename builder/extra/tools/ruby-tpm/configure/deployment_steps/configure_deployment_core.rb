@@ -230,7 +230,7 @@ module ConfigureDeploymentCore
     }.each{
       |subcommand_key, subcommand|
       
-      key = applier.get_applier_key(subcommand_key)
+      key = applier.get_key(subcommand_key)
       shell_command = @config.getProperty(key)
       out.puts "command.#{subcommand}=#{get_svc_command(shell_command)}"
     }
