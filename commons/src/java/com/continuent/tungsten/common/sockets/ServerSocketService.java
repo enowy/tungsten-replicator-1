@@ -20,14 +20,17 @@
 
 package com.continuent.tungsten.common.sockets;
 
+import com.continuent.tungsten.common.security.AuthenticationInfo;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.channels.ServerSocketChannel;
+import java.security.GeneralSecurityException;
 
-import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 
 import org.apache.log4j.Logger;
@@ -47,10 +50,9 @@ public class ServerSocketService
     // Properties
     InetSocketAddress           address;
     private boolean             useSSL;
+    private String              keystoreAlias = null;
+    private AuthenticationInfo  securityInfo  = null;
     private int                 acceptTimeout = 1000;
-
-    // Socket factory for new SSL connections.
-    private ServerSocketFactory sslServerFactory;
 
     // Currently open server socket.
     private ServerSocket        serverSocket  = null;
@@ -82,7 +84,15 @@ public class ServerSocketService
     /** If set to true, use an SSL socket, otherwise use plain TCP/IP. */
     public void setUseSSL(boolean useSSL)
     {
+        this.setUseSSL(useSSL, null, null);
+    }
+
+    public void setUseSSL(boolean useSSL, String keystoreAlias,
+            AuthenticationInfo securityInfo)
+    {
         this.useSSL = useSSL;
+        this.keystoreAlias = keystoreAlias;
+        this.securityInfo = securityInfo;
     }
 
     // Accessors to server socket data.
@@ -106,15 +116,22 @@ public class ServerSocketService
 
     /**
      * Connect to the server socket.
+     * @throws GeneralSecurityException 
      */
-    public ServerSocket bind() throws IOException
+    public ServerSocket bind() throws IOException, GeneralSecurityException
     {
         // Create the serverSocket.
         if (useSSL)
         {
-            // Open up SSL server socket.
-            sslServerFactory = SSLServerSocketFactory.getDefault();
-            serverSocket = sslServerFactory.createServerSocket();
+            // Create an SSL socket.
+            // Use custom Socket Factory Generator to allow multiple aliases in single keystore
+            // TUC-23399
+            SSLSocketFactoryGenerator sslFactoryGenerator = new SSLSocketFactoryGenerator(
+                    this.keystoreAlias, this.securityInfo);
+
+            // Will use default ssl socket factory if no alias was specified
+            SSLServerSocketFactory sslserverSocketFactory  = sslFactoryGenerator.getSSLServerSocketFactory();
+            serverSocket = (SSLServerSocket)sslserverSocketFactory.createServerSocket();
         }
         else
         {

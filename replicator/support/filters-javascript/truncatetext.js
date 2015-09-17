@@ -152,9 +152,9 @@ function filterRowChangeData(event, d)
 function byteArrayToString(byteArray)
 {
   str = "";
-  for (i = 0; i < byteArray.length; i++ )
+  for (k = 0; k < byteArray.length; k++ )
   {
-    str += String.fromCharCode(byteArray[i]);
+    str += String.fromCharCode(byteArray[k]);
   }
   return str;
 }

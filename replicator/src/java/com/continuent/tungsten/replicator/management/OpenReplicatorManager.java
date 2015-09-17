@@ -55,6 +55,7 @@ import com.continuent.tungsten.common.jmx.DynamicMBeanHelper;
 import com.continuent.tungsten.common.jmx.JmxManager;
 import com.continuent.tungsten.common.jmx.MethodDesc;
 import com.continuent.tungsten.common.jmx.ParamDesc;
+import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.fsm.core.Action;
 import com.continuent.tungsten.fsm.core.Entity;
 import com.continuent.tungsten.fsm.core.EntityAdapter;
@@ -189,6 +190,9 @@ public class OpenReplicatorManager extends NotificationBroadcasterSupport
     private HashMap<String, Object> mbeans                  = new HashMap<String, Object>();
 
     private CountDownLatch          doneLatch               = null;
+
+    // Security information
+    private AuthenticationInfo      securityInfo      = null;
 
     /**
      * Creates a new <code>ReplicatorManager</code> object
@@ -3166,6 +3170,12 @@ public class OpenReplicatorManager extends NotificationBroadcasterSupport
         {
             propertiesManager.loadProperties();
             properties = propertiesManager.getProperties();
+            // Add Security information
+            if (this.securityInfo!=null)
+            {
+               String jsonSecurityInfo = this.securityInfo.toJSON();
+               properties.put(AuthenticationInfo.SECURITY_INFO_PROPERTY, jsonSecurityInfo);
+            }
         }
         catch (ReplicatorException e)
         {
@@ -3331,6 +3341,26 @@ public class OpenReplicatorManager extends NotificationBroadcasterSupport
     public TimeZone getReplicatorTimeZone()
     {
         return replicatorTimeZone;
+    }
+    
+    /**
+     * Returns the securityInfo value.
+     * 
+     * @return Returns the securityInfo.
+     */
+    public AuthenticationInfo getSecurityInfo()
+    {
+        return securityInfo;
+    }
+
+    /**
+     * Sets the securityInfo value.
+     * 
+     * @param securityInfo The SecurityInfo to set.
+     */
+    public void setSecurityInfo(AuthenticationInfo securityInfo)
+    {
+        this.securityInfo = securityInfo;
     }
 
     public static TungstenProperties getConfigurationProperties(

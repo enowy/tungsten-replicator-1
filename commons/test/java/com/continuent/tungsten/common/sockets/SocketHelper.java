@@ -47,7 +47,21 @@ public class SocketHelper
                     "Unable to locate security information; ensure security.properties file is configured");
         }
     }
-
+    
+    /** Validate and load security properties that uses a keystore containing multiple aliases. */
+    public AuthenticationInfo loadSecurityProperties_keystoreWithAlias() throws ConfigurationException
+    {
+        AuthenticationInfo authInfo = SecurityHelper
+                .loadAuthenticationInformation("sample.security.multiple.aliases.properties");
+        // Validate security settings.
+        if (authInfo == null)
+        {
+            throw new ServerRuntimeException(
+                    "Unable to locate security information; ensure security.properties file is configured");
+        }
+        return authInfo;
+    }
+    
     /** Sends a string and confirms it is echoed back. */
     public String echo(Socket sock, String message) throws IOException
     {

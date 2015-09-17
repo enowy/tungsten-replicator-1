@@ -558,7 +558,8 @@ public class MySQLExtractor implements RawExtractor
                     serverId = logEvent.serverId;
 
                 if (startTime == null
-                        && !(logEvent instanceof FormatDescriptionLogEvent))
+                        && !((logEvent instanceof FormatDescriptionLogEvent)
+                                || (logEvent instanceof RotateLogEvent)))
                     startTime = logEvent.getWhen();
 
                 if (logEvent instanceof RowsLogEvent)

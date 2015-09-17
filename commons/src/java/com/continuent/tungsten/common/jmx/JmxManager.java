@@ -134,7 +134,7 @@ public class JmxManager implements NotificationListener
         // Authentication and encryption parameters
         if (tungstenProperty != null)
             authenticationInfo = (AuthenticationInfo) tungstenProperty
-                    .getObject(AuthenticationInfo.AUTHENTICATION_INFO_PROPERTY,
+                    .getObject(AuthenticationInfo.SECURITY_INFO_PROPERTY,
                             null, false);
     }
 
@@ -497,7 +497,7 @@ public class JmxManager implements NotificationListener
             AuthenticationInfo authInfo = null;
             if (jmxProperties != null)
                 authInfo = (AuthenticationInfo) jmxProperties.getObject(
-                        AuthenticationInfo.AUTHENTICATION_INFO_PROPERTY, null,
+                        AuthenticationInfo.SECURITY_INFO_PROPERTY, null,
                         false);
             if (authInfo == null) // Last chance: try the static member
                 authInfo = authenticationInfo;

@@ -46,6 +46,7 @@ import com.continuent.tungsten.common.jmx.MethodDesc;
 import com.continuent.tungsten.common.jmx.ParamDesc;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 import com.continuent.tungsten.common.utils.CLUtils;
 import com.continuent.tungsten.common.utils.ManifestParser;
 import com.continuent.tungsten.replicator.ReplicatorException;
@@ -80,6 +81,8 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
     private int      managerRMIPort     = -1;
     private TimeZone hostTimeZone       = null;
     private TimeZone replicatorTimeZone = null;
+    
+    private AuthenticationInfo                          securityInfo          = null;
 
     /**
      * Creates a new <code>ReplicatorManager</code> object
@@ -104,16 +107,14 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
 
         // Get Authentication and encryption parameters for JMX and set SSL
         // parameters required for secure operation.
-        TungstenProperties jmxProperties = null;
+        TungstenProperties securityPropertiesAsObject = null;
         try
         {
+            // Load security information and set critical properties as system properties   
             logger.info("Loading security information");
             AuthenticationInfo authenticationInfo = SecurityHelper
-                    .loadAuthenticationInformation(); // Load security
-                                                      // information and set
-                                                      // critical properties as
-                                                      // system properties
-            jmxProperties = authenticationInfo.getAsTungstenProperties();
+                    .loadAuthenticationInformation(TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+            this.securityInfo = authenticationInfo;
         }
         catch (ConfigurationException ce)
         {
@@ -134,7 +135,7 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
         managerRMIHost = getHostName(serviceProps);
 
         JmxManager jmxManager = new JmxManager(managerRMIHost, managerRMIPort,
-                ReplicatorConf.RMI_DEFAULT_SERVICE_NAME, jmxProperties);
+                ReplicatorConf.RMI_DEFAULT_SERVICE_NAME, securityPropertiesAsObject);
         jmxManager.start();
 
         // Make sure we have configurations for the replicators to work with.
@@ -152,6 +153,7 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
             boolean isDetached = replProps.getBoolean(ReplicatorConf.DETACHED);
 
             replProps.setBoolean(ReplicatorConf.FORCE_OFFLINE, forceOffline);
+
             if (serviceType.equals("local"))
             {
                 // Get properties file name if specified or generate default.
@@ -779,6 +781,7 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
             orm.setHostTimeZone(hostTimeZone);
             orm.setReplicatorTimeZone(replicatorTimeZone);
             orm.advertiseInternal();
+            orm.setSecurityInfo(this.securityInfo);
             return (OpenReplicatorManagerMBean) orm;
         }
         catch (Exception e)
