@@ -94,7 +94,6 @@ build_tarball() {
   echo "JOB_NAME: ${JOB_NAME}" >> $manifest
   echo "BUILD_TAG: ${BUILD_TAG}" >> $manifest
   echo "HUDSON_URL: ${HUDSON_URL}" >> $manifest
-  echo "SVN_REVISION: ${SVN_REVISION}" >> $manifest
   
   # Local values.
   echo "HOST: `hostname`" >> $manifest
@@ -137,8 +136,7 @@ build_tarball() {
   echo    "    \"buildId\": ${BUILD_NUMBER-null}," >> $manifestJSON
   echo    "    \"jobName\": \"${JOB_NAME}\"," >> $manifestJSON
   echo    "    \"buildTag\": \"${BUILD_TAG}\"," >> $manifestJSON
-  echo    "    \"URL\": \"${HUDSON_URL}\"," >> $manifestJSON
-  echo    "    \"SVNRevision\": ${SVN_REVISION-null}" >> $manifestJSON
+  echo    "    \"URL\": \"${HUDSON_URL}\"" >> $manifestJSON
   echo    "  }," >> $manifestJSON
 
   # Git repo details.

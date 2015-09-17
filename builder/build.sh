@@ -47,7 +47,6 @@ build_source() {
   cp -r $SRC_DIR/replicator $modules_sources_folder
   cp -r $SRC_DIR/commons $modules_sources_folder
   cp -r build.sh helpers.sh build_tarball.sh config extra $builder_folder/
-  echo "SKIP_CHECKOUT=1" > $builder_folder/config.local
 
   # Clean all copied source trees to keep only necessary files
   echo "### Cleaning-up source folders"
@@ -90,14 +89,6 @@ if [ -z $config ]; then
 fi
 
 printHeader "REPLICATOR BUILD SCRIPT"
-
-#if [ -n "$SKIP_PROMPT" ]
-#then
-#    echo "Skipping confirmation, as the variable SKIP_PROMPT is set"
-#else
-#    echo "Did you update config.local? (press enter to continue)"
-#    read ignored_answer
-#fi
 
 source ./$config
 
@@ -170,8 +161,12 @@ then
 else
   printHeader "Building replicator from source"
   # Run the builds.
-  doAnt commons $source_commons/build.xml clean dist 
-  doAnt replicator $source_replicator/build.xml clean dist javadoc
+  if [ ${RUN_JUNIT} -eq 1 ]
+  then
+    JUNIT_TARGET="test"
+  fi
+  doAnt commons $source_commons/build.xml clean dist ${JUNIT_TARGET}
+  doAnt replicator $source_replicator/build.xml clean dist javadoc ${JUNIT_TARGET}
 fi
 
 source ./build_tarball.sh

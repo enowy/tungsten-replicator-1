@@ -15,3 +15,5 @@ SKIP_BUILD=0
 
 # Set to 1 to skip source generation.
 SKIP_SOURCE=1
+
+RUN_JUNIT=0
