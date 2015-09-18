@@ -25,9 +25,6 @@
 # Source and define various functions
 ##########################################################################
 
-cd `dirname $0`
-source ./helpers.sh
-
 # Creates the src tarball
 build_source() {
   printHeader "Creating Replicator source release"
@@ -88,14 +85,28 @@ if [ -z $config ]; then
   config=config
 fi
 
-printHeader "REPLICATOR BUILD SCRIPT"
-
 source ./$config
 
 if [ -f config.local ]; then
   echo "Overriding $config with config.local"
   source config.local
 fi
+
+VERSION=$VERSION_MAJOR.$VERSION_MINOR.$VERSION_REVISION
+
+# Release name.
+product="Tungsten Replicator"
+relname=tungsten-replicator-${VERSION}
+# Add Jenkins build number if any
+if [ "x${BUILD_NUMBER}" != "x" ]
+then
+    relname=${relname}-${BUILD_NUMBER}
+fi
+
+cd `dirname $0`
+source ./helpers.sh
+
+printHeader "REPLICATOR BUILD SCRIPT"
 
 ##########################################################################
 # Set global variables.
@@ -136,20 +147,6 @@ fi
 echo "### Checking environment..."
 checkCommandExists ant
 echo "### ... Success!"
-
-
-##########################################################################
-# Additional initializations
-##########################################################################
-
-# Release name.
-product="Tungsten Replicator"
-relname=tungsten-replicator-${VERSION}
-# Add Jenkins build number if any
-if [ "x${BUILD_NUMBER}" != "x" ]
-then
-    relname=${relname}-${BUILD_NUMBER}
-fi
 
 ##########################################################################
 # Build products.
