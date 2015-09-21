@@ -24,7 +24,7 @@ build_tarball() {
   # Copy files into the community build.
   ########################################################################
   printHeader "Creating Replicator release"
-  reldir=${BUILD_DIR}/${relname}
+  reldir=build/${relname}
   if [ -d $reldir ]; then
     echo "### Removing old release directory"
     \rm -rf $reldir
@@ -108,11 +108,6 @@ build_tarball() {
   # Create JSON manifest file.
   ########################################################################
 
-  # Extract revision number from the source control info.
-  extractRevision() {
-    (cd $1; git rev-parse HEAD)
-  }
-  
   manifestJSON=${reldir}/.manifest.json
   echo "### Creating JSON manifest file: $manifestJSON"
   

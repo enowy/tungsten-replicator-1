@@ -292,16 +292,8 @@ class ConfigureDatabasePlatform
     "#{@username}@#{@host}:#{@port}#{password}"
   end
   
-  def get_applier_key(key)
-    [DATASOURCES, @config.getProperty(REPL_DATASOURCE), key]
-  end
-  
-  def get_extractor_key(key)
-    if @config.getProperty(REPL_ROLE) == REPL_ROLE_DI
-      [DATASOURCES, @config.getProperty(REPL_MASTER_DATASOURCE), key]
-    else
-      get_applier_key(@config, key)
-    end
+  def get_key(key)
+    @prefix + [key]
   end
   
   def get_topology
