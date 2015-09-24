@@ -1388,6 +1388,10 @@ class ConfigureDeploymentStepMethod
     @method_name=method_name
     @group_id=group_id
     @weight=weight
+    
+    if (parallelization == false)
+      parallelization = ConfigureDeploymentStepParallelization::NONE
+    end
     @parallelization=parallelization
   end
 end
