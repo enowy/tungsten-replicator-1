@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 ##########################################################################
 # NAME:  BUILD
@@ -85,6 +86,7 @@ if [ -z $config ]; then
   config=config
 fi
 
+cd `dirname $0`
 source ./$config
 
 if [ -f config.local ]; then
@@ -114,7 +116,6 @@ then
     relname=${relname}-${BUILD_NUMBER}
 fi
 
-cd `dirname $0`
 source ./helpers.sh
 
 printHeader "REPLICATOR BUILD SCRIPT"

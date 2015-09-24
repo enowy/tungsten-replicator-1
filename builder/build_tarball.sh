@@ -98,6 +98,17 @@ build_tarball() {
   mkdir -p $tools_dir
   cp $extra_tools/tpm $tools_dir
   rsync -Ca $extra_tools/ruby-tpm $tools_dir
+
+	########################################################################
+  # Evaluate any extensions in $SRC_DIR
+  ########################################################################
+	extensions=`find $SRC_DIR/extensions -depth 1 -type d`
+	for ext in $extensions; do
+		if [ -f "${ext}/build.xml" ]; then
+			echo "### Build ${ext}"
+			ant -buildfile $ext/build.xml -DTARGET=$PWD/$reldir -DPRODUCT=TR -DVERSION=$VERSION -DBUILD_NUMBER=$BUILD_NUMBER
+		fi
+	done
   
   ########################################################################
   # Create manifest file.
