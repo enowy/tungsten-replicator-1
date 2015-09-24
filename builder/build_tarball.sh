@@ -69,6 +69,29 @@ build_tarball() {
   echo "# Copying in oss-commons libraries"
   cp -r $jars_commons/* $cluster_home/lib
   cp -r $lib_commons/* $cluster_home/lib
+
+	# Copy in Tanuki wrapper libraries if they exist
+	if [ -d $extra_commercial ]; then
+		if [ -d "${extra_commercial}/cluster-home/bin" ]; then
+			cp $extra_commercial/cluster-home/bin/wrapper* $cluster_home/bin
+		fi
+		
+		if [ -d "${extra_commercial}/cluster-home/lib" ]; then
+			cp $extra_commercial/cluster-home/lib/wrapper* $cluster_home/lib
+			cp $extra_commercial/cluster-home/lib/libwrapper* $cluster_home/lib
+		fi
+		
+		if [ -d "${extra_commercial}/replicator/conf" ]; then
+			cp $extra_commercial/replicator/conf/* $reldir_replicator/conf
+		fi
+		
+		wrapper_binaries=`ls $cluster_home/bin/wrapper* | wc -l`
+		if [ "$wrapper_binaries" != "0" ]; then
+			echo "### Replicator: use Tanuki Wrapper"
+			cp $source_replicator/samples/scripts/tanuki/replicator $reldir_replicator/bin
+			cp $source_replicator/samples/scripts/tanuki/log4j.properties $reldir_replicator/conf
+		fi
+	fi
   
   echo "### Creating tools"
   tools_dir=$reldir/tools

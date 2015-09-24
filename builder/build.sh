@@ -132,6 +132,7 @@ source_community_extra=extra
 extra_replicator=${source_community_extra}/replicator
 extra_cluster_home=${source_community_extra}/cluster-home
 extra_tools=${source_community_extra}/tools
+extra_commercial=${SRC_DIR}/community/extra
 
 jars_commons=${source_commons}/build/jars
 lib_commons=${source_commons}/lib

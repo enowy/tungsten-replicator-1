@@ -31,7 +31,7 @@ APP_NAME="treplicator"
 APP_LONG_NAME="Tungsten Replicator Service"
 
 # Wrapper
-WRAPPER_CMD="./wrapper"
+WRAPPER_CMD="../../cluster-home/bin/wrapper"
 WRAPPER_CONF="../conf/wrapper.conf"
 
 # Priority at which to run the wrapper.  See "man nice" for valid priorities.

@@ -52,8 +52,18 @@ module ConfigureDeploymentStepReplicator
     add_log_file("tungsten-replicator/log/xtrabackup.log")
     add_log_file("tungsten-replicator/log/mysqldump.log")
     set_run_as_user("tungsten-replicator/bin/replicator")
-    transform_host_template("tungsten-replicator/conf/replicator.env",
-	    "tungsten-replicator/samples/conf/replicator.env")
+    
+    # If the Tanuki wrapper is used by tungsten-replicator/bin/replicator,
+    # we need to write the wrapper.conf file. Otherwise, replicator.env 
+    # will be used.
+    replicator_uses_wrapper = cmd_result("grep WRAPPER_CONF #{get_deployment_basedir()}/tungsten-replicator/bin/replicator | wc -l")
+    if replicator_uses_wrapper != "0"
+      transform_host_template("tungsten-replicator/conf/wrapper.conf",
+	      "tungsten-replicator/samples/conf/wrapper.conf")
+    else
+      transform_host_template("tungsten-replicator/conf/replicator.env",
+	      "tungsten-replicator/samples/conf/replicator.env")
+	  end
   end
   
   def write_replication_monitor_extension
