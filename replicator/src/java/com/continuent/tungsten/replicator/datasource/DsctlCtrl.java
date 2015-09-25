@@ -116,6 +116,11 @@ public class DsctlCtrl
                 {
                     sourceId = argvIterator.next();
                 }
+                else if ("-help".equals(curArg) || "--help".equals(curArg) || "-h".equals(curArg))
+                {
+                    command = Commands.HELP ;
+                    break;
+                }
                 else if (curArg.startsWith("-"))
                 {
                     fatal("Unrecognized option: " + curArg, null, 1);
