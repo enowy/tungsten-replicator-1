@@ -1455,11 +1455,20 @@ class HostSecurityDirectory < ConfigurePrompt
   end
 end
 
+class HostEnableJgroupsSSL < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "true")
+    add_command_line_alias("jgroups-ssl")
+  end
+end
+
 class HostEnableRMIAuthentication < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, "false")
+    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, "true")
     add_command_line_alias("rmi-authentication")
   end
 end
@@ -1468,7 +1477,7 @@ class HostEnableRMISSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, "false")
+    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, "true")
     add_command_line_alias("rmi-ssl")
   end
 end
@@ -1663,13 +1672,60 @@ class GlobalHostJavaPasswordStorePath < ConfigurePrompt
   end
 end
 
-class HostBuildSecurityFiles < ConfigurePrompt
+class HostTLSAlias < ConfigurePrompt
   include ClusterHostPrompt
-  include NoStoredServerConfigValue
-  include HiddenValueModule
+  include PrivateArgumentModule
   
   def initialize
-    super(BUILD_SECURITY_FILES, "Build the necessary Java security files", PV_BOOLEAN, "false")
+    super(JAVA_TLS_ENTRY_ALIAS, "The alias to use for the TLS key/certificate in the keystore and truststore.", PV_ANY, "tls")
+  end
+end
+
+class HostTLSKey < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(JAVA_TLS_ENTRY_KEY, "The key to use for all Continuent TLS encryption.", PV_FILENAME)
+  end
+  
+  def get_template_value
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/.tls.key"
+  end
+  
+  DeploymentFiles.register(JAVA_TLS_ENTRY_KEY, GLOBAL_JAVA_TLS_ENTRY_KEY)
+end
+
+class GlobalHostTLSKey < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(GLOBAL_JAVA_TLS_ENTRY_KEY, "The key to use for all Continuent TLS encryption.", PV_FILENAME)
+  end
+end
+
+class HostTLSCertificate < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(JAVA_TLS_ENTRY_CERTIFICATE, "The certificate to use for all Continuent TLS encryption.", PV_FILENAME)
+  end
+  
+  def get_template_value
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/.tls.certificate"
+  end
+  
+  DeploymentFiles.register(JAVA_TLS_ENTRY_CERTIFICATE, GLOBAL_JAVA_TLS_ENTRY_CERTIFICATE)
+end
+
+class GlobalHostTLSCertificate < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(GLOBAL_JAVA_TLS_ENTRY_CERTIFICATE, "The certificate to use for all Continuent TLS encryption.", PV_FILENAME)
   end
 end
 

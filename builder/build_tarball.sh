@@ -102,11 +102,13 @@ build_tarball() {
 	########################################################################
   # Evaluate any extensions in $SRC_DIR
   ########################################################################
-	extensions=`find $SRC_DIR/extensions -depth 1 -type d`
+	extensions=`ls -d $SRC_DIR/extensions/*`
 	for ext in $extensions; do
-		if [ -f "${ext}/build.xml" ]; then
-			echo "### Build ${ext}"
-			ant -buildfile $ext/build.xml -DTARGET=$PWD/$reldir -DPRODUCT=TR -DVERSION=$VERSION -DBUILD_NUMBER=$BUILD_NUMBER
+		if [ -d $ext ]; then
+			if [ -f "${ext}/build.xml" ]; then
+				echo "### Build ${ext}"
+				ant -buildfile $ext/build.xml -DTARGET=$PWD/$reldir -DPRODUCT=TR -DVERSION=$VERSION -DBUILD_NUMBER=$BUILD_NUMBER
+			fi
 		fi
 	done
   

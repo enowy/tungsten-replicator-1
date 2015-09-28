@@ -97,6 +97,28 @@ module ConfigureDeploymentStepDeployment
     # Write the cluster-home/conf/security.properties file
     transform_host_template("cluster-home/conf/security.properties",
       "cluster-home/samples/conf/security.properties.tpl")
+      
+    rmi_user = @config.getProperty(RMI_USER)
+    jks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
+    ts_pass = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
+    
+    jmxremote = @config.getTemplateValue(JAVA_JMXREMOTE_ACCESS_PATH)
+    unless File.exist?(jmxremote)
+      File.open(jmxremote, "w") {
+        |f|
+        f.puts("#{rmi_user}        readwrite \\
+  create javax.management.monitor.*,javax.management.timer.* \\
+  unregister")
+      }
+    end
+    
+    password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
+    unless File.exist?(password_store)
+cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{jks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
+      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{jks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
+    end
     
     # Write the tungsten-cookbook/INSTALLED* files
     write_tungsten_cookbook_installed_recipe()
