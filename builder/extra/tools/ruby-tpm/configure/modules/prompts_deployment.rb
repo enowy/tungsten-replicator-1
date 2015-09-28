@@ -1459,8 +1459,69 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "true")
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "false")
     add_command_line_alias("jgroups-ssl")
+  end
+  
+  def get_template_value
+    if get_value() == "true"
+      keystore = File.basename(@config.getTemplateValue(get_member_key(JAVA_JGROUPS_KEYSTORE_PATH)))
+      key_alias = @config.getProperty(get_member_key(JAVA_JGROUPS_ENTRY_ALIAS))
+      ks_pass = @config.getProperty(get_member_key(JAVA_KEYSTORE_PASSWORD))
+      return "<ENCRYPT key_store_name=\"#{keystore}\"  store_password=\"#{ks_pass}\" key_password=\"#{ks_pass}\" alias=\"#{key_alias}\" />"
+    else
+      return ""
+    end
+  end
+end
+
+class HostJgroupsTLSAlias < ConfigurePrompt
+  include ClusterHostPrompt
+  include PrivateArgumentModule
+  
+  def initialize
+    super(JAVA_JGROUPS_ENTRY_ALIAS, "The alias to use for the JGroups TLS key in the keystore.", PV_ANY, "jgroups")
+  end
+end
+
+class HostJavaJgroupsKeystorePath < ConfigurePrompt
+  include ClusterHostPrompt
+  include NoStoredServerConfigValue
+  
+  def initialize
+    super(JAVA_JGROUPS_KEYSTORE_PATH, "Local path to the JGroups Java Keystore file.", PV_FILENAME)
+  end
+  
+  def get_template_value
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_jgroups_keystore.jceks"
+  end
+  
+  def required?
+    false
+  end
+  
+  def validate_value(value)
+    super(value)
+    if is_valid?() && value != ""
+      unless File.exists?(value)
+        error("The file #{value} does not exist")
+      end
+    end
+    
+    is_valid?()
+  end
+  
+  DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
+end
+
+class GlobalHostJavaJgroupsKeystorePath < ConfigurePrompt
+  include ClusterHostPrompt
+  include ConstantValueModule
+  include NoStoredServerConfigValue
+  
+  def initialize
+    super(GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH, "Staging path to the Java JGroups Keystore file", 
+      PV_FILENAME)
   end
 end
 

@@ -157,6 +157,25 @@ class ConfigureDeploymentHandler
             GLOBAL_JAVA_TLS_ENTRY_CERTIFICATE => local_tls_cert.path()
           })
         end
+        
+        if @config.getProperty(JAVA_JGROUPS_KEYSTORE_PATH) == nil
+          local_jgroups_ks = Tempfile.new("sec")
+          local_jgroups_ks.close()
+          File.unlink(local_jgroups_ks.path())
+          
+          jgroups_ks_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+          
+          cmd = ["keytool -genseckey -alias #{jgroups_ks_alias}",
+            "-keypass #{ks_pass}",
+            "-storepass #{ks_pass} -keyalg Blowfish -keysize 56",
+            "-keystore #{local_jgroups_ks.path()} -storetype JCEKS"]
+          cmd_result(cmd.join(" "))
+            
+          config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
+            JAVA_JGROUPS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_jgroups_ks.path())}",
+            GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH => local_jgroups_ks.path()
+          })
+        end
 
         if false == "true"
           ca_pem = Tempfile.new("sec")
