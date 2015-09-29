@@ -64,15 +64,25 @@ function prepare() {
  */
 function filter(event) {
   // Ensure that we are dealing with a MySQL event. If not, we can stop. 
-  dbms_type = event.getMetadataOption("dbms_type");
-  if (dbms_type != "mysql")
+  raw_event = event.getDBMSEvent();
+  if (raw_event == null)
+  {
+    //logger.info("Event was null!");
     return;
+  }
+  dbms_type = raw_event.getMetadataOptionValue("dbms_type");
+  if (dbms_type != "mysql")
+  {
+    //logger.info("Event was not mysql: [" + dbms_type + "]");
+    return;
+  }
 
   // Next see strings need fixing up.  If 'strings=utf8' is set, there is
   // no further work required. 
-  strings = event.getMetadataOption("strings");
+  strings = raw_event.getMetadataOptionValue("strings");
   if (strings == "utf8")
   {
+    //logger.info("string was already fixed!");
     return;
   }
 
@@ -97,7 +107,7 @@ function filter(event) {
 
   // If we made it this far, byte values are properly translated to UTF8. 
   // Make a note to that effect. 
-  event.setMetadataOption("strings", "utf8");
+  raw_event.setMetaDataOption("strings", "utf8");
 }
 
 // Convert String bytes to blob or string based on type description. 
@@ -168,6 +178,25 @@ function fixUpStrings(schema, table, columns, columnValues, charset)
           if (colDesc.startsWith("BINARY") || colDesc.startsWith("VARBINARY")) {
             // Convert to a hexadecimal string. 
             hex = javax.xml.bind.DatatypeConverter.printHexBinary(raw_v);
+            //logger.info(hex);
+            if (colDesc.startsWith("B")) {
+              // Conversion cuts off trailing x'00' bytes in BINARY strings. 
+              // We compute the proper length from the type name and append
+              // the missing null values. 
+              re = /BINARY\(([0-9]+)\)/;
+              match = re.exec(colDesc);
+              expectLen = match[1] * 2;
+              actLen = hex.length();
+              diff = expectLen - actLen;
+              if (diff > 0)
+              {
+                extraZeroes = "";
+                for (zeroes = 0; zeroes < diff; zeroes++) {
+                  extraZeroes += "0";
+                }
+                hex += extraZeroes;
+              }
+            }
             value.setValue(hex);
           } 
           else {

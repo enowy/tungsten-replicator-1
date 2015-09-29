@@ -205,7 +205,7 @@ public class CsvFileSet
             catch (IOException e)
             {
                 throw new ReplicatorException("Unable to intialize CSV file: "
-                        + file.getAbsolutePath());
+                        + file.getAbsolutePath(), e);
             }
         }
         return csvFile;

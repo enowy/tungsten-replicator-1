@@ -60,8 +60,8 @@ RPBIN=`dirname $0`
 RPHOME=`cd $RPBIN/..; pwd`
 
 # If there's a replicator.env file, source it now. 
-if [ -f $RPHOME/conf/repld.env ]; then
-  . $RPHOME/conf/repld.env
+if [ -f $RPHOME/conf/replicator.env ]; then
+  . $RPHOME/conf/replicator.env
 fi
 
 # Identify the replicator PID file. 

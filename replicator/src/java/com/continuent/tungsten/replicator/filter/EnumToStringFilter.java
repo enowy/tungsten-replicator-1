@@ -329,7 +329,7 @@ public class EnumToStringFilter implements Filter
         // Parse out what's inside brackets.
         String keyword = colType + "(";
         int iA = definition.toLowerCase().indexOf(keyword);
-        int iB = definition.indexOf(')', iA);
+        int iB = definition.lastIndexOf(')');
         String list = definition.substring(iA + keyword.length(), iB);
 
         // Split by comma, remove quotes and save into array.
