@@ -15,7 +15,7 @@
 	limitations under the License.
 
     Initial developer(s): Marc Herbert, Jeff Mesnil
-    Contributor(s): Csaba Simon, Robert Hodges
+    Contributor(s): Csaba Simon, Robert Hodges, Linas Virbalas
 -->
 
 <project name="tungsten_replicator" default="all" xmlns:jacoco="antlib:org.jacoco.ant">
@@ -301,7 +301,7 @@
             </fileset>
         </copy>
 
-
+    <chmod dir="${dist.dir}/extractors" perm="ugoa+rx" includes="**/*.sh"/>
 
 	<chmod dir="${dist.dir}/support" perm="ugoa+rx" includes="**/*.sh"/>
 
@@ -352,7 +352,7 @@
             <tarfileset dir="${dist.dir}" mode="755" prefix="${build.name}">
                 <include name="bin/*"/>
                 <include name="samples/**/*.sh"/>
-            	<include name="scripts/**/*.sh"/>
+            	<include name="extractors/**/*.sh"/>
                 <exclude name="bin/*.bat"/>
             </tarfileset>
             <tarfileset dir="${dist.dir}" prefix="${build.name}">
@@ -361,13 +361,13 @@
             <tarfileset dir="${dist.dir}" prefix="${build.name}">
                 <exclude name="bin/**"/>
                 <exclude name="samples/**/*.sh"/>
-            	<exclude name="scripts/**/*.sh"/>
+            	<exclude name="extractors//**/*.sh"/>
             </tarfileset>
         </tar>
         <zip destfile="${dist.dir}.zip" basedir="${dist.dir}" includes="tungsten/**">
             <zipfileset dir="${dist.dir}" filemode="755" prefix="${build.name}">
                 <include name="samples/**/*.sh"/>
-            	<include name="scripts/**/*.sh"/>
+            	<include name="extractors/**/*.sh"/>
                 <include name="bin/*"/>
             </zipfileset>
             <zipfileset dir="${dist.dir}" prefix="${build.name}">
