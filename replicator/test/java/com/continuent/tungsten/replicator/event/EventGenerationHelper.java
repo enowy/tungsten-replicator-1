@@ -52,8 +52,8 @@ public class EventGenerationHelper
         Timestamp ts = new Timestamp(System.currentTimeMillis());
         ArrayList<DBMSData> t = new ArrayList<DBMSData>();
         t.add(new StatementData(query, ts.getTime(), defaultSchema));
-        DBMSEvent dbmsEvent = new DBMSEvent(new Long(seqno).toString(), null,
-                t, lastFrag, new Timestamp(System.currentTimeMillis()));
+        DBMSEvent dbmsEvent = new DBMSEvent(new Long(seqno).toString(), null, t,
+                lastFrag, new Timestamp(System.currentTimeMillis()));
         ReplDBMSEvent replDbmsEvent = new ReplDBMSEvent(seqno, (short) fragNo,
                 lastFrag, "NONE", 0, ts, dbmsEvent);
         return replDbmsEvent;
@@ -77,8 +77,8 @@ public class EventGenerationHelper
         sd.setQuery(queryAsBytes);
         sd.setCharset(charset);
         t.add(sd);
-        DBMSEvent dbmsEvent = new DBMSEvent(new Long(seqno).toString(), null,
-                t, lastFrag, new Timestamp(System.currentTimeMillis()));
+        DBMSEvent dbmsEvent = new DBMSEvent(new Long(seqno).toString(), null, t,
+                lastFrag, new Timestamp(System.currentTimeMillis()));
         ReplDBMSEvent replDbmsEvent = new ReplDBMSEvent(seqno, (short) fragNo,
                 lastFrag, "NONE", 0, ts, dbmsEvent);
         return replDbmsEvent;
@@ -104,6 +104,19 @@ public class EventGenerationHelper
         Timestamp ts = new Timestamp(System.currentTimeMillis());
         return eventFromRowInsert(seqno, schema, table, names, values, fragNo,
                 lastFrag, ts);
+    }
+
+    /**
+     * Convenience method to create a transaction event from a row update using
+     * the current time as the commit time.
+     */
+    public ReplDBMSEvent eventFromRowUpdate(long seqno, String schema,
+            String table, String[] names, Object[] values, Object[] keys,
+            int fragNo, boolean lastFrag)
+    {
+        Timestamp ts = new Timestamp(System.currentTimeMillis());
+        return eventFromRowUpdate(seqno, schema, table, names, values, keys,
+                fragNo, lastFrag, ts);
     }
 
     /**
@@ -145,6 +158,51 @@ public class EventGenerationHelper
         // filter.
         rowChange.setColumnSpec(generateSpec(rowChange, names));
         rowChange.setColumnValues(generateValues(rowChange, values));
+
+        // Wrap the row change in a change set.
+        RowChangeData rowChangeData = new RowChangeData();
+        rowChangeData.appendOneRowChange(rowChange);
+
+        // Add the change set to the event array and generate a DBMS
+        // transaction.
+        ArrayList<DBMSData> data = new ArrayList<DBMSData>();
+        data.add(rowChangeData);
+
+        DBMSEvent dbmsEvent = new DBMSEvent(new Long(seqno).toString(), null,
+                data, lastFrag, new Timestamp(System.currentTimeMillis()));
+        ReplDBMSEvent replDbmsEvent = new ReplDBMSEvent(seqno, (short) fragNo,
+                lastFrag, "NONE", 0, commitTime, dbmsEvent);
+        return replDbmsEvent;
+    }
+
+    /**
+     * Creates a transaction event from a row update. This operation repeats the
+     * column values for the keys.
+     * 
+     * @param seqno Sequence number
+     * @param schema Schema name
+     * @param table Table name
+     * @param names Column names
+     * @param values Value columns
+     * @param values Key columns
+     * @param fragNo Fragment number within transaction
+     * @param lastFrag If true, last fragment in the transaction
+     * @param commitTime Time of commit
+     * @return A fully formed event containing a single row change
+     */
+    public ReplDBMSEvent eventFromRowUpdate(long seqno, String schema,
+            String table, String[] names, Object[] values, Object[] keys,
+            int fragNo, boolean lastFrag, Timestamp commitTime)
+    {
+        // Create row change data. This will contain a set of updates.
+        OneRowChange rowChange = generateRowChange(schema, table,
+                RowChangeData.ActionType.UPDATE);
+
+        // Add specifications and values for columns and keys.
+        rowChange.setColumnSpec(generateSpec(rowChange, names));
+        rowChange.setColumnValues(generateValues(rowChange, values));
+        rowChange.setKeySpec(generateSpec(rowChange, names));
+        rowChange.setKeyValues(generateValues(rowChange, keys));
 
         // Wrap the row change in a change set.
         RowChangeData rowChangeData = new RowChangeData();

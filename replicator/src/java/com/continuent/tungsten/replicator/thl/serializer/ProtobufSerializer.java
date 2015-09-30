@@ -39,6 +39,7 @@ import javax.sql.rowset.serial.SerialException;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.replicator.database.AdditionalTypes;
 import com.continuent.tungsten.replicator.dbms.DBMSData;
 import com.continuent.tungsten.replicator.dbms.LoadDataFileFragment;
 import com.continuent.tungsten.replicator.dbms.LoadDataFileQuery;
@@ -847,6 +848,16 @@ public class ProtobufSerializer implements Serializer
                     trace.append(value);
                 }
 
+                valueBuilder.setType(Type.STRING);
+                break;
+            case AdditionalTypes.INTERVALDS:
+            case AdditionalTypes.INTERVALYM:
+                valueBuilder.setStringValue((String) value);
+                if (logger.isDebugEnabled())
+                {
+                    trace.append(" / ");
+                    trace.append(value);
+                }
                 valueBuilder.setType(Type.STRING);
                 break;
             default :

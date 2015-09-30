@@ -64,6 +64,8 @@ import com.continuent.tungsten.replicator.consistency.ConsistencyTable;
 import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.database.DatabaseFactory;
 import com.continuent.tungsten.replicator.database.Table;
+import com.continuent.tungsten.replicator.datasource.SqlDataSource;
+import com.continuent.tungsten.replicator.datasource.UniversalDataSource;
 import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.extractor.Extractor;
 import com.continuent.tungsten.replicator.heartbeat.HeartbeatTable;
@@ -95,14 +97,14 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         implements
             OpenReplicatorPlugin
 {
-    private static Logger             logger     = Logger.getLogger(TungstenPlugin.class);
+    private static Logger logger = Logger.getLogger(TungstenPlugin.class);
 
     // Configuration is stored in the ReplicatorRuntime
-    private TungstenProperties        properties = null;
-    private ReplicatorRuntime         runtime;
-    private Pipeline                  pipeline;
-    private OpenReplicatorContext     context;
-    private ShardManager              shardManager;
+    private TungstenProperties    properties = null;
+    private ReplicatorRuntime     runtime;
+    private Pipeline              pipeline;
+    private OpenReplicatorContext context;
+    private ShardManager          shardManager;
 
     // Job services.
     private SimpleJobService<Integer> purgeService;
@@ -160,9 +162,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
     public int consistencyCheck(String method, String schemaName,
             String tableName, int rowOffset, int rowLimit) throws Exception
     {
-        logger.info("Got consistency check request: " + method + ":"
-                + schemaName + "." + tableName + ":" + rowOffset + ","
-                + rowLimit);
+        logger.info(
+                "Got consistency check request: " + method + ":" + schemaName
+                        + "." + tableName + ":" + rowOffset + "," + rowLimit);
 
         int id = -1;
 
@@ -170,7 +172,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         ReplicatorRuntime ourRuntime = runtime;
         if (ourRuntime == null)
         {
-            logger.warn("Master is offline and cannot perform consistency check");
+            logger.warn(
+                    "Master is offline and cannot perform consistency check");
             throw new Exception(
                     "Unable to obtain runtime for consistency check; is replicator offline?");
         }
@@ -185,8 +188,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             try
             // connect to database
             {
-                conn = DatabaseFactory
-                        .createDatabase(url, user, password, true);
+                conn = DatabaseFactory.createDatabase(url, user, password,
+                        true);
                 // this is about the only place where we want logging the
                 // queries
                 conn.connect();
@@ -287,8 +290,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
     {
         try
         {
-            return conn.findTable(replicatorSchema,
-                    ConsistencyTable.TABLE_NAME, false);
+            return conn.findTable(replicatorSchema, ConsistencyTable.TABLE_NAME,
+                    false);
         }
         catch (Exception e)
         {
@@ -315,9 +318,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         {
             Statement st;
             st = conn.createStatement();
-            ResultSet rs = st.executeQuery("SELECT MAX("
-                    + ConsistencyTable.idColumnName + ") FROM "
-                    + ct.getSchema() + "." + ct.getName());
+            ResultSet rs = st
+                    .executeQuery("SELECT MAX(" + ConsistencyTable.idColumnName
+                            + ") FROM " + ct.getSchema() + "." + ct.getName());
             if (rs.next())
             {
                 id = rs.getInt(1) + 1; // increment id
@@ -393,13 +396,15 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                     .getString(OpenReplicatorParams.INIT_EVENT_ID);
             if (initialEventId != null)
             {
-                logger.info("Initializing extractor to start at specific event ID: "
-                        + initialEventId);
+                logger.info(
+                        "Initializing extractor to start at specific event ID: "
+                                + initialEventId);
                 pipeline.setInitialEventId(initialEventId);
             }
 
             // Set apply skip events, if specified and higher than 0.
-            if (params.getString(OpenReplicatorParams.SKIP_APPLY_EVENTS) != null)
+            if (params
+                    .getString(OpenReplicatorParams.SKIP_APPLY_EVENTS) != null)
             {
                 try
                 {
@@ -415,13 +420,14 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                 catch (NumberFormatException e)
                 {
                     throw new ReplicatorException(
-                            "Invalid apply skip count: "
-                                    + params.getString(OpenReplicatorParams.SKIP_APPLY_EVENTS));
+                            "Invalid apply skip count: " + params.getString(
+                                    OpenReplicatorParams.SKIP_APPLY_EVENTS));
                 }
             }
 
             // Set apply skip seqnos.
-            if (params.getString(OpenReplicatorParams.SKIP_APPLY_SEQNOS) != null)
+            if (params
+                    .getString(OpenReplicatorParams.SKIP_APPLY_SEQNOS) != null)
             {
                 try
                 {
@@ -435,12 +441,13 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         String[] seqnoBoundaries = seqnoRange.trim().split("-");
                         if (seqnoBoundaries.length == 1)
                         {
-                            seqnos.add(Long.parseLong(seqnoBoundaries[0].trim()));
+                            seqnos.add(
+                                    Long.parseLong(seqnoBoundaries[0].trim()));
                         }
                         else if (seqnoBoundaries.length == 2)
                         {
-                            Long start = Long.parseLong(seqnoBoundaries[0]
-                                    .trim());
+                            Long start = Long
+                                    .parseLong(seqnoBoundaries[0].trim());
                             Long end = Long
                                     .parseLong(seqnoBoundaries[1].trim());
                             if (start < end)
@@ -454,14 +461,16 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                             {
                                 throw new ReplicatorException(
                                         "Invalid apply skip seqnos: "
-                                                + params.getString(OpenReplicatorParams.SKIP_APPLY_SEQNOS));
+                                                + params.getString(
+                                                        OpenReplicatorParams.SKIP_APPLY_SEQNOS));
                             }
                         }
                         else
                         {
                             throw new ReplicatorException(
                                     "Invalid apply skip seqnos: "
-                                            + params.getString(OpenReplicatorParams.SKIP_APPLY_SEQNOS));
+                                            + params.getString(
+                                                    OpenReplicatorParams.SKIP_APPLY_SEQNOS));
                         }
                     }
                     logger.info("Going online and skipping events " + seqnos);
@@ -470,8 +479,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                 catch (NumberFormatException e)
                 {
                     throw new ReplicatorException(
-                            "Invalid apply skip seqnos: "
-                                    + params.getString(OpenReplicatorParams.SKIP_APPLY_SEQNOS));
+                            "Invalid apply skip seqnos: " + params.getString(
+                                    OpenReplicatorParams.SKIP_APPLY_SEQNOS));
                 }
             }
 
@@ -480,8 +489,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             {
                 long seqno = params
                         .getLong(OpenReplicatorParams.ONLINE_TO_SEQNO);
-                logger.info("Initializing pipeline to go offline after processing seqno: "
-                        + seqno);
+                logger.info(
+                        "Initializing pipeline to go offline after processing seqno: "
+                                + seqno);
                 pipeline.shutdownAfterSequenceNumber(seqno);
             }
 
@@ -490,8 +500,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             {
                 String eventId = params
                         .getString(OpenReplicatorParams.ONLINE_TO_EVENT_ID);
-                logger.info("Initializing pipeline to go offline after processing event ID: "
-                        + eventId);
+                logger.info(
+                        "Initializing pipeline to go offline after processing event ID: "
+                                + eventId);
                 pipeline.shutdownAfterEventId(eventId);
             }
 
@@ -500,7 +511,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             {
                 String name = params.getString(
                         OpenReplicatorParams.ONLINE_TO_HEARTBEAT, "*", true);
-                logger.info("Initializing pipeline to go offline after processing hearbeat");
+                logger.info(
+                        "Initializing pipeline to go offline after processing hearbeat");
                 pipeline.shutdownAfterHeartbeat(name);
             }
 
@@ -513,15 +525,15 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         "yyyy-MM-dd HH:mm:ss");
                 Date toDate = new Date(timeMillis);
                 Timestamp ts = new Timestamp(timeMillis);
-                logger.info("Scheduling pipeline to go offline after processing source timestamp: "
-                        + formatter.format(toDate));
+                logger.info(
+                        "Scheduling pipeline to go offline after processing source timestamp: "
+                                + formatter.format(toDate));
                 pipeline.shutdownAfterTimestamp(ts);
             }
 
             // Masters have extra work.
-            if (runtime.isMaster()
-                    && runtime.getReplicatorProperties().getBoolean(
-                            ReplicatorConf.MASTER_THL_CHECK,
+            if (runtime.isMaster() && runtime.getReplicatorProperties()
+                    .getBoolean(ReplicatorConf.MASTER_THL_CHECK,
                             ReplicatorConf.MASTER_THL_CHECK_DEFAULT, false))
             {
                 // Check if this host was already the master previously :
@@ -531,8 +543,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         .getLastEvent();
                 if (lastAppliedEvent != null
                         && lastAppliedEvent.getSourceId() != null
-                        && !lastAppliedEvent.getSourceId().equals(
-                                runtime.getSourceId()))
+                        && !lastAppliedEvent.getSourceId()
+                                .equals(runtime.getSourceId()))
                 {
                     // Last applied event source id is different from this host
                     // source id, which means that this host was a slave
@@ -546,8 +558,7 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         throw new ReplicatorException("Database (@seqno "
                                 + maxCommittedSeqno
                                 + ") does not seem in sync with THL (@seqno "
-                                + maxStoredSeqno
-                                + "). The last stored event (#"
+                                + maxStoredSeqno + "). The last stored event (#"
                                 + maxStoredSeqno + ") was extracted by "
                                 + lastAppliedEvent.getSourceId()
                                 + " and was not applied on "
@@ -643,30 +654,39 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                 // Shut down processing at a particular sequence number.
                 long seqno = params
                         .getLong(OpenReplicatorParams.OFFLINE_AT_SEQNO);
-                logger.info("Initializing pipeline to go offline after processing seqno: "
-                        + seqno);
+                logger.info(
+                        "Initializing pipeline to go offline after processing seqno: "
+                                + seqno);
                 pipeline.shutdownAfterSequenceNumber(seqno);
             }
-            else if (params.get(OpenReplicatorParams.OFFLINE_AT_EVENT_ID) != null)
+            else
+                if (params
+                        .get(OpenReplicatorParams.OFFLINE_AT_EVENT_ID) != null)
             {
                 // Shut down processing at a particular event ID.
                 String eventId = params
                         .getString(OpenReplicatorParams.OFFLINE_AT_EVENT_ID);
-                logger.info("Initializing pipeline to go offline after processing event ID: "
-                        + eventId);
+                logger.info(
+                        "Initializing pipeline to go offline after processing event ID: "
+                                + eventId);
                 pipeline.shutdownAfterEventId(eventId);
             }
             // Stay online to a heartbeat event.
-            else if (params.get(OpenReplicatorParams.OFFLINE_AT_HEARTBEAT) != null)
+            else
+                    if (params.get(
+                            OpenReplicatorParams.OFFLINE_AT_HEARTBEAT) != null)
             {
                 String name = params.getString(
                         OpenReplicatorParams.OFFLINE_AT_HEARTBEAT, "*", true);
-                logger.info("Scheduline pipeline to go offline after processing hearbeat");
+                logger.info(
+                        "Scheduline pipeline to go offline after processing hearbeat");
                 pipeline.shutdownAfterHeartbeat(name);
             }
 
             // Stay online to a specified timestamp.
-            else if (params.get(OpenReplicatorParams.OFFLINE_AT_TIMESTAMP) != null)
+            else
+                        if (params.get(
+                                OpenReplicatorParams.OFFLINE_AT_TIMESTAMP) != null)
             {
                 long timeMillis = params
                         .getLong(OpenReplicatorParams.OFFLINE_AT_TIMESTAMP);
@@ -674,8 +694,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         "yyyy-MM-dd HH:mm:ss");
                 Date toDate = new Date(timeMillis);
                 Timestamp ts = new Timestamp(timeMillis);
-                logger.info("Scheduling pipeline to go offline after processing source timestamp: "
-                        + formatter.format(toDate));
+                logger.info(
+                        "Scheduling pipeline to go offline after processing source timestamp: "
+                                + formatter.format(toDate));
                 pipeline.shutdownAfterTimestamp(ts);
             }
 
@@ -711,28 +732,41 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
     {
         if (runtime == null)
             return false;
-
         else
         {
-            String url = runtime.getJdbcUrl(null);
-            String user = runtime.getJdbcUser();
-            String password = runtime.getJdbcPassword();
-            String name = params.getString(OpenReplicatorParams.HEARTBEAT_NAME,
-                    "NONE", true);
-            try
+            UniversalDataSource uds = runtime.getDataSource("extractor");
+            if (uds instanceof SqlDataSource)
             {
-                HeartbeatTable htTable = new HeartbeatTable(
-                        runtime.getReplicatorSchemaName(),
-                        runtime.getTungstenTableType());
-                htTable.startHeartbeat(url, user, password, name, 
-                                       params.getString(ReplicatorConf.RESOURCE_JDBC_INIT_SCRIPT));
-                return true;
+                SqlDataSource dataSource = (SqlDataSource) uds;
+                Database db = null;
+                try
+                {
+                    String name = params.getString(
+                            OpenReplicatorParams.HEARTBEAT_NAME, "NONE", true);
+                    db = dataSource.getConnection();
+                    HeartbeatTable htTable = new HeartbeatTable(
+                            runtime.getReplicatorSchemaName(),
+                            runtime.getTungstenTableType());
+                    htTable.startHeartbeat(db, name);
+                    return true;
+                }
+                catch (SQLException e)
+                {
+                    throw new ReplicatorException(
+                            "Heartbeat operation failed due to SQL error: "
+                                    + e.getMessage(),
+                            e);
+                }
+                finally
+                {
+                    if (db != null)
+                        dataSource.releaseConnection(db);
+                }
             }
-            catch (SQLException e)
+            else
             {
                 throw new ReplicatorException(
-                        "Heartbeat operation failed due to SQL error: "
-                                + e.getMessage(), e);
+                        "Heartbeat operation not supported for non-SQL data sources");
             }
         }
     }
@@ -752,8 +786,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         TungstenProperties props = new TungstenProperties();
         props.setString(OpenReplicatorParams.HEARTBEAT_NAME, "FLUSH");
 
-        String initScript = runtime.getReplicatorProperties().getString(
-                ReplicatorConf.RESOURCE_JDBC_INIT_SCRIPT);
+        String initScript = runtime.getReplicatorProperties()
+                .getString(ReplicatorConf.RESOURCE_JDBC_INIT_SCRIPT);
         if (initScript != null)
             props.setString(ReplicatorConf.RESOURCE_JDBC_INIT_SCRIPT,
                     initScript);
@@ -776,8 +810,9 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         }
 
         long seqno = event.getSeqno();
-        logger.info("SyncEvent-Flush: Flush complete.  Returning sequence number: "
-                + seqno);
+        logger.info(
+                "SyncEvent-Flush: Flush complete.  Returning sequence number: "
+                        + seqno);
         return new Long(seqno).toString();
     }
 
@@ -795,11 +830,11 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
 
         // Check constraints.
         if (timeout < 0)
-            throw new Exception("Timeout value may not be less than 0: "
-                    + timeout);
+            throw new Exception(
+                    "Timeout value may not be less than 0: " + timeout);
         if (!"master".equals(role))
-            throw new Exception("Purge only allowed on master: current role="
-                    + role);
+            throw new Exception(
+                    "Purge only allowed on master: current role=" + role);
 
         // Spawn the task.
         Future<Integer> purgeFuture = null;
@@ -902,8 +937,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         TungstenProperties statusProps = new TungstenProperties();
 
         // Set generic values that are always identical.
-        statusProps
-                .setString(Replicator.SEQNO_TYPE, Replicator.SEQNO_TYPE_LONG);
+        statusProps.setString(Replicator.SEQNO_TYPE,
+                Replicator.SEQNO_TYPE_LONG);
         statusProps.setString(Replicator.VERSION,
                 ManifestParser.parseReleaseWithBuildNumber());
 
@@ -919,8 +954,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
         statusProps.setString(Replicator.OFFLINE_REQUESTS, "NONE");
         statusProps.setString(Replicator.PIPELINE_SOURCE, "UNKNOWN");
         statusProps.setLong(Replicator.CHANNELS, -1);
-        statusProps.setString(Replicator.TIME_ZONE, TimeZone.getDefault()
-                .getID());
+        statusProps.setString(Replicator.TIME_ZONE,
+                TimeZone.getDefault().getID());
 
         // The following logic avoids race conditions that may cause
         // different sources of information to be null.
@@ -1004,17 +1039,17 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                     }
                 }
 
-                statusProps
-                        .setLong(Replicator.MIN_STORED_SEQNO, minStoredSeqno);
-                statusProps
-                        .setLong(Replicator.MAX_STORED_SEQNO, maxStoredSeqno);
+                statusProps.setLong(Replicator.MIN_STORED_SEQNO,
+                        minStoredSeqno);
+                statusProps.setLong(Replicator.MAX_STORED_SEQNO,
+                        maxStoredSeqno);
                 statusProps.setDouble(Replicator.APPLIED_LATENCY,
                         pipeline.getApplyLatency());
                 Timestamp commitTime = lastEvent.getExtractedTstamp();
                 if (commitTime != null)
                 {
-                    double relativeLatency = ((System.currentTimeMillis() - commitTime
-                            .getTime()) / 1000.0);
+                    double relativeLatency = ((System.currentTimeMillis()
+                            - commitTime.getTime()) / 1000.0);
                     statusProps.setDouble(Replicator.RELATIVE_LATENCY,
                             relativeLatency);
                 }
@@ -1076,8 +1111,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                         avgBlock = 0.0;
                     props.put("averageBlockSize",
                             String.format("%-10.3f", avgBlock));
-                    props.put("lastCommittedBlockSize",
-                            Long.toString(progress.getLastCommittedBlockSize()));
+                    props.put("lastCommittedBlockSize", Long
+                            .toString(progress.getLastCommittedBlockSize()));
                     props.put("currentBlockSize",
                             Long.toString(progress.getCurrentBlockSize()));
                     props.put("commits", Long.toString(blockCount));
@@ -1156,8 +1191,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                     Store store = pipeline.getStore(storeName);
                     TungstenProperties storeProps = store.status();
                     storeProps.setString("name", storeName);
-                    storeProps.setString("storeClass", store.getClass()
-                            .getName());
+                    storeProps.setString("storeClass",
+                            store.getClass().getName());
                     statusList.add(storeProps.hashMap());
                 }
             }
@@ -1168,8 +1203,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                     PipelineService service = pipeline.getService(serviceName);
                     TungstenProperties serviceProps = service.status();
                     serviceProps.setString("name", serviceName);
-                    serviceProps.setString("storeClass", service.getClass()
-                            .getName());
+                    serviceProps.setString("storeClass",
+                            service.getClass().getName());
                     statusList.add(serviceProps.hashMap());
                 }
             }
@@ -1210,14 +1245,15 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                             .getBlockCommitInterval().longValue() / 1000.0;
                     props.put("blockCommitInterval",
                             new Double(intervalSecs).toString() + "s");
-                    props.put("blockCommitPolicy", stage.getBlockCommitPolicy());
+                    props.put("blockCommitPolicy",
+                            stage.getBlockCommitPolicy());
 
                     // Add stage components.
                     props.put("applier.name", stage.getApplierSpec().getName());
-                    props.put("applier.class", stage.getApplierSpec()
-                            .getPluginClass().getName());
-                    props.put("extractor.name", stage.getExtractorSpec()
-                            .getName());
+                    props.put("applier.class",
+                            stage.getApplierSpec().getPluginClass().getName());
+                    props.put("extractor.name",
+                            stage.getExtractorSpec().getName());
                     props.put("extractor.class", stage.getExtractorSpec()
                             .getPluginClass().getName());
                     List<PluginSpecification> filters = stage.getFilterSpecs();
@@ -1225,16 +1261,18 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
                     {
                         String prefix = "filter." + i;
                         props.put(prefix + ".name", filters.get(i).getName());
-                        props.put(prefix + ".class", filters.get(i)
-                                .getPluginClass().getName());
+                        props.put(prefix + ".class",
+                                filters.get(i).getPluginClass().getName());
                     }
 
                     // Print stage progress.
                     StageProgressTracker tracker = stage.getProgressTracker();
                     props.put("committedMinSeqno",
-                            new Long(tracker.getCommittedMinSeqno()).toString());
+                            new Long(tracker.getCommittedMinSeqno())
+                                    .toString());
                     props.put("processedMinSeqno",
-                            new Long(tracker.getDirtyMinLastSeqno()).toString());
+                            new Long(tracker.getDirtyMinLastSeqno())
+                                    .toString());
 
                     statusList.add(props);
                 }
@@ -1251,8 +1289,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             }
 
             else
-                throw new ReplicatorException("Unrecognized status list type: "
-                        + name);
+                throw new ReplicatorException(
+                        "Unrecognized status list type: " + name);
         }
 
         // Return whatever we found.
@@ -1263,8 +1301,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
     private void addWatchStatus(Stage stage,
             List<Map<String, String>> statusList, boolean committed)
     {
-        List<Watch<?>> watches = stage.getProgressTracker().getWatches(
-                committed);
+        List<Watch<?>> watches = stage.getProgressTracker()
+                .getWatches(committed);
         for (Watch<?> watch : watches)
         {
             // Unfortunately running a "toString()" on the watch is a bit
@@ -1285,8 +1323,8 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             {
                 if (i > 0)
                     matchString.append(",");
-                matchString.append("[").append(i).append(":")
-                        .append(matched[i]).append("]");
+                matchString.append("[").append(i).append(":").append(matched[i])
+                        .append("]");
             }
             matchString.append("]");
             props.put("matched", matchString.toString());
@@ -1296,7 +1334,7 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
 
     public void provision(String uri) throws Exception
     {
-        // Currently unused. 
+        // Currently unused.
     }
 
     public ReplicatorCapabilities getCapabilities() throws Exception

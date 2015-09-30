@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.Date;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Time;
@@ -307,26 +308,33 @@ public class DsQueryCtrl
             throws SQLException
     {
         LinkedHashMap<String, Object> json = new LinkedHashMap<String, Object>();
-        for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++)
+        ResultSetMetaData metaData = rs.getMetaData();
+        for (int i = 1; i <= metaData.getColumnCount(); i++)
         {
-            Object value = rs.getObject(i);
+            Object value = null;
+            if (metaData.getColumnType(i) == java.sql.Types.TIMESTAMP)
+                value = rs.getTimestamp(i);
+            else
+                value = rs.getObject(i);
+            
+            String columnName = metaData.getColumnLabel(i);
             if (value instanceof Timestamp)
             {
                 String valueAsString = ((Timestamp) value).toString();
-                json.put(rs.getMetaData().getColumnLabel(i), valueAsString);
+                json.put(columnName, valueAsString);
             }
             else if (value instanceof Date)
             {
                 String valueAsString = ((Date) value).toString();
-                json.put(rs.getMetaData().getColumnLabel(i), valueAsString);
+                json.put(columnName, valueAsString);
             }
             else if (value instanceof Time)
             {
                 String valueAsString = ((Time) value).toString();
-                json.put(rs.getMetaData().getColumnLabel(i), valueAsString);
+                json.put(columnName, valueAsString);
             }
             else
-                json.put(rs.getMetaData().getColumnLabel(i), value);
+                json.put(columnName, value);
         }
         return json;
     }

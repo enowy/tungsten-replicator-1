@@ -9,11 +9,11 @@ REPL_ORACLE_LICENSE = "repl_oracle_license"
 REPL_ORACLE_SCHEMA = "repl_oracle_schema"
 REPL_ORACLE_LICENSED_SLAVE = "repl_oracle_licensed_slave"
 REPL_ORACLE_SCAN = "repl_datasource_oracle_scan"
+REPL_ORACLE_EXTRACTOR_METHOD = "repl_oracle_extractor_method"
 
 EXTRACTOR_REPL_ORACLE_SERVICE = "repl_direct_datasource_oracle_service"
 EXTRACTOR_REPL_ORACLE_SID = "repl_direct_datasource_oracle_sid"
 EXTRACTOR_REPL_ORACLE_SCAN = "repl_direct_datasource_oracle_scan"
-
 
 class OracleDatabasePlatform < ConfigureDatabasePlatform
   def get_uri_scheme
@@ -105,12 +105,18 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   end
 
   def get_extractor_template
-    if @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "") == ""
+    if @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "") != ""
+      # This picks oracle-scan.tpl.
       "tungsten-replicator/samples/conf/extractors/#{get_uri_scheme()}.tpl"
+    elsif @config.getPropertyOr(@prefix + [REPL_ORACLE_EXTRACTOR_METHOD], "") != ""
+      # This picks oracle-{cdc|redo}
+      tpl_base = "oracle-" + 
+         @config.getPropertyOr(@prefix + [REPL_ORACLE_EXTRACTOR_METHOD])
+      "tungsten-replicator/samples/conf/extractors/#{tpl_base}.tpl"
     else
-      "tungsten-replicator/samples/conf/extractors/oracle-scan.tpl"
+      "tungsten-replicator/samples/conf/extractors/oracle.tpl"
     end
-	end
+  end
 
   def get_default_table_engine
     case @config.getProperty(REPL_ROLE)
@@ -126,7 +132,23 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   end
   
   def get_extractor_filters
-    super() + ["CDC"]
+    # Compute the method. 
+    method = @config.getPropertyOr(@prefix + [REPL_ORACLE_EXTRACTOR_METHOD], "")
+
+    # Assign default filters based on type of extraction. 
+    if @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "") != ""
+      # Oracle scan gets no extra filters. 
+      super()
+    elsif method == "cdc"
+      # CDC gets CDC filter. 
+      super() + ["CDC"]
+    elsif method == "redo"
+      # Redo log reader requires filter to drop catalog data. 
+      ["dropcatalogdata"] + super()
+    else
+      # Anything else gets defaults. 
+      super()
+    end
   end
   
 	def get_applier_filters()
@@ -234,6 +256,23 @@ class OracleSCAN < OracleConfigurePrompt
   
   def required?
     false
+  end
+end
+
+class OracleExtractorMethod < OracleConfigurePrompt
+  include DatasourcePrompt
+
+  def initialize
+    super(REPL_ORACLE_EXTRACTOR_METHOD, "Oracle extractor
+      method", PV_ANY)
+  end
+
+  def required?
+    false
+  end
+
+  def load_default_value
+    @default = @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD))
   end
 end
 

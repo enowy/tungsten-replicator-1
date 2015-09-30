@@ -48,33 +48,33 @@ import com.continuent.tungsten.replicator.database.Table;
  */
 public class HeartbeatTable
 {
-    private static Logger      logger        = Logger.getLogger(HeartbeatTable.class);
+    private static Logger logger = Logger.getLogger(HeartbeatTable.class);
 
-    public static final String TABLE_NAME    = "heartbeat";
-    public static final String STAGE_TABLE_NAME    = "stage_xxx_heartbeat";
-    private static final long  KEY           = 1;
+    public static final String TABLE_NAME       = "heartbeat";
+    public static final String STAGE_TABLE_NAME = "stage_xxx_heartbeat";
+    private static final long  KEY              = 1;
 
-    private static AtomicLong  saltValue     = new AtomicLong(0);
+    private static AtomicLong saltValue = new AtomicLong(0);
 
-    private Table              hbTable;
-    private Table              hbStageTable;
-    private Column             hbTOpcode;
-    private Column             hbTSeqno;
-    private Column             hbTRowId;
-    private Column             hbTCommitTstamp;;
-    private Column             hbId;
-    private Column             hbSeqno;
-    private Column             hbEventId;
-    private Column             hbSourceTstamp;
-    private Column             hbTargetTstamp;
-    private Column             hbLagMillis;
-    private Column             hbSalt;
-    private Column             hbName;
+    private Table  hbTable;
+    private Table  hbStageTable;
+    private Column hbTOpcode;
+    private Column hbTSeqno;
+    private Column hbTRowId;
+    private Column hbTCommitTstamp;;
+    private Column hbId;
+    private Column hbSeqno;
+    private Column hbEventId;
+    private Column hbSourceTstamp;
+    private Column hbTargetTstamp;
+    private Column hbLagMillis;
+    private Column hbSalt;
+    private Column hbName;
 
-    String                     sourceTsQuery = null;
+    String sourceTsQuery = null;
 
-    private String             tableType;
-    private String             serviceName;
+    private String tableType;
+    private String serviceName;
 
     public HeartbeatTable(String schema, String tableType)
     {
@@ -116,8 +116,8 @@ public class HeartbeatTable
         hbTable.AddColumn(hbName);
         hbTable.AddKey(hbKey);
 
-        sourceTsQuery = "SELECT source_tstamp from " + schema + "."
-                + TABLE_NAME + " where id=" + KEY;
+        sourceTsQuery = "SELECT source_tstamp from " + schema + "." + TABLE_NAME
+                + " where id=" + KEY;
     }
 
     private void initializeStage(String schema)
@@ -126,7 +126,8 @@ public class HeartbeatTable
         hbTOpcode = new Column("tungsten_opcode", Types.VARCHAR, 2);
         hbTSeqno = new Column("tungsten_seqno", Types.BIGINT, true);
         hbTRowId = new Column("tungsten_row_id", Types.BIGINT, true);
-        hbTCommitTstamp = new Column("tungsten_commit_timestamp", Types.TIMESTAMP);
+        hbTCommitTstamp = new Column("tungsten_commit_timestamp",
+                Types.TIMESTAMP);
 
         Key hbKey = new Key(Key.Primary);
 
@@ -147,7 +148,7 @@ public class HeartbeatTable
         hbStageTable.AddColumn(hbSalt);
         hbStageTable.AddColumn(hbName);
         hbStageTable.AddKey(hbKey);
-   }
+    }
 
     /**
      * Returns metadata used to create the underlying heartbeat table.
@@ -229,17 +230,19 @@ public class HeartbeatTable
         }
     }
 
-    public void initializeHeartbeatStageTable(Database database) throws SQLException
+    public void initializeHeartbeatStageTable(Database database)
+            throws SQLException
     {
         if (logger.isDebugEnabled())
             logger.debug("Initializing heartbeat staging table");
 
         // Create the table if it does not exist.
-        if (database.findTable(hbStageTable.getSchema(), hbStageTable.getName()) == null)
-            {
-                database.createTable(this.hbStageTable, false, this.hbStageTable.getSchema(),
-                                     tableType, serviceName);
-            }
+        if (database.findTable(hbStageTable.getSchema(),
+                hbStageTable.getName()) == null)
+        {
+            database.createTable(this.hbStageTable, false,
+                    this.hbStageTable.getSchema(), tableType, serviceName);
+        }
     }
 
     /**
@@ -273,21 +276,21 @@ public class HeartbeatTable
      * Wrapper for startHeartbeat() call.
      */
     public void startHeartbeat(String url, String user, String password,
-                               String name, String initScript) throws SQLException
+            String name, String initScript) throws SQLException
     {
         Database db = null;
         try
-            {
-                db = DatabaseFactory.createDatabase(url, user, password);
-                if (initScript != null)
-                    db.setInitScript(initScript);
-                db.connect();
-                startHeartbeat(db, name);
-            }
+        {
+            db = DatabaseFactory.createDatabase(url, user, password);
+            if (initScript != null)
+                db.setInitScript(initScript);
+            db.connect();
+            startHeartbeat(db, name);
+        }
         finally
-            {
-                db.close();
-            }
+        {
+            db.close();
+        }
     }
 
     /**

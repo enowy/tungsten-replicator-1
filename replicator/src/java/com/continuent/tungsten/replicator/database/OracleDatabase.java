@@ -712,7 +712,7 @@ public class OracleDatabase extends AbstractDatabase
             throws SQLException
     {
         createTable(table, replace);
-        createChangeTable(table, tungstenSchema, tungstenTableType, serviceName);
+        // createChangeTable(table, tungstenSchema, tungstenTableType, serviceName);
 
     }
 
