@@ -86,9 +86,7 @@ build_tarball() {
 		fi
 		
 		# Toggle the -e flag in case there aren't wrapper entries 
-		set +e
-		wrapper_binaries=`ls $cluster_home/bin/wrapper* | wc -l`
-		set -e
+		wrapper_binaries=`find $cluster_home/bin -depth 1 -name wrapper* | wc -l`
 		if [ "$wrapper_binaries" != "0" ]; then
 			echo "### Replicator: use Tanuki Wrapper"
 			cp $source_replicator/samples/scripts/tanuki/replicator $reldir_replicator/bin
@@ -105,7 +103,7 @@ build_tarball() {
 	########################################################################
   # Evaluate any extensions in $SRC_DIR
   ########################################################################
-	extensions=`ls -d $SRC_DIR/extensions/*`
+	extensions=`find $SRC_DIR/extensions -depth 1 -type d`
 	for ext in $extensions; do
 		if [ -d $ext ]; then
 			if [ -f "${ext}/build.xml" ]; then
