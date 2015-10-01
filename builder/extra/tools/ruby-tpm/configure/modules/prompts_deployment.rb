@@ -1459,7 +1459,7 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "false")
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "true")
     add_command_line_alias("jgroups-ssl")
   end
   
@@ -1512,6 +1512,30 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   end
   
   DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
+  
+  def self.build_keystore(keyalias, keypass, storepass)
+    Configurator.instance.synchronize() {
+      @keystores ||= {}
+      
+      if @keystores[keyalias] != nil
+        return @keystores[keyalias]
+      end
+      
+      ks = Tempfile.new("jgroupssec")
+      ks.close()
+      File.unlink(ks.path())
+      
+      cmd = ["keytool -genseckey -alias #{keyalias}",
+        "-keypass #{keypass}",
+        "-storepass #{storepass} -keyalg Blowfish -keysize 56",
+        "-keystore #{ks.path()} -storetype JCEKS"]
+      cmd_result(cmd.join(" "))
+      
+      @keystores[keyalias] = ks.path()
+      
+      return @keystores[keyalias]
+    }
+  end
 end
 
 class GlobalHostJavaJgroupsKeystorePath < ConfigurePrompt
@@ -1742,43 +1766,43 @@ class HostTLSAlias < ConfigurePrompt
   end
 end
 
-class HostTLSKey < ConfigurePrompt
+class HostJavaTLSKeystorePath < ConfigurePrompt
   include ClusterHostPrompt
   include OptionalPromptModule
   
   def initialize
-    super(JAVA_TLS_ENTRY_KEY, "The key to use for all Continuent TLS encryption.", PV_FILENAME)
+    super(JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
   end
   
   def get_template_value
-    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/.tls.key"
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_tls_keystore.jks"
   end
   
-  DeploymentFiles.register(JAVA_TLS_ENTRY_KEY, GLOBAL_JAVA_TLS_ENTRY_KEY)
-end
-
-class GlobalHostTLSKey < ConfigurePrompt
-  include ClusterHostPrompt
-  include OptionalPromptModule
+  DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def initialize
-    super(GLOBAL_JAVA_TLS_ENTRY_KEY, "The key to use for all Continuent TLS encryption.", PV_FILENAME)
+  def self.build_keystore(keyalias, keypass, storepass)
+    Configurator.instance.synchronize() {
+      @keystores ||= {}
+      
+      if @keystores[keyalias] != nil
+        return @keystores[keyalias]
+      end
+      
+      ks = Tempfile.new("tlssec")
+      ks.close()
+      File.unlink(ks.path())
+      
+      cmd = ["keytool -genkey -alias #{keyalias}",
+        "-keyalg RSA -keystore #{ks.path()}",
+        "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
+        "-storepass #{storepass} -keypass #{keypass}"]
+      cmd_result(cmd.join(" "))
+      
+      @keystores[keyalias] = ks.path()
+      
+      return @keystores[keyalias]
+    }
   end
-end
-
-class HostTLSCertificate < ConfigurePrompt
-  include ClusterHostPrompt
-  include OptionalPromptModule
-  
-  def initialize
-    super(JAVA_TLS_ENTRY_CERTIFICATE, "The certificate to use for all Continuent TLS encryption.", PV_FILENAME)
-  end
-  
-  def get_template_value
-    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/.tls.certificate"
-  end
-  
-  DeploymentFiles.register(JAVA_TLS_ENTRY_CERTIFICATE, GLOBAL_JAVA_TLS_ENTRY_CERTIFICATE)
 end
 
 class GlobalHostTLSCertificate < ConfigurePrompt
@@ -1786,7 +1810,7 @@ class GlobalHostTLSCertificate < ConfigurePrompt
   include OptionalPromptModule
   
   def initialize
-    super(GLOBAL_JAVA_TLS_ENTRY_CERTIFICATE, "The certificate to use for all Continuent TLS encryption.", PV_FILENAME)
+    super(GLOBAL_JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
   end
 end
 

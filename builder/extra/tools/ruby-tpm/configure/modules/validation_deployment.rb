@@ -1517,8 +1517,9 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       keytool_path = nil
     end
     
-    if ssl_enabled == true
-      keystore_path = @config.getProperty(JAVA_KEYSTORE_PATH)
+    keystore_path = @config.getProperty(JAVA_KEYSTORE_PATH)
+    truststore_path = @config.getProperty(JAVA_TRUSTSTORE_PATH)
+    if ssl_enabled == true && keystore_path != nil && truststore_path != nil
       if keystore_path.to_s() == ""
         if File.exist?(@config.getTemplateValue(JAVA_KEYSTORE_PATH))
           keystore_path = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
@@ -1535,7 +1536,6 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         end
       end
     
-      truststore_path = @config.getProperty(JAVA_TRUSTSTORE_PATH)
       if truststore_path.to_s() == ""
         if File.exist?(@config.getTemplateValue(JAVA_TRUSTSTORE_PATH))
           truststore_path = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)

@@ -99,10 +99,55 @@ module ConfigureDeploymentStepDeployment
       "cluster-home/samples/conf/security.properties.tpl")
       
     rmi_user = @config.getProperty(RMI_USER)
-    jks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
+    ks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
     
     ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
     ts_pass = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
+    
+    tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+    tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
+    if File.exist?(tls_keystore)
+      if File.exist?(ks)
+        cmd = ["keytool -delete -alias #{tls_alias}",
+        	"-keystore #{ks}",
+        	"-storepass #{ks_pass}"]
+        cmd_result(cmd.join(" "))
+      end
+
+      cmd = ["keytool -importkeystore -noprompt",
+      	"-srckeystore #{tls_keystore}",
+      	"-srcstorepass #{ks_pass}",
+      	"-srckeypass #{ks_pass}",
+      	"-destkeystore #{ks}",
+      	"-deststorepass #{ks_pass}",
+      	"-destkeypass #{ks_pass}",
+      	"-srcalias #{tls_alias} -destalias #{tls_alias}"]
+      cmd_result(cmd.join(" "))
+      
+      local_cert = Tempfile.new("tcfg")
+      local_cert.close()
+      File.unlink(local_cert.path())
+      
+      cmd = ["keytool -export -alias #{tls_alias}",
+        "-file #{local_cert.path()}",
+        "-keystore #{ks} -storepass #{ks_pass}",
+        "-keypass #{ks_pass}"]
+      cmd_result(cmd.join(" "))
+      
+      if File.exist?(ts)
+        cmd = ["keytool -delete -alias #{tls_alias}",
+        	"-keystore #{ts}",
+        	"-storepass #{ts_pass}"]
+        cmd_result(cmd.join(" "))
+      end
+      
+      cmd = ["keytool -import -trustcacerts -alias #{tls_alias}",
+        "-file #{local_cert.path()} -keystore #{ts}",
+        "-storepass #{ts_pass} -noprompt"]
+      cmd_result(cmd.join(" "))
+    end
     
     jmxremote = @config.getTemplateValue(JAVA_JMXREMOTE_ACCESS_PATH)
     unless File.exist?(jmxremote)
@@ -116,8 +161,8 @@ module ConfigureDeploymentStepDeployment
     
     password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
     unless File.exist?(password_store)
-cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{jks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
-      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{jks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
+cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
+      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
     end
     
     # Write the tungsten-cookbook/INSTALLED* files
