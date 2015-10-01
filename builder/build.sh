@@ -97,9 +97,20 @@ VERSION=$VERSION_MAJOR.$VERSION_MINOR.$VERSION_REVISION
 # Release name.
 product="Tungsten Replicator"
 relname=tungsten-replicator-${VERSION}
+
 # Add Jenkins build number if any
-if [ "x${BUILD_NUMBER}" != "x" ]
+if [ -n "${BUILD_NUMBER}" ]
 then
+    # Checks that BUILD_NUMBER contains only digits
+    case $BUILD_NUMBER in
+            ''|*[!0-9]*) 
+                    echo "Bad BUILD_NUMBER <$BUILD_NUMBER> : Only digits are allowed"
+                    exit 1
+                    ;;
+                *) 
+                    echo "Using build number <$BUILD_NUMBER>" 
+                    ;;
+    esac
     relname=${relname}-${BUILD_NUMBER}
 fi
 
