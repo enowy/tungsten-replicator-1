@@ -152,7 +152,11 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   end
   
 	def get_applier_filters()
-	  ["nocreatedbifnotexists","dbupper"] + super()
+	  if @config.getProperty(@prefix + [ENABLE_HETEROGENOUS_SLAVE]) == "true"
+	    ["nocreatedbifnotexists","dbupper"] + super()
+	  else
+	    super()
+	  end
 	end
 	
 	def get_default_master_log_directory
