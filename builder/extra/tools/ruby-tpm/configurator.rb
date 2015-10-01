@@ -215,6 +215,8 @@ class Configurator
   end
 
   def run
+    original_umask = File.umask()
+		
     # Include additional Ruby files from the source tree
     load_include_files()
     
@@ -230,6 +232,17 @@ class Configurator
     # Hand of control to the ConfigureCommand object. After completion
     # cleanup the process and exit with a 0 or 1
     begin
+      # Change the umask to a protected state for files that
+      # we create on the users behalf
+      if (@config.getNestedProperty([DEPLOYMENT_HOST]) != nil && 
+          @config.getProperty(PROTECT_CONFIGURATION_FILES) == "true")
+        File.umask(0077)
+      else
+        unless original_umask == 0077.to_i()
+          warning("Your umask is not set to 0077. This may result in some files not being fully protected from other users on this sytem.")
+        end
+      end
+			
       if @command.run() == false
         cleanup(1)
       else
@@ -240,6 +253,9 @@ class Configurator
     rescue => e
       exception(e)
       cleanup(1)
+    ensure
+      # Restore the umask to the original value
+      File.umask(original_umask)
     end
   end
   
