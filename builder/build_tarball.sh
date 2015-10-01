@@ -85,7 +85,10 @@ build_tarball() {
 			cp $extra_commercial/replicator/conf/* $reldir_replicator/conf
 		fi
 		
+		# Toggle the -e flag in case there aren't wrapper entries 
+		set +e
 		wrapper_binaries=`ls $cluster_home/bin/wrapper* | wc -l`
+		set -e
 		if [ "$wrapper_binaries" != "0" ]; then
 			echo "### Replicator: use Tanuki Wrapper"
 			cp $source_replicator/samples/scripts/tanuki/replicator $reldir_replicator/bin
