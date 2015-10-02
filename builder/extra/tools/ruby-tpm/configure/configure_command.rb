@@ -44,6 +44,8 @@ module ConfigureCommand
     @command_dataservices = []
     @fixed_properties = []
     @removed_properties = []
+    
+    @temp_directory = nil
   end
   
   def distribute_log?(v = nil)
@@ -512,6 +514,7 @@ module ConfigureCommand
       return false
     rescue => e
       exception(e)
+      cleanup()
       return false
     end
 
@@ -573,6 +576,10 @@ module ConfigureCommand
   
   def cleanup
     parallel_handle(get_deployment_handler_class(), 'cleanup')
+    
+    if @temp_directory != nil
+      cmd_result("rm -rf #{@temp_directory}")
+    end
   end
   
   def parallel_handle(klass, method)
@@ -1326,6 +1333,20 @@ module ConfigureCommand
     return methods
   end
   
+  def get_temp_directory
+    if @temp_directory != nil
+      return @temp_directory
+    else
+      Configurator.instance.synchronize("ConfigureCommandGetTempDirectory") do
+        if @temp_directory == nil
+          @temp_directory = Dir.mktmpdir()
+        end
+      
+        return @temp_directory
+      end
+    end
+  end
+  
   def self.included(subclass)
     @@subclasses ||= []
     
@@ -1388,6 +1409,10 @@ class ConfigureDeploymentStepMethod
     @method_name=method_name
     @group_id=group_id
     @weight=weight
+    
+    if (parallelization == false)
+      parallelization = ConfigureDeploymentStepParallelization::NONE
+    end
     @parallelization=parallelization
   end
 end

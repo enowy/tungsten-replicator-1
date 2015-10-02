@@ -121,14 +121,14 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   def get_default_table_engine
     case @config.getProperty(REPL_ROLE)
     when REPL_ROLE_S
-      ""
+      "redo"
     else
-      "CDC"
+      "redo"
     end
   end
 
   def get_allowed_table_engines
-    ["CDC", "CDCASYNC", "CDCSYNC"]
+    ["redo", "CDCASYNC", "CDCSYNC"]
   end
   
   def get_extractor_filters
@@ -152,7 +152,11 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   end
   
 	def get_applier_filters()
-	  ["nocreatedbifnotexists","dbupper"] + super()
+	  if @config.getProperty(@prefix + [ENABLE_HETEROGENOUS_SLAVE]) == "true"
+	    ["nocreatedbifnotexists","dbupper"] + super()
+	  else
+	    super()
+	  end
 	end
 	
 	def get_default_master_log_directory

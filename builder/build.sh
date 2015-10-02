@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 ##########################################################################
 # NAME:  BUILD
@@ -85,6 +86,7 @@ if [ -z $config ]; then
   config=config
 fi
 
+cd `dirname $0`
 source ./$config
 
 if [ -f config.local ]; then
@@ -114,7 +116,6 @@ then
     relname=${relname}-${BUILD_NUMBER}
 fi
 
-cd `dirname $0`
 source ./helpers.sh
 
 printHeader "REPLICATOR BUILD SCRIPT"
@@ -132,6 +133,7 @@ source_community_extra=extra
 extra_replicator=${source_community_extra}/replicator
 extra_cluster_home=${source_community_extra}/cluster-home
 extra_tools=${source_community_extra}/tools
+extra_commercial=${SRC_DIR}/community/extra
 
 jars_commons=${source_commons}/build/jars
 lib_commons=${source_commons}/lib

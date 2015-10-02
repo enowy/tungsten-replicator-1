@@ -190,6 +190,7 @@ class Configurator
     @alive_thread = nil
     
     @mutex = Mutex.new
+    @external_mutexes = {}
   end
   
   def cleanup(code = 0)
@@ -215,6 +216,8 @@ class Configurator
   end
 
   def run
+    original_umask = File.umask()
+		
     # Include additional Ruby files from the source tree
     load_include_files()
     
@@ -230,6 +233,27 @@ class Configurator
     # Hand of control to the ConfigureCommand object. After completion
     # cleanup the process and exit with a 0 or 1
     begin
+      # Change the umask to a protected state for files that
+      # we create on the users behalf
+      if @config.getNestedProperty([DEPLOYMENT_HOST]) != nil
+        target_umask = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
+      else
+        target_umask = nil
+        if Configurator.instance.default_security?() == true
+          desired_umask = 0077
+        else
+          desired_umask = nil
+        end
+      end
+      
+      if target_umask != nil
+        File.umask(target_umask)
+      elsif desired_umask != nil
+        unless original_umask == desired_umask.to_i()
+          warning("Your umask is not set to #{sprintf("%04o", desired_umask)}. This may result in some files not being fully protected from other users on this sytem.")
+        end
+      end
+			
       if @command.run() == false
         cleanup(1)
       else
@@ -240,6 +264,9 @@ class Configurator
     rescue => e
       exception(e)
       cleanup(1)
+    ensure
+      # Restore the umask to the original value
+      File.umask(original_umask)
     end
   end
   
@@ -952,7 +979,7 @@ class Configurator
   
   def get_interface_address(interface_name)
     debug("Search ifconfig for interface #{interface_name}")
-    details IPParse.new().get_interface_address(interface_name, IPParse::IPV4)
+    details = IPParse.new().get_interface_address(interface_name, IPParse::IPV4)
     
     if details == nil
       return nil
@@ -1194,6 +1221,14 @@ class Configurator
       @command.forced?()
     else
       false
+    end
+  end
+  
+  def default_security?
+    if is_open_source?() == true
+      return false
+    else
+      return true
     end
   end
   
@@ -1461,8 +1496,17 @@ class Configurator
     }
   end
   
-  def synchronize(&block)
-    @mutex.synchronize do
+  def synchronize(name = nil, &block)
+    if name == nil
+      mtx = @mutex
+    else
+      if @external_mutexes.has_key?(name) == false
+        @external_mutexes[name] = Mutex.new()
+      end
+      mtx = @external_mutexes[name]
+    end
+    
+    mtx.synchronize do
       block.call()
     end
   end

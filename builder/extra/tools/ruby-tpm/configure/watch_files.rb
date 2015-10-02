@@ -14,11 +14,6 @@ class WatchFiles
       |out|
       out.puts file_to_watch
     }
-
-    if cfg.getProperty(PROTECT_CONFIGURATION_FILES) == "true"
-      cmd_result("chmod o-rwx #{file}")
-      cmd_result("chmod o-rwx #{WatchFiles.get_original_watch_file(file)}")
-    end
   end
   
   def self.get_original_watch_file(file)

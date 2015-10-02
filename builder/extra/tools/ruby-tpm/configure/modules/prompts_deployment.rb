@@ -1455,11 +1455,110 @@ class HostSecurityDirectory < ConfigurePrompt
   end
 end
 
+class HostEnableJgroupsSSL < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "true")
+    add_command_line_alias("jgroups-ssl")
+  end
+  
+  def get_template_value
+    if get_value() == "true"
+      keystore = File.basename(@config.getTemplateValue(get_member_key(JAVA_JGROUPS_KEYSTORE_PATH)))
+      key_alias = @config.getProperty(get_member_key(JAVA_JGROUPS_ENTRY_ALIAS))
+      ks_pass = @config.getProperty(get_member_key(JAVA_KEYSTORE_PASSWORD))
+      return "<ENCRYPT key_store_name=\"#{keystore}\"  store_password=\"#{ks_pass}\" key_password=\"#{ks_pass}\" alias=\"#{key_alias}\" />"
+    else
+      return ""
+    end
+  end
+end
+
+class HostJgroupsTLSAlias < ConfigurePrompt
+  include ClusterHostPrompt
+  include PrivateArgumentModule
+  
+  def initialize
+    super(JAVA_JGROUPS_ENTRY_ALIAS, "The alias to use for the JGroups TLS key in the keystore.", PV_ANY, "jgroups")
+  end
+end
+
+class HostJavaJgroupsKeystorePath < ConfigurePrompt
+  include ClusterHostPrompt
+  include NoStoredServerConfigValue
+  
+  def initialize
+    super(JAVA_JGROUPS_KEYSTORE_PATH, "Local path to the JGroups Java Keystore file.", PV_FILENAME)
+  end
+  
+  def get_template_value
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_jgroups_keystore.jceks"
+  end
+  
+  def required?
+    false
+  end
+  
+  def validate_value(value)
+    super(value)
+    if is_valid?() && value != ""
+      unless File.exists?(value)
+        error("The file #{value} does not exist")
+      end
+    end
+    
+    is_valid?()
+  end
+  
+  DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
+  
+  def self.build_keystore(dest, keyalias, keypass, storepass)
+    Configurator.instance.synchronize() {
+      @mutex ||= Mutex.new
+    }
+    
+    @mutex.synchronize do
+      @keystores ||= {}
+      
+      if @keystores[keyalias] != nil
+        return @keystores[keyalias]
+      end
+      
+      ks = Tempfile.new("jgroupssec")
+      ks.close()
+      File.unlink(ks.path())
+      path = "#{dest}/#{File.basename(ks.path())}"
+      
+      cmd = ["keytool -genseckey -alias #{keyalias}",
+        "-keypass #{keypass}",
+        "-storepass #{storepass} -keyalg Blowfish -keysize 56",
+        "-keystore #{path} -storetype JCEKS"]
+      cmd_result(cmd.join(" "))
+      
+      @keystores[keyalias] = path
+      
+      return @keystores[keyalias]
+    end
+  end
+end
+
+class GlobalHostJavaJgroupsKeystorePath < ConfigurePrompt
+  include ClusterHostPrompt
+  include ConstantValueModule
+  include NoStoredServerConfigValue
+  
+  def initialize
+    super(GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH, "Staging path to the Java JGroups Keystore file", 
+      PV_FILENAME)
+  end
+end
+
 class HostEnableRMIAuthentication < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, "false")
+    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, "true")
     add_command_line_alias("rmi-authentication")
   end
 end
@@ -1468,7 +1567,7 @@ class HostEnableRMISSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, "false")
+    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, "true")
     add_command_line_alias("rmi-ssl")
   end
 end
@@ -1663,13 +1762,65 @@ class GlobalHostJavaPasswordStorePath < ConfigurePrompt
   end
 end
 
-class HostBuildSecurityFiles < ConfigurePrompt
+class HostTLSAlias < ConfigurePrompt
   include ClusterHostPrompt
-  include NoStoredServerConfigValue
-  include HiddenValueModule
+  include PrivateArgumentModule
   
   def initialize
-    super(BUILD_SECURITY_FILES, "Build the necessary Java security files", PV_BOOLEAN, "false")
+    super(JAVA_TLS_ENTRY_ALIAS, "The alias to use for the TLS key/certificate in the keystore and truststore.", PV_ANY, "tls")
+  end
+end
+
+class HostJavaTLSKeystorePath < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
+  end
+  
+  def get_template_value
+    @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_tls_keystore.jks"
+  end
+  
+  DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
+  
+  def self.build_keystore(dest, keyalias, keypass, storepass)
+    Configurator.instance.synchronize() {
+      @mutex ||= Mutex.new
+    }
+    
+    @mutex.synchronize do
+      @keystores ||= {}
+      
+      if @keystores[keyalias] != nil
+        return @keystores[keyalias]
+      end
+      
+      ks = Tempfile.new("tlssec")
+      ks.close()
+      File.unlink(ks.path())
+      path = "#{dest}/#{File.basename(ks.path())}"
+      
+      cmd = ["keytool -genkey -alias #{keyalias}",
+        "-keyalg RSA -keystore #{path}",
+        "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
+        "-storepass #{storepass} -keypass #{keypass}"]
+      cmd_result(cmd.join(" "))
+      
+      @keystores[keyalias] = path
+      
+      return @keystores[keyalias]
+    end
+  end
+end
+
+class GlobalHostTLSCertificate < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(GLOBAL_JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
   end
 end
 
@@ -1719,7 +1870,48 @@ class HostProtectConfigurationFiles < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(PROTECT_CONFIGURATION_FILES, "Make configuration files readable by only the system user", PV_BOOLEAN, "true")
+    super(PROTECT_CONFIGURATION_FILES, "Make configuration files readable by only the system user", PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if Configurator.instance.default_security?() == true
+      @default = "true"
+    else
+      @default = "false"
+    end
+  end
+end
+
+class HostFileProtectionLevel < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    validator = PropertyValidator.new("^user|group|none$", 
+      "Value must be user, group or none")
+    super(FILE_PROTECTION_LEVEL, "Protection level for Continuent files", validator)
+  end
+  
+  def load_default_value
+    if @config.getProperty(get_member_key(PROTECT_CONFIGURATION_FILES)) == "false"
+      @default = "none"
+    else
+      if Configurator.instance.default_security?() == true
+        @default = "user"
+      else
+        @default = "none"
+      end
+    end
+  end
+  
+  def get_template_value
+    case get_value()
+    when "user"
+      return 0077
+    when "group"
+      return 0007
+    else
+      return nil
+    end
   end
 end
 

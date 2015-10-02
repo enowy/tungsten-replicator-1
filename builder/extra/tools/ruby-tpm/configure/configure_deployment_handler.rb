@@ -11,6 +11,7 @@ class ConfigureDeploymentHandler
   
   def prepare(configs)
     reset_errors()
+    
     configs.each{
       |config|
       
@@ -57,98 +58,12 @@ class ConfigureDeploymentHandler
           end
         end
         
-        if @config.getProperty(BUILD_SECURITY_FILES) == "true"
-          jmx = Tempfile.new("sec")
-          jmx.puts("#{@config.getProperty(RMI_USER)}        readwrite \\
-  create javax.management.monitor.*,javax.management.timer.* \\
-  unregister")
-          jmx.close()
-          
-          password_store = Tempfile.new("sec")
-          password_store.close()
-          File.unlink(password_store.path())
-          
-          ca_pem = Tempfile.new("sec")
-          ca_pem.close()
-          pem = Tempfile.new("sec")
-          pem.close()
-          p12 = Tempfile.new("sec")
-          p12.close()
-          cer = Tempfile.new("sec")
-          cer.close()
-          jks = Tempfile.new("sec")
-          jks.close()
-          File.unlink(jks.path())
-          ts = Tempfile.new("sec")
-          ts.close()
-          File.unlink(ts.path())
-          conn_jks = Tempfile.new("sec")
-          conn_jks.close()
-          File.unlink(conn_jks.path())
-          conn_ts = Tempfile.new("sec")
-          conn_ts.close()
-          File.unlink(conn_ts.path())
-          
-          ssl_ca = File.open(@config.getProperty(SSL_CA))
-          ssl_ca.close()
-          ssl_key = File.open(@config.getProperty(SSL_KEY))
-          ssl_key.close()
-          ssl_cert = File.open(@config.getProperty(SSL_CERT))
-          ssl_cert.close()
-          
-          jks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
-          ts_pass = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
-          conn_jks_pass = @config.getProperty(JAVA_CONNECTOR_KEYSTORE_PASSWORD)
-          conn_ts_pass = @config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PASSWORD)
-
-          cmd_result("openssl x509 -in #{ssl_ca.path()} -out #{ca_pem.path()} -outform PEM")
-          cmd_result("openssl x509 -in #{ssl_cert.path()} -out #{pem.path()} -outform PEM")
-          cmd_result("openssl pkcs12 -export -inkey #{ssl_key.path()} -in #{pem.path()} -CAfile #{ca_pem.path()} -out #{p12.path()} -passout pass:temp")
-
-          # Build tungsten_keystore.jks
-          cmd_result("keytool -importkeystore -srckeystore #{p12.path()} -srcstoretype PKCS12 -destkeystore #{jks.path()} -srcstorepass temp -deststorepass #{jks_pass} -noprompt")
-          #cmd_result("keytool -import -alias mysqlServerCACert -file #{ssl_ca.path()} -keystore #{jks.path()} -deststorepass #{jks_pass} -noprompt")
-          #cmd_result("keytool -export -file #{cer.path()} -keystore #{jks.path()} -storepass #{jks_pass} -noprompt")
-          
-          # Build tungsten_truststore.ts
-          cmd_result("keytool -import -alias mysqlServerCACert -file #{ca_pem.path()} -keystore #{ts.path()} -deststorepass #{ts_pass} -noprompt")
-          
-          # Build tungsten_connector_keystore.jks
-          cmd_result("keytool -importkeystore -srckeystore #{p12.path()} -srcstoretype PKCS12 -destkeystore #{conn_jks.path()} -srcstorepass temp -deststorepass #{conn_jks_pass} -noprompt")
-          cmd_result("keytool -import -alias mysqlServerCACert -file #{ca_pem.path()} -keystore #{conn_jks.path()} -deststorepass #{conn_jks_pass} -noprompt")
-          
-          # Build tungsten_connector_truststore.ts
-          #cmd_result("keytool -import -trustcacerts -file #{cer.path()} -keystore #{conn_ts.path()} -deststorepass #{conn_ts_pass} -noprompt")
-          cmd_result("keytool -import -alias mysqlServerCACert -file #{ca_pem.path()} -keystore #{conn_ts.path()} -deststorepass #{conn_ts_pass} -noprompt")
-          
-          cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{@config.getProperty(RMI_USER)} #{jks_pass} -p #{password_store.path()} -e -ts #{ts.path()} -tsp #{ts_pass}")
-          cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{@config.getProperty(RMI_USER)} #{jks_pass} -p #{password_store.path()} -e -ts #{ts.path()} -tsp #{ts_pass} -target rmi_jmx")
-          
-          config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
-            JAVA_JMXREMOTE_ACCESS_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(jmx.path())}",
-            GLOBAL_JAVA_JMXREMOTE_ACCESS_PATH => jmx.path(),
-            JAVA_PASSWORDSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(password_store.path())}",
-            GLOBAL_JAVA_PASSWORDSTORE_PATH => password_store.path(),
-            JAVA_TRUSTSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(jks.path())}",
-            GLOBAL_JAVA_TRUSTSTORE_PATH => jks.path(),
-            JAVA_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(jks.path())}",
-            GLOBAL_JAVA_KEYSTORE_PATH => jks.path()
-          })
-          
-          if config.getProperty([CONNECTORS, config.getProperty([DEPLOYMENT_HOST])]) != nil
-            config.include([CONNECTORS, config.getProperty([DEPLOYMENT_HOST])], {
-              JAVA_CONNECTOR_TRUSTSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(conn_ts.path())}",
-              GLOBAL_JAVA_CONNECTOR_TRUSTSTORE_PATH => conn_ts.path(),
-              JAVA_CONNECTOR_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(conn_jks.path())}",
-              GLOBAL_JAVA_CONNECTOR_KEYSTORE_PATH => conn_jks.path()
-            })
-          end
-        end
+        create_default_security_files(config)
         
         DeploymentFiles.prompts.each{
           |p|
           if config.getProperty(p[:global]) != nil
-            if File.file?(config.getProperty(p[:global]))
+            if File.exist?(config.getProperty(p[:global]))
               debug("Transfer #{File.basename(config.getProperty(p[:global]))} to #{config.getProperty(HOST)}")
               scp_result(config.getProperty(p[:global]), config.getProperty(p[:local]), config.getProperty(HOST), config.getProperty(USERID))
             elsif Configurator.instance.is_locked?() == false
@@ -191,17 +106,106 @@ class ConfigureDeploymentHandler
         end
       end
     else
+      create_default_security_files(@config)
+      
+      DeploymentFiles.prompts.each{
+        |p|
+        if config.getProperty(p[:global]) != nil
+          if File.exist?(config.getProperty(p[:global]))
+            if File.expand_path(config.getProperty(p[:global])) != File.expand_path(config.getProperty(p[:local]))
+              debug("Transfer #{File.basename(config.getProperty(p[:global]))} to #{config.getProperty(HOST)}")
+              FileUtils.cp(config.getProperty(p[:global]), config.getProperty(p[:local]))
+            end
+          elsif Configurator.instance.is_locked?() == false
+            error("Unable to store #{File.basename(config.getProperty(p[:global]))} because it does not exist or is not a complete file name")
+            return
+          end
+        end
+      }
+      
       unless Configurator.instance.command.skip_prompts?()
         prompt_handler = ConfigurePromptHandler.new(@config)
         debug("Validate configuration values for #{@config.getProperty(HOST)}")
 
-        # Validate the values in the configuration file against the prompt validation
+        # Validate the values in the configuration file against 
+        # the prompt validation
         prompt_handler.save_system_defaults()
         prompt_handler.validate()
         
         add_remote_result(prompt_handler.get_remote_result())
         output_property('props', @config.props.dup)
       end
+    end
+  end
+  
+  def create_default_security_files(config)
+    rmi_user = config.getProperty(RMI_USER)
+    ts_pass = config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
+    ks_pass = config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    generate_tls = true
+    
+    # Backwards compatible section allows for the use of 
+    # --java-truststore-path and --java-keystore-path
+    
+    ts = config.getProperty(JAVA_TRUSTSTORE_PATH)
+    ks = config.getProperty(JAVA_KEYSTORE_PATH)
+    
+    if ts != nil && ks == nil
+      Configurator.instance.error("Both --java-truststore-path and --java-keystore-path must be given together or not at all.")
+    end
+    if ts == nil && ks != nil
+      Configurator.instance.error("Both --java-truststore-path and --java-keystore-path must be given together or not at all.")
+    end
+    if ts != nil && ks != nil
+      generate_tls = false
+    end
+    
+    # New section allows for the use of 
+    # --java-tls-key and --java-tls-certificate
+    
+    tls_keystore = config.getProperty(JAVA_TLS_KEYSTORE_PATH)
+    if tls_keystore != nil
+      generate_tls = false
+    end
+    
+    ###
+    # Temporary section to generate a keystore and truststore
+    # This should be replaced by generated a key and cert
+    # to be imported on the target machine.
+    ###
+    if generate_tls == true
+      generate_tls = false
+      
+      tls_ks = HostJavaTLSKeystorePath.build_keystore(
+        staging_temp_directory(),
+        config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, ks_pass
+      )
+      local_tls_ks = Tempfile.new("tlssec")
+      local_tls_ks.close()
+      local_tls_ks_path = "#{staging_temp_directory()}/#{File.basename(local_tls_ks.path())}"
+      FileUtils.cp(tls_ks, local_tls_ks_path)
+      
+      config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
+        JAVA_TLS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_tls_ks_path)}",
+        GLOBAL_JAVA_TLS_KEYSTORE_PATH => local_tls_ks_path
+      })
+    end
+    
+    if config.getProperty(JAVA_JGROUPS_KEYSTORE_PATH) == nil
+      jgroups_ks = HostJavaJgroupsKeystorePath.build_keystore(
+        staging_temp_directory(),
+        config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS), ks_pass, ks_pass
+      )
+      local_jgroups_ks = Tempfile.new("jgroupssec")
+      local_jgroups_ks.close()
+      local_jgroups_ks_path = "#{staging_temp_directory()}/#{File.basename(local_jgroups_ks.path())}"
+      FileUtils.cp(jgroups_ks, local_jgroups_ks_path)
+        
+      config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
+        JAVA_JGROUPS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_jgroups_ks_path)}",
+        GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH => local_jgroups_ks_path
+      })
     end
   end
   
@@ -338,6 +342,12 @@ class ConfigureDeploymentHandler
       end
     }
     
+    Configurator.instance.synchronize("ConfigureDeploymentHandlerCleanup") do
+      if File.exist?(get_validation_temp_directory())
+        cmd_result("rm -rf #{get_validation_temp_directory()}")
+      end
+    end
+    
     is_valid?()
   end
   
@@ -348,6 +358,10 @@ class ConfigureDeploymentHandler
   
   def get_validation_temp_directory
     "#{@config.getProperty(TEMP_DIRECTORY)}/#{@config.getProperty(CONFIG_TARGET_BASENAME)}/"
+  end
+  
+  def staging_temp_directory
+    Configurator.instance.command.get_temp_directory()
   end
   
   def get_message_hostname

@@ -82,12 +82,14 @@ class ConfigureDatabasePlatform
 	end
 	
 	def get_remote_filters()
-	  filters = []
-	  unless applier_supports_bytes_for_strings?()
-      filters << "fixmysqlstrings"
-	  end
+		filters = []
+		unless applier_supports_bytes_for_strings?()
+			if @config.getProperty(@prefix + [ENABLE_HETEROGENOUS_SLAVE]) == "true"
+				filters << "fixmysqlstrings"
+			end
+		end
 	  
-	  return filters
+		return filters
 	end
 	
 	def get_applier_filters()
