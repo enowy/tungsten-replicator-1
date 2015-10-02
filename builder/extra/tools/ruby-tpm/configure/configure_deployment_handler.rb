@@ -111,8 +111,10 @@ class ConfigureDeploymentHandler
         |p|
         if config.getProperty(p[:global]) != nil
           if File.exist?(config.getProperty(p[:global]))
-            debug("Transfer #{File.basename(config.getProperty(p[:global]))} to #{config.getProperty(HOST)}")
-            FileUtils.cp(config.getProperty(p[:global]), config.getProperty(p[:local]))
+            if File.expand_path(config.getProperty(p[:global])) != File.expand_path(config.getProperty(p[:local]))
+              debug("Transfer #{File.basename(config.getProperty(p[:global]))} to #{config.getProperty(HOST)}")
+              FileUtils.cp(config.getProperty(p[:global]), config.getProperty(p[:local]))
+            end
           elsif Configurator.instance.is_locked?() == false
             error("Unable to store #{File.basename(config.getProperty(p[:global]))} because it does not exist or is not a complete file name")
             return
@@ -180,11 +182,12 @@ class ConfigureDeploymentHandler
       )
       local_tls_ks = Tempfile.new("tlssec")
       local_tls_ks.close()
-      FileUtils.cp(tls_ks, local_tls_ks.path())
+      local_tls_ks_path = "#{get_validation_temp_directory()}/#{File.basename(local_tls_ks.path())}"
+      FileUtils.cp(tls_ks, local_tls_ks_path)
       
       config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
-        JAVA_TLS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_tls_ks.path())}",
-        GLOBAL_JAVA_TLS_KEYSTORE_PATH => local_tls_ks.path()
+        JAVA_TLS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_tls_ks_path)}",
+        GLOBAL_JAVA_TLS_KEYSTORE_PATH => local_tls_ks_path
       })
     end
     
@@ -195,11 +198,12 @@ class ConfigureDeploymentHandler
       )
       local_jgroups_ks = Tempfile.new("jgroupssec")
       local_jgroups_ks.close()
-      FileUtils.cp(jgroups_ks, local_jgroups_ks.path())
+      local_jgroups_ks_path = "#{get_validation_temp_directory()}/#{File.basename(local_jgroups_ks.path())}"
+      FileUtils.cp(jgroups_ks, local_jgroups_ks_path)
         
       config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
-        JAVA_JGROUPS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_jgroups_ks.path())}",
-        GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH => local_jgroups_ks.path()
+        JAVA_JGROUPS_KEYSTORE_PATH => "#{config.getProperty(TEMP_DIRECTORY)}/#{config.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(local_jgroups_ks_path)}",
+        GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH => local_jgroups_ks_path
       })
     end
   end
