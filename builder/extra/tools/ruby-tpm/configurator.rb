@@ -968,7 +968,7 @@ class Configurator
   
   def get_interface_address(interface_name)
     debug("Search ifconfig for interface #{interface_name}")
-    details IPParse.new().get_interface_address(interface_name, IPParse::IPV4)
+    details = IPParse.new().get_interface_address(interface_name, IPParse::IPV4)
     
     if details == nil
       return nil
