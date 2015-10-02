@@ -11,6 +11,7 @@ class ConfigureDeploymentHandler
   
   def prepare(configs)
     reset_errors()
+    
     configs.each{
       |config|
       
@@ -177,12 +178,12 @@ class ConfigureDeploymentHandler
       generate_tls = false
       
       tls_ks = HostJavaTLSKeystorePath.build_keystore(
-        get_validation_temp_directory(),
+        staging_temp_directory(),
         config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, ks_pass
       )
       local_tls_ks = Tempfile.new("tlssec")
       local_tls_ks.close()
-      local_tls_ks_path = "#{get_validation_temp_directory()}/#{File.basename(local_tls_ks.path())}"
+      local_tls_ks_path = "#{staging_temp_directory()}/#{File.basename(local_tls_ks.path())}"
       FileUtils.cp(tls_ks, local_tls_ks_path)
       
       config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
@@ -193,12 +194,12 @@ class ConfigureDeploymentHandler
     
     if config.getProperty(JAVA_JGROUPS_KEYSTORE_PATH) == nil
       jgroups_ks = HostJavaJgroupsKeystorePath.build_keystore(
-        get_validation_temp_directory(),
+        staging_temp_directory(),
         config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS), ks_pass, ks_pass
       )
       local_jgroups_ks = Tempfile.new("jgroupssec")
       local_jgroups_ks.close()
-      local_jgroups_ks_path = "#{get_validation_temp_directory()}/#{File.basename(local_jgroups_ks.path())}"
+      local_jgroups_ks_path = "#{staging_temp_directory()}/#{File.basename(local_jgroups_ks.path())}"
       FileUtils.cp(jgroups_ks, local_jgroups_ks_path)
         
       config.include([HOSTS, config.getProperty([DEPLOYMENT_HOST])], {
@@ -336,12 +337,16 @@ class ConfigureDeploymentHandler
           end
           
           ssh_result("rm -f #{remote_additional_properties_filename}", @config.getProperty(HOST), @config.getProperty(USERID))
-        else
-          cmd_result("rm -rf #{get_validation_temp_directory()}")
         end
       rescue RemoteError
       end
     }
+    
+    Configurator.instance.synchronize("ConfigureDeploymentHandlerCleanup") do
+      if File.exist?(get_validation_temp_directory())
+        cmd_result("rm -rf #{get_validation_temp_directory()}")
+      end
+    end
     
     is_valid?()
   end
@@ -353,6 +358,10 @@ class ConfigureDeploymentHandler
   
   def get_validation_temp_directory
     "#{@config.getProperty(TEMP_DIRECTORY)}/#{@config.getProperty(CONFIG_TARGET_BASENAME)}/"
+  end
+  
+  def staging_temp_directory
+    Configurator.instance.command.get_temp_directory()
   end
   
   def get_message_hostname

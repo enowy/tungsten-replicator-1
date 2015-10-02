@@ -190,6 +190,7 @@ class Configurator
     @alive_thread = nil
     
     @mutex = Mutex.new
+    @external_mutexes = {}
   end
   
   def cleanup(code = 0)
@@ -234,12 +235,22 @@ class Configurator
     begin
       # Change the umask to a protected state for files that
       # we create on the users behalf
-      if (@config.getNestedProperty([DEPLOYMENT_HOST]) != nil && 
-          @config.getProperty(PROTECT_CONFIGURATION_FILES) == "true")
-        File.umask(0077)
+      if @config.getNestedProperty([DEPLOYMENT_HOST]) != nil
+        target_umask = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
       else
-        unless original_umask == 0077.to_i()
-          warning("Your umask is not set to 0077. This may result in some files not being fully protected from other users on this sytem.")
+        target_umask = nil
+        if Configurator.instance.default_security?() == true
+          desired_umask = 0077
+        else
+          desired_umask = nil
+        end
+      end
+      
+      if target_umask != nil
+        File.umask(target_umask)
+      elsif desired_umask != nil
+        unless original_umask == desired_umask.to_i()
+          warning("Your umask is not set to #{sprintf("%04o", desired_umask)}. This may result in some files not being fully protected from other users on this sytem.")
         end
       end
 			
@@ -1213,6 +1224,14 @@ class Configurator
     end
   end
   
+  def default_security?
+    if is_open_source?() == true
+      return false
+    else
+      return true
+    end
+  end
+  
   def is_enterprise?
     release_details = get_release_details()
     release_details[:is_enterprise_package]
@@ -1477,8 +1496,17 @@ class Configurator
     }
   end
   
-  def synchronize(&block)
-    @mutex.synchronize do
+  def synchronize(name = nil, &block)
+    if name == nil
+      mtx = @mutex
+    else
+      if @external_mutexes.has_key?(name) == false
+        @external_mutexes[name] = Mutex.new()
+      end
+      mtx = @external_mutexes[name]
+    end
+    
+    mtx.synchronize do
       block.call()
     end
   end

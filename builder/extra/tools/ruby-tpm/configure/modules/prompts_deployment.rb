@@ -1870,7 +1870,48 @@ class HostProtectConfigurationFiles < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(PROTECT_CONFIGURATION_FILES, "Make configuration files readable by only the system user", PV_BOOLEAN, "true")
+    super(PROTECT_CONFIGURATION_FILES, "Make configuration files readable by only the system user", PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if Configurator.instance.default_security?() == true
+      @default = "true"
+    else
+      @default = "false"
+    end
+  end
+end
+
+class HostFileProtectionLevel < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    validator = PropertyValidator.new("^user|group|none$", 
+      "Value must be user, group or none")
+    super(FILE_PROTECTION_LEVEL, "Protection level for Continuent files", validator)
+  end
+  
+  def load_default_value
+    if @config.getProperty(get_member_key(PROTECT_CONFIGURATION_FILES)) == "false"
+      @default = "none"
+    else
+      if Configurator.instance.default_security?() == true
+        @default = "user"
+      else
+        @default = "none"
+      end
+    end
+  end
+  
+  def get_template_value
+    case get_value()
+    when "user"
+      return 0077
+    when "group"
+      return 0007
+    else
+      return nil
+    end
   end
 end
 
