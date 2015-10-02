@@ -1515,6 +1515,10 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   
   def self.build_keystore(keyalias, keypass, storepass)
     Configurator.instance.synchronize() {
+      @mutex ||= Mutex.new
+    }
+    
+    @mutex.synchronize do
       @keystores ||= {}
       
       if @keystores[keyalias] != nil
@@ -1534,7 +1538,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
       @keystores[keyalias] = ks.path()
       
       return @keystores[keyalias]
-    }
+    end
   end
 end
 
@@ -1782,6 +1786,10 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
   
   def self.build_keystore(keyalias, keypass, storepass)
     Configurator.instance.synchronize() {
+      @mutex ||= Mutex.new
+    }
+    
+    @mutex.synchronize do
       @keystores ||= {}
       
       if @keystores[keyalias] != nil
@@ -1801,7 +1809,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       @keystores[keyalias] = ks.path()
       
       return @keystores[keyalias]
-    }
+    end
   end
 end
 
