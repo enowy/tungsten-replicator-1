@@ -1459,7 +1459,12 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, "true")
+    if Configurator.instance.default_security?() == true
+      default = "true"
+    else
+      default = "false"
+    end
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, default)
     add_command_line_alias("jgroups-ssl")
   end
   
@@ -1558,7 +1563,12 @@ class HostEnableRMIAuthentication < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, "true")
+    if Configurator.instance.default_security?() == true
+      default = "true"
+    else
+      default = "false"
+    end
+    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, default)
     add_command_line_alias("rmi-authentication")
   end
 end
@@ -1567,7 +1577,12 @@ class HostEnableRMISSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, "true")
+    if Configurator.instance.default_security?() == true
+      default = "true"
+    else
+      default = "false"
+    end
+    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, default)
     add_command_line_alias("rmi-ssl")
   end
 end
