@@ -1513,7 +1513,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
   
-  def self.build_keystore(keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, keypass, storepass)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1528,14 +1528,15 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
       ks = Tempfile.new("jgroupssec")
       ks.close()
       File.unlink(ks.path())
+      path = "#{dest}/#{File.basename(ks.path())}"
       
       cmd = ["keytool -genseckey -alias #{keyalias}",
         "-keypass #{keypass}",
         "-storepass #{storepass} -keyalg Blowfish -keysize 56",
-        "-keystore #{ks.path()} -storetype JCEKS"]
+        "-keystore #{path} -storetype JCEKS"]
       cmd_result(cmd.join(" "))
       
-      @keystores[keyalias] = ks.path()
+      @keystores[keyalias] = path
       
       return @keystores[keyalias]
     end
@@ -1784,7 +1785,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def self.build_keystore(keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, keypass, storepass)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1799,14 +1800,15 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       ks = Tempfile.new("tlssec")
       ks.close()
       File.unlink(ks.path())
+      path = "#{dest}/#{File.basename(ks.path())}"
       
       cmd = ["keytool -genkey -alias #{keyalias}",
-        "-keyalg RSA -keystore #{ks.path()}",
+        "-keyalg RSA -keystore #{path}",
         "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
         "-storepass #{storepass} -keypass #{keypass}"]
       cmd_result(cmd.join(" "))
       
-      @keystores[keyalias] = ks.path()
+      @keystores[keyalias] = path
       
       return @keystores[keyalias]
     end

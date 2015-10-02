@@ -150,10 +150,6 @@ class WriteableTempDirectoryCheck < ConfigureValidationCheck
       debug "#{validation_temp_directory} is executable by #{user}"
     end
   end
-  
-  def enabled?
-    super() && !(Configurator.instance.is_localhost?(@config.getProperty(HOST)))
-  end
 end
 
 class WhichAvailableCheck < ConfigureValidationCheck
