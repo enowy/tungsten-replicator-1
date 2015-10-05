@@ -3,6 +3,11 @@ class InstallCommand
   include ResetConfigPackageModule
   include ClusterCommandModule
   include ProvisionNewSlavesPackageModule
+  include ClusterSecurityFiles
+  
+  def prepare_config_for_command(config)
+    create_default_security_files(config)
+  end
   
   def output_command_usage()
     super()
