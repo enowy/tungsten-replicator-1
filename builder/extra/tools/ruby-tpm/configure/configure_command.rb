@@ -542,6 +542,10 @@ module ConfigureCommand
     is_valid?()
   end
   
+  def prepare_config_for_command(config)
+    # Do nothing
+  end
+  
   def validate
     parallel_handle(get_validation_handler_class(), 'validate')
     
