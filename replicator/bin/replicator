@@ -35,6 +35,8 @@
 # To configure script behavior, put default values in replicator.env
 # and they will be sourced on startup.  This is better than altering
 # the script directly.
+
+@{#(FILE_PROTECTION_LEVEL)}umask @{FILE_PROTECTION_LEVEL|0077}
  
 # Initialization block for the install_initd and remove_initd scripts used by
 #  SUSE linux distributions.

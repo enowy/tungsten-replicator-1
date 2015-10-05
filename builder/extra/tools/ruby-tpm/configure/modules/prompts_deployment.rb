@@ -1921,9 +1921,9 @@ class HostFileProtectionLevel < ConfigurePrompt
   def get_template_value
     case get_value()
     when "user"
-      return 0077
+      return "0077"
     when "group"
-      return 0007
+      return "0007"
     else
       return nil
     end

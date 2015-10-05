@@ -237,6 +237,9 @@ class Configurator
       # we create on the users behalf
       if @config.getNestedProperty([DEPLOYMENT_HOST]) != nil
         target_umask = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
+        if target_umask != nil
+          target_umask = target_umask.to_i(8)
+        end
       else
         target_umask = nil
         if Configurator.instance.default_security?() == true
