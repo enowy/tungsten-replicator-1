@@ -28,13 +28,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Implements a self-managing cache suitable for database metadata. The cache
- * has a specific capacity which is maintained by invalidating cache nodes
- * implicitly using an LRU (least recently used) algorithm. Clients can also
- * invalidate individual keys, key ranges, and the entire cache.
+ * Implements a self-managing cache suitable for database metadata or other
+ * resources that clients wish to manage in a bounded fashion. The cache has a
+ * specific capacity which is maintained by invalidating cache nodes implicitly
+ * using an LRU (least recently used) algorithm. Clients can also invalidate
+ * individual keys, key ranges, and the entire cache.
  * <p/>
- * NOTE: The cache is designed for use by a single thread. There is no
- * synchronization, nor do we have a notion of "loans."
+ * NOTE: The cache is designed for use by a single thread and implements basic
+ * cache semantics semantics only. Clients must add synchronization as well as
+ * higher level semantics like notions of loans on cached object.
  * 
  * @author <a href="mailto:robert.hodges@continuent.com">Robert Hodges</a>
  */
@@ -44,14 +46,14 @@ public class IndexedLRUCache<T>
     private Map<String, CacheNode<T>> pmap = new HashMap<String, CacheNode<T>>();
 
     // Most and leads recently used node.
-    private CacheNode<T>              lruFirst;
-    private CacheNode<T>              lruLast;
+    private CacheNode<T> lruFirst;
+    private CacheNode<T> lruLast;
 
     // Maximum size of the cache.
-    private int                       capacity;
+    private int capacity;
 
     // Call-back to release values.
-    private CacheResourceManager<T>   resourceManager;
+    private CacheResourceManager<T> resourceManager;
 
     /**
      * Creates a new prepared statement cache.
@@ -60,7 +62,8 @@ public class IndexedLRUCache<T>
      *            removed in LRU order
      * @param resourceManager Name of the cache manager
      */
-    public IndexedLRUCache(int capacity, CacheResourceManager<T> resourceManager)
+    public IndexedLRUCache(int capacity,
+            CacheResourceManager<T> resourceManager)
     {
         this.capacity = capacity;
         this.resourceManager = resourceManager;
