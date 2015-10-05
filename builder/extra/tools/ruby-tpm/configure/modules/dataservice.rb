@@ -971,7 +971,7 @@ class THLSSL < ConfigurePrompt
   include ReplicationServicePrompt
   
   def initialize
-    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN, "false")
+    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN, "true")
     add_command_line_alias("thl-ssl")
   end
 end
