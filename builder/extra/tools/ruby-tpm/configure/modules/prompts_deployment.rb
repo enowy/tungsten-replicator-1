@@ -1789,6 +1789,7 @@ end
 class HostJavaTLSKeystorePath < ConfigurePrompt
   include ClusterHostPrompt
   include OptionalPromptModule
+  include NoStoredServerConfigValue
   
   def initialize
     super(JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
@@ -1832,7 +1833,8 @@ end
 
 class GlobalHostTLSCertificate < ConfigurePrompt
   include ClusterHostPrompt
-  include OptionalPromptModule
+  include ConstantValueModule
+  include NoStoredServerConfigValue
   
   def initialize
     super(GLOBAL_JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
