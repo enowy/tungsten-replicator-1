@@ -25,11 +25,14 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.text.MessageFormat;
-
+import java.net.Socket;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
@@ -510,5 +513,47 @@ public class SecurityHelper
     public static String getTrustStoreLocation()
     {
         return System.getProperty("javax.net.ssl.trustStore");
+    }
+    
+    /**
+     * Compare two String arrays and store matching Strings to result
+     * array.
+     * 
+     * @param str1
+     * @param str2
+     * @return String array consisting of all common Strings in str1 and str2
+     * or null if the set is empty.
+     */
+    public static String [] getMatchingStrings(String [] str1, String [] str2)
+    {
+        String [] resultStr = new String[0];
+        String [] longerStr;
+        String [] shorterStr;
+        int ri=0;
+        
+        if (str1.length > str2.length)
+        {
+            longerStr = str1;
+            shorterStr = str2;
+        }
+        else
+        {
+            longerStr = str2;
+            shorterStr = str1;
+        }
+        for (int li=0; li<longerStr.length; li++)
+        {
+            for (int si=0; si<shorterStr.length; si++)
+            {
+                if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
+                {
+                    resultStr[ri++] = new String(shorterStr[si]);
+                }
+            }
+        }
+        if (resultStr.length == 0)
+            return null;
+        else
+            return resultStr;
     }
 }

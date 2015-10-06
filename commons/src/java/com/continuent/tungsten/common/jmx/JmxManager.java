@@ -265,13 +265,31 @@ public class JmxManager implements NotificationListener
                         authenticationInfo.getKeystoreLocation());
                 System.setProperty("javax.net.ssl.keyStorePassword",
                         authenticationInfo.getKeystorePassword());
-                // Configure SSL
-                SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
-                SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory();
-                env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
-                        csf);
-                env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
-                        ssf);
+                /**
+                 * Configure SSL. Protocols and ciphers are set in
+                 * securityHelper.setSecurityProperties and used by
+                 * SslRMIClientSocketFactory
+                 */
+                try
+                {
+                    String[] protocolArray = (String[]) authenticationInfo
+                            .getEnabledProtocols().toArray();
+                    String[] cipherArray = (String[]) authenticationInfo
+                            .getEnabledCipherSuites().toArray();
+                    SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
+                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
+                            cipherArray, protocolArray, false);
+                    env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
+                            csf);
+                    env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
+                            ssf);
+                }
+                catch (IllegalArgumentException ie)
+                {
+                    logger.warn("Some of the protocols or ciphers are not supported. "
+                            + ie.getMessage());
+                    throw new IllegalArgumentException(ie.getCause());
+                }
             }
 
             env.put(RMIConnectorServer.JNDI_REBIND_ATTRIBUTE, "true");
