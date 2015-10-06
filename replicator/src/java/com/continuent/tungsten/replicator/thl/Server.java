@@ -31,6 +31,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
 import com.continuent.tungsten.common.sockets.ServerSocketService;
@@ -232,8 +233,9 @@ public class Server implements Runnable
     /**
      * Start up the THL server, which spawns a service thread.
      * @throws GeneralSecurityException
+     * @throws ConfigurationException 
      */
-    public void start() throws IOException, GeneralSecurityException
+    public void start() throws IOException, GeneralSecurityException, ConfigurationException
     {
         // --- Retrieve and use SecurityInfo if needed ---
         String keystoreAlias = null;

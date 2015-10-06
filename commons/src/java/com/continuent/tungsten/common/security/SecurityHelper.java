@@ -550,6 +550,56 @@ public class SecurityHelper
                     resultStr[ri++] = new String(shorterStr[si]);
                 }
             }
+
+    /**
+     * Stores the certificate in the host certificate truststore with the
+     * associated alias. If the certificate is already added, this operation
+     * does nothing. Any other certificate associated with the alias is
+     * replaced.
+     * 
+     * @param certificateAlias Alias of the certificate in the truststore
+     * @param certificateLocation Where to get the certificate from
+     */
+    public static void addCertificateToTruststore(String certificateAlias,
+            String certificateLocation)
+    {
+
+    }
+    /**
+     * Compare two String arrays and store matching Strings to result
+     * array.
+     * 
+     * @param str1
+     * @param str2
+     * @return String array consisting of all common Strings in str1 and str2
+     * or null if the set is empty.
+     */
+    public static String [] getMatchingStrings(String [] str1, String [] str2)
+    {
+        String [] resultStr = new String[0];
+        String [] longerStr;
+        String [] shorterStr;
+        int ri=0;
+        
+        if (str1.length > str2.length)
+        {
+            longerStr = str1;
+            shorterStr = str2;
+        }
+        else
+        {
+            longerStr = str2;
+            shorterStr = str1;
+        }
+        for (int li=0; li<longerStr.length; li++)
+        {
+            for (int si=0; si<shorterStr.length; si++)
+            {
+                if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
+                {
+                    resultStr[ri++] = new String(shorterStr[si]);
+                }
+            }
         }
         if (resultStr.length == 0)
             return null;

@@ -30,6 +30,7 @@ import org.apache.log4j.Logger;
 import com.continuent.tungsten.common.cluster.resource.physical.Replicator;
 import com.continuent.tungsten.common.config.Interval;
 import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.datasource.CommitSeqno;
 import com.continuent.tungsten.replicator.datasource.CommitSeqnoAccessor;
@@ -411,6 +412,10 @@ public class THL implements Store
             {
                 server = new Server(context, sequencer, this);
                 server.start();
+            }
+            catch (ConfigurationException e)
+            {
+                throw new ReplicatorException("Unable to start THL server", e);                
             }
             catch (IOException e)
             {
