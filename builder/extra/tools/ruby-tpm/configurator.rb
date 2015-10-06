@@ -864,46 +864,51 @@ class Configurator
   end
   
   def is_localhost?(hostname)
-    if hostname == DEFAULTS
-      return false
-    end
-    
     @_is_localhost_cache ||= {}
     unless @_is_localhost_cache.has_key?(hostname)
       @_is_localhost_cache[hostname] = _is_localhost?(hostname)
     end
-    
+  
     return @_is_localhost_cache[hostname]
   end
   
   def _is_localhost?(hostname)
-    if hostname == hostname()
+    case hostname
+    when DEFAULTS
+      return false
+    when hostname()
       return true
-    end
+    when "localhost"
+      return true
+    when "127.0.0.1"
+      return true
+    when "::1"
+      return true
+    else
+      ip_addresses = get_ip_addresses(hostname)
+      if ip_addresses == false
+        return false
+      end
 
-    ip_addresses = get_ip_addresses(hostname)
-    if ip_addresses == false
+      debug("Search ifconfig for #{ip_addresses.join(', ')}")
+      ipparsed = IPParse.new().get_interfaces()
+      ipparsed.each{
+        |iface, addresses|
+
+        begin
+          # Do a string comparison so that we only match the address portion
+          addresses.each{
+            |type, details|
+            if ip_addresses.include?(details[:address])
+              return true
+            end
+          }
+        rescue ArgumentError
+        end
+      }
+
       return false
     end
-
-    debug("Search ifconfig for #{ip_addresses.join(', ')}")
-    ipparsed = IPParse.new().get_interfaces()
-    ipparsed.each{
-      |iface, addresses|
-
-      begin
-        # Do a string comparison so that we only match the address portion
-        addresses.each{
-          |type, details|
-          if ip_addresses.include?(details[:address])
-            return true
-          end
-        }
-      rescue ArgumentError
-      end
-    }
-
-    false
   end
   
   def get_ip_addresses(hostname)
