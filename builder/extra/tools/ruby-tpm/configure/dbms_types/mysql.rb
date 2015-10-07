@@ -2217,3 +2217,37 @@ class MySQLDumpCheck < ConfigureValidationCheck
       Configurator.instance.is_localhost?(@config.getProperty(get_applier_key(REPL_DBHOST)))
   end
 end
+
+class MySQLSuperReadOnlyCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL super_read_only check"
+  end
+
+  def validate
+    info("Checking that super_read_only is not turned on")
+    # Check the running MySQL instance to see if super_read_only is on.
+    super_read_only = get_applier_datasource.get_value("show variables like 'super_read_only'", "Value")
+    if super_read_only == 'ON'
+      error("The mysql instance has the super_read_only option on. Replication will not work with this option on.")
+    else
+      # The instance does not have super_read_only on but we want to check the config file too.
+      conf_file = @config.getProperty(get_applier_key(REPL_MYSQL_CONF))
+      begin
+        conf_file_results = cmd_result("my_print_defaults --config-file=#{conf_file} mysqld|tr '_' '-'|grep '^--super-read-only'").split("=")[-1].strip()
+        if conf_file_results == '--super-read-only' || conf_file_results == 'on'
+          error("The mysql configuration has the super_read_only option on. Replication will not work with this option on.")
+        end
+      rescue CommandError
+      end
+    end
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version >= 5.7
+  end
+end
