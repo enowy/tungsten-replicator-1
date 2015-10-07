@@ -2153,17 +2153,28 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     if datadir == nil
       warning "Unable to determine datadir"
     else
-      test_cmd= "test -x \"#{datadir}\""
-      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' -prune -o -name '*.MYD' -print -quit"
+      # Define the find command start
+      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' "
 
-      # Check if we can run as root
+      mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+      if mysql_version >= 5.7
+        # Add the sys schema to the exlusions in the find command. It is new in 5.7 and we don't need to search it.
+        find_cmd = find_cmd + "-prune -o -path '#{datadir}sys' "
+      end
+
+      # Now complete the find command with the filename we are looking for.
+      find_cmd = find_cmd + "-o -name '*.MYD' -print -quit"
+      # Define the test command
+      test_cmd= "test -x \"#{datadir}\""
+
+      # Check if we can run as root and add sudo prefix to the commands if we can.
       if @config.getProperty(get_host_key(ROOT_PREFIX)) == "true"
         test_cmd= "sudo -n " +  test_cmd
         find_cmd = "sudo -n " + find_cmd
       end
 
       begin
-        # Test for the existance of a data directory with execute permissions - needed to list directory contents
+        # Test for the existence of a data directory with execute permissions - needed to list directory contents.
         cmd_result(test_cmd)
         # Run the bash find command to search for MyISAM files having an extension of MYD. Quit after the first match.
         myisam_result = cmd_result(find_cmd)
@@ -2181,7 +2192,6 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     super()
   end
 end
-
 
 class MySQLDumpCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
