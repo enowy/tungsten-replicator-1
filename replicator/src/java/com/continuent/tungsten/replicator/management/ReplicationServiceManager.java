@@ -107,7 +107,6 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
 
         // Get Authentication and encryption parameters for JMX and set SSL
         // parameters required for secure operation.
-        TungstenProperties securityPropertiesAsObject = null;
         try
         {
             // Load security information and set critical properties as system properties   
@@ -135,7 +134,7 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
         managerRMIHost = getHostName(serviceProps);
 
         JmxManager jmxManager = new JmxManager(managerRMIHost, managerRMIPort,
-                ReplicatorConf.RMI_DEFAULT_SERVICE_NAME, securityPropertiesAsObject);
+                ReplicatorConf.RMI_DEFAULT_SERVICE_NAME, securityInfo);
         jmxManager.start();
 
         // Make sure we have configurations for the replicators to work with.
