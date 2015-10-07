@@ -124,18 +124,15 @@ public class JmxManager implements NotificationListener
      * @param host
      * @param registryPort
      * @param serviceName
-     * @param tungstenProperty
+     * @param authInfo
      */
     public JmxManager(String host, int registryPort, String serviceName,
-            TungstenProperties tungstenProperty)
+            AuthenticationInfo authInfo)
     {
         this(host, registryPort, serviceName);
 
         // Authentication and encryption parameters
-        if (tungstenProperty != null)
-            authenticationInfo = (AuthenticationInfo) tungstenProperty
-                    .getObject(AuthenticationInfo.SECURITY_INFO_PROPERTY,
-                            null, false);
+        authenticationInfo = authInfo;
     }
 
     /**
@@ -298,8 +295,8 @@ public class JmxManager implements NotificationListener
             connector.start();
 
             logger.info(MessageFormat
-                    .format("JMXConnector: security.propoerties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
-                            (authenticationInfo != null) ? authenticationInfo.getParentPropertiesFileLocation() : "No security.propoerties file found !...",
+                    .format("JMXConnector: security.properties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
+                            (authenticationInfo != null) ? authenticationInfo.getParentPropertiesFileLocation() : "No security.properties file found !...",
                             (authenticationInfo != null) ? authenticationInfo.isAuthenticationNeeded() : false,
                             (authenticationInfo != null) ? authenticationInfo.isUseEncryptedPasswords(): false,
                             (authenticationInfo != null) ? authenticationInfo.isEncryptionNeeded() : false));
