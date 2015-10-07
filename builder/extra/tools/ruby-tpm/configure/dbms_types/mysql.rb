@@ -2113,6 +2113,12 @@ class MySQLPasswordSettingCheck < ConfigureValidationCheck
       help("Review https://docs.continuent.com/wiki/display/TEDOC/Changing+MySQL+old+passwords for more information on this problem")
     end
   end
+
+  def enabled?
+    # Only run this check if the MySQL version lower than 5.7
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version < 5.7
+  end
 end
 
 class MySQLTriggerCheck < ConfigureValidationCheck
