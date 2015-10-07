@@ -165,13 +165,14 @@ module ClusterDiagnosticPackage
           write_file("#{diag_dir}/#{h_alias}/mysql/global_variables.txt",call_mysql(config,h_alias,ds,'show global variables'))
           write_file("#{diag_dir}/#{h_alias}/mysql/status.txt",call_mysql(config,h_alias,ds,'show status'))
 
-          #This will probably fail unless the tungsten user has access to the logfile
-          mysql_error_log = call_mysql(config,h_alias,ds,"select variable_value from information_schema.global_variables where variable_name='log_error'")
-          get_log(config, mysql_error_log,"#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
-          # If it does fail we'll try another way
-          unless File.exist?("#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
-            mysql_error_log_output=ssh_result("sudo -n cat #{mysql_error_log}|tail -n 1000", config.getProperty(HOST), config.getProperty(USERID))
+          mysql_error_log = call_mysql(config,h_alias,ds,"SELECT @@GLOBAL.log_error")
+
+          if config.getProperty(ROOT_PREFIX) == "true"
+            mysql_error_log_output=ssh_result("sudo -n tail -n 1000 #{mysql_error_log}", config.getProperty(HOST), config.getProperty(USERID))
             write_file("#{diag_dir}/#{h_alias}/mysql/mysql_error.log", mysql_error_log_output)
+          else
+            #This will probably fail unless the tungsten user has access to the logfile
+            get_log(config, mysql_error_log,"#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
           end
         end
       end
