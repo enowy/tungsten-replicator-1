@@ -250,13 +250,8 @@ class Configurator
         File.umask(target_umask)
         
         # Update the @log permissions to be under the umask
-        if @log && File.exists?(@log.path)
-          # Get values like 0660 or 0700 for the log and umask
-          log_perms = sprintf("%o", File.stat(@log.path).mode)[-4,4].to_i(8)
-          max_perms = sprintf("%04d", 777-sprintf("%o", target_umask).to_i()).to_i(8)
-          # Calculate the target permissions for @log and set them
-          set_to_perms = log_perms & max_perms
-          @log.chmod(sprintf("%o", set_to_perms).to_i(8))
+        if @log
+          limit_file_permissions(@log.path())
         end
       end
 			
@@ -1276,6 +1271,17 @@ class Configurator
   def version
     release_details = get_release_details()
     release_details["version"]
+  end
+  
+  def limit_file_permissions(path)
+    if File.exists?(path)
+      # Get values like 0660 or 0700 for the log and umask
+      log_perms = sprintf("%o", File.stat(path).mode)[-4,4].to_i(8)
+      max_perms = sprintf("%04d", 777-sprintf("%o", File.umask()).to_i()).to_i(8)
+      # Calculate the target permissions for @log and set them
+      set_to_perms = log_perms & max_perms
+      File.chmod(sprintf("%o", set_to_perms).to_i(8), path)
+    end
   end
   
   def get_config
