@@ -34,7 +34,7 @@ Notes:
     may not be the optimal approach in all cases.
 #else
 #parse("includes/ddl-header.vm")
-CREATE SCHEMA $table.getSchema()##
+CREATE SCHEMA "$table.getSchema()"##
 ;
 #end
 #end
@@ -44,11 +44,11 @@ CREATE SCHEMA $table.getSchema()##
 #end
 
 DROP TABLE ##
-$table.getSchema().$table.getName()##
+"$table.getSchema()"."$table.getName()"##
 ;
 
 CREATE TABLE ##
-$table.getSchema().$table.getName()##
+"$table.getSchema()"."$table.getName()"##
 #if ( $table.getName().substring(0, 1).matches("[0-9]") ) /* ERROR: table starts with a number, use rename option and a filter */ #end
 
 (
@@ -61,7 +61,7 @@ $table.getSchema().$table.getName()##
 ,
 #end
 ## Print column name. 
-  $col.getName() ##
+  "$col.getName()" ##
 ### Add datatype specification. 
 #if ( $col.getTypeDescription().contains("DATETIME"))
 DATETIME##
@@ -124,7 +124,7 @@ $col.getTypeDescription() /* ERROR: unrecognized (type=$col.getType(), length=$c
 #if ( $table.getPrimaryKey() )
   ORDER BY ##
 #foreach ( $key in $table.getPrimaryKey().getColumns() )
-$key.getName()##
+"$key.getName()"##
 #if( $foreach.hasNext ), #else #end
 #end
 #elseif ( $velocity.resourceExists($tryPkInclude) )
