@@ -45,6 +45,7 @@ CONN_RO_PROPERTIES_EXISTS = "connector_ro_properties_exists"
 CONN_MAX_SLAVE_LATENCY = "connector_max_slave_latency"
 CONN_MAX_CONNECTIONS = "connector_max_connections"
 CONN_DROP_AFTER_MAX_CONNECTIONS = "connector_drop_after_max_connections"
+CONN_DISABLE_CONNECTION_WARNINGS = "connector_disable_connection_warnings"
 
 class Connectors < GroupConfigurePrompt
   def initialize
@@ -335,6 +336,23 @@ class ConnectorDBVersion < ConfigurePrompt
   
   def initialize
     super(CONN_DB_VERSION, "DB version for the connector to display", PV_ANY, "autodetect")
+  end
+end
+
+class ConnectorDisableConnectionWarnings < ConfigurePrompt
+  include ConnectorPrompt
+  include AdvancedPromptModule
+  
+  def initialize
+    super(CONN_DISABLE_CONNECTION_WARNINGS, "Hide Connector warnings in log files", PV_BOOLEAN, "false")
+  end
+  
+  def get_template_value
+    if get_value() == "true"
+      return "false"
+    else
+      return "true"
+    end
   end
 end
 
