@@ -47,7 +47,6 @@ module ConfigureDeploymentStepDeployment
     File.open(@config.getProperty(DIRECTORY_LOCK_FILE), "w") {
       |f|
       f.puts(@config.getProperty(HOME_DIRECTORY))
-      f.chmod(0644)
     }
     
     # Reset the .watchfiles file before rewriting all configuration files

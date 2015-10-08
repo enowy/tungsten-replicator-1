@@ -250,9 +250,9 @@ class Configurator
         File.umask(target_umask)
         
         # Update the @log permissions to be under the umask
-        if @log
+        if @log && File.exists?(@log.path)
           # Get values like 0660 or 0700 for the log and umask
-          log_perms = sprintf("%o", File.stat("/tmp/tungsten-configure.log").mode)[-4,4].to_i(8)
+          log_perms = sprintf("%o", File.stat(@log.path).mode)[-4,4].to_i(8)
           max_perms = sprintf("%04d", 777-sprintf("%o", target_umask).to_i()).to_i(8)
           # Calculate the target permissions for @log and set them
           set_to_perms = log_perms & max_perms
