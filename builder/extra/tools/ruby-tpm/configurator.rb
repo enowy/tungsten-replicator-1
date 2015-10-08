@@ -197,11 +197,6 @@ class Configurator
     stop_alive_thread()
     
     if @log
-      begin
-        @log.chmod(0660)
-      rescue
-      end
-      
       @log.close
       @log = nil
     end
@@ -242,18 +237,26 @@ class Configurator
         end
       else
         target_umask = nil
+        
+        # Convert the umask to match the base directory
         if Configurator.instance.default_security?() == true
-          desired_umask = 0077
-        else
-          desired_umask = nil
+          staging_mode = sprintf("%o", File.stat(get_base_path()).mode)
+          staging_umask = 777 - staging_mode[-3,3].to_i()
+          target_umask = sprintf("%04d", staging_umask).to_i(8)
         end
       end
       
       if target_umask != nil
         File.umask(target_umask)
-      elsif desired_umask != nil
-        unless original_umask == desired_umask.to_i()
-          warning("Your umask is not set to #{sprintf("%04o", desired_umask)}. This may result in some files not being fully protected from other users on this sytem.")
+        
+        # Update the @log permissions to be under the umask
+        if @log
+          # Get values like 0660 or 0700 for the log and umask
+          log_perms = sprintf("%o", File.stat("/tmp/tungsten-configure.log").mode)[-4,4].to_i(8)
+          max_perms = sprintf("%04d", 777-sprintf("%o", target_umask).to_i()).to_i(8)
+          # Calculate the target permissions for @log and set them
+          set_to_perms = log_perms & max_perms
+          @log.chmod(sprintf("%o", set_to_perms).to_i(8))
         end
       end
 			
@@ -732,7 +735,7 @@ class Configurator
   def initialize_log
     unless @log
       begin
-        @log = File.open(get_log_filename(), "a", 0660)
+        @log = File.open(get_log_filename(), "a")
       rescue => e
         raise e
       end
