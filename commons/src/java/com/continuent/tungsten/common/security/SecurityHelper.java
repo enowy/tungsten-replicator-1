@@ -2,17 +2,18 @@
  * VMware Continuent Tungsten Replicator
  * Copyright (C) 2015 VMware, Inc. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0
- *      
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  *
  * Initial developer(s): Ludovic Launer
  * Contributors: Robert Hodges
@@ -25,14 +26,14 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.text.MessageFormat;
-import java.net.Socket;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
-import javax.net.SocketFactory;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
@@ -179,7 +180,7 @@ public class SecurityHelper
 
     public static AuthenticationInfo loadAuthenticationInformation(
             TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         return loadAuthenticationInformation(null, true,
                 tungstenApplicationName);
@@ -205,7 +206,7 @@ public class SecurityHelper
     public static AuthenticationInfo loadAuthenticationInformation(
             String propertiesFileLocation, boolean doConsistencyChecks,
             TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         // Load properties and perform substitution
         TungstenProperties securityProperties = null;
@@ -281,10 +282,10 @@ public class SecurityHelper
                     .getString(security_keystore_password);
             String truststoreLocation = securityProperties
                     .getString(security_truststore_location);
-            truststoreLocation = (truststoreLocation != null && StringUtils
-                    .isNotBlank(truststoreLocation))
-                    ? truststoreLocation
-                    : null;
+            truststoreLocation = (truststoreLocation != null
+                    && StringUtils.isNotBlank(truststoreLocation))
+                            ? truststoreLocation
+                            : null;
             String truststorePassword = securityProperties
                     .getString(security_truststore_password);
             String userName = securityProperties.getString(
@@ -323,9 +324,9 @@ public class SecurityHelper
             authInfo.setParentProperties(securityProperties);
             // aliases
             if (connector_alias_client_to_connector != null)
-                authInfo.getMapKeystoreAliasesForTungstenApplication()
-                        .put(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
-                                connector_alias_client_to_connector);
+                authInfo.getMapKeystoreAliasesForTungstenApplication().put(
+                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
+                        connector_alias_client_to_connector);
             if (connector_alias_connector_to_db != null)
                 authInfo.getMapKeystoreAliasesForTungstenApplication().put(
                         SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
@@ -369,6 +370,54 @@ public class SecurityHelper
                 authInfo.getTruststoreLocation(), verbose);
         setSystemProperty("javax.net.ssl.trustStorePassword",
                 authInfo.getTruststorePassword(), verbose);
+
+        // Protocols and Cipher Suites
+        if (!authInfo.getEnabledProtocols().isEmpty())
+        {
+            String enabledProtocols = StringUtils
+                    .join(authInfo.getEnabledProtocols(), ",");
+            setSystemProperty("javax.rmi.ssl.client.enabledProtocols",
+                    enabledProtocols, verbose);
+            setSystemProperty("https.protocols",
+                    enabledProtocols, verbose);
+        }
+        
+        if (!authInfo.getEnabledCipherSuites().isEmpty())
+        {
+            String enabledCipherSuites = StringUtils
+                    .join(authInfo.getEnabledCipherSuites(), ",");
+            setSystemProperty("javax.rmi.ssl.client.enabledCipherSuites",
+                    enabledCipherSuites, verbose);
+        }
+    }
+
+    /**
+     * Set system properties required for client SSL support and authentication.
+     * The keyStore holds the client's private key to be used for authentication
+     * The trustStore holds the certificates of the trusted servers
+     * 
+     * @param authInfo
+     * @param verbose
+     */
+    public static void setClientSecurityProperties(AuthenticationInfo authInfo,
+            boolean debug)
+    {
+        if (debug)
+        {
+            CLUtils.println("Clearing and Setting Client security properties");
+        }
+
+        System.clearProperty("javax.net.ssl.keyStore");
+        System.clearProperty("javax.net.ssl.trustStore");
+
+        setSystemProperty("javax.net.ssl.keyStore",
+                authInfo.getClientKeystoreLocation(), debug);
+        setSystemProperty("javax.net.ssl.keyStorePassword",
+                authInfo.getClientKeystorePassword(), debug);
+        setSystemProperty("javax.net.ssl.trustStore",
+                authInfo.getTruststoreLocation(), debug);
+        setSystemProperty("javax.net.ssl.trustStorePassword",
+                authInfo.getTruststorePassword(), debug);
     }
 
     /**
@@ -514,7 +563,49 @@ public class SecurityHelper
     {
         return System.getProperty("javax.net.ssl.trustStore");
     }
-    
+
+    /**
+     * Get alias in a keystore or truststore
+     * 
+     * @param keystoreLocation
+     * @param keystorePassword
+     * @return
+     * @throws KeyStoreException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws IOException
+     */
+    public static List<String> getAliasesforKeystore(String keystoreLocation,
+            String keystorePassword) throws KeyStoreException,
+                    NoSuchAlgorithmException, CertificateException, IOException
+    {
+        Enumeration<String> enumAliases = null;
+
+        FileInputStream inputstreamStore;
+
+        inputstreamStore = new FileInputStream(keystoreLocation);
+        KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keystore.load(inputstreamStore, keystorePassword.toCharArray());
+
+        // List the aliases
+        enumAliases = keystore.aliases();
+
+        List<String> listAliases = Collections.list(enumAliases);
+
+        // while (enumAliases.hasMoreElements())
+        // {
+        // String alias = enumAliases.nextElement();
+        //
+        // // Does alias refer to a private key?
+        // // boolean b = keystore.isKeyEntry(alias);
+        //
+        // // Does alias refer to a trusted certificate?
+        // // b = keystore.isCertificateEntry(alias);
+        // }
+
+        return listAliases;
+    }
+
     /**
      * Compare two String arrays and store matching Strings to result
      * array.
@@ -524,17 +615,23 @@ public class SecurityHelper
      * @return String array consisting of all common Strings in str1 and str2
      * or null if the set is empty.
      */
-    public static String [] getMatchingStrings(String [] str1, String [] str2)
+    public static void checkAccessAndAliasesForKeystore(String storeLocation,
+            String storePassword, boolean shouldNotBeEmpty)
+                    throws ConfigurationException
     {
-        String [] resultStr = new String[0];
-        String [] longerStr;
-        String [] shorterStr;
-        int ri=0;
-        
-        if (str1.length > str2.length)
+        final String errorMessage = MessageFormat.format(
+                "Could not access or retrieve aliases from {0}", storeLocation);
+        try
         {
-            longerStr = str1;
-            shorterStr = str2;
+            List<String> aliasesInKeystore = SecurityHelper
+                    .getAliasesforKeystore(storeLocation, storePassword);
+
+            if (aliasesInKeystore.isEmpty() && shouldNotBeEmpty)
+            {
+                throw new ConfigurationException(MessageFormat.format(
+                        "Keystore / Truststore does not contain any aliases: {0}",
+                        storeLocation));
+            }
         }
         else
         {
@@ -543,13 +640,20 @@ public class SecurityHelper
         }
         for (int li=0; li<longerStr.length; li++)
         {
-            for (int si=0; si<shorterStr.length; si++)
-            {
-                if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
-                {
-                    resultStr[ri++] = new String(shorterStr[si]);
-                }
-            }
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+        catch (CertificateException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+        catch (IOException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+    }
 
     /**
      * Stores the certificate in the host certificate truststore with the
@@ -565,45 +669,5 @@ public class SecurityHelper
     {
 
     }
-    /**
-     * Compare two String arrays and store matching Strings to result
-     * array.
-     * 
-     * @param str1
-     * @param str2
-     * @return String array consisting of all common Strings in str1 and str2
-     * or null if the set is empty.
-     */
-    public static String [] getMatchingStrings(String [] str1, String [] str2)
-    {
-        String [] resultStr = new String[0];
-        String [] longerStr;
-        String [] shorterStr;
-        int ri=0;
-        
-        if (str1.length > str2.length)
-        {
-            longerStr = str1;
-            shorterStr = str2;
-        }
-        else
-        {
-            longerStr = str2;
-            shorterStr = str1;
-        }
-        for (int li=0; li<longerStr.length; li++)
-        {
-            for (int si=0; si<shorterStr.length; si++)
-            {
-                if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
-                {
-                    resultStr[ri++] = new String(shorterStr[si]);
-                }
-            }
-        }
-        if (resultStr.length == 0)
-            return null;
-        else
-            return resultStr;
-    }
+
 }

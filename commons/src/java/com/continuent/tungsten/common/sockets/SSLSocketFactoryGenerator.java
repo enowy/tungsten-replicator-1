@@ -36,11 +36,8 @@ import javax.net.ssl.X509KeyManager;
 
 import org.apache.log4j.Logger;
 
-import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
-import com.continuent.tungsten.common.security.SecurityConf;
 import com.continuent.tungsten.common.security.SecurityHelper;
-import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 
 /**
  * Implements an class to generate SSLSocketFactory instances. The author
@@ -82,10 +79,9 @@ public class SSLSocketFactoryGenerator
      * @return
      * @throws IOException
      * @throws GeneralSecurityException
-     * @throws ConfigurationException 
      */
     private SSLContext getSSLContext() throws IOException,
-            GeneralSecurityException, ConfigurationException
+            GeneralSecurityException
     {
         KeyManager[] keyManagers = getKeyManagers();
         TrustManager[] trustManagers = getTrustManagers();
@@ -100,17 +96,8 @@ public class SSLSocketFactoryGenerator
                         (X509KeyManager) keyManagers[i], alias);
             }
         }
-        /**
-         * Read protocols from security.properties and use the first on the
-         * list.
-         */
-        AuthenticationInfo authInfo = SecurityHelper
-                .loadAuthenticationInformation();
-        // Use the first protocol in SSLContext - the fact that there may be
-        // multiple configured protocols is not handled here;
-        // SSLContext.getInstance only takes one
-        SSLContext context = SSLContext.getInstance(authInfo
-                .getEnabledProtocols().get(0));
+
+        SSLContext context = SSLContext.getInstance("SSL");
         context.init(keyManagers, trustManagers, null);
 
         return context;
@@ -122,16 +109,15 @@ public class SSLSocketFactoryGenerator
      * @return
      * @throws IOException
      * @throws GeneralSecurityException
-     * @throws ConfigurationException 
      */
     public SSLSocketFactory getSSLSocketFactory()
-            throws IOException, GeneralSecurityException, ConfigurationException
+            throws IOException, GeneralSecurityException
     {
         // --- No alias defined. Use default SSL socket factory ---
         if (this.alias == null)
         {
-            logger.debug("No keystore alias entry defined. Will use default "
-                    + "SSLSocketFactory selecting 1st entry in keystore !");
+            logger.debug(
+                    "No keystore alias entry defined. Will use default SSLSocketFactory selecting 1st entry in keystore !");
             return (SSLSocketFactory) SSLSocketFactory.getDefault();
         }
         // --- Alias defined. Use custom alias selector ---
@@ -149,10 +135,9 @@ public class SSLSocketFactoryGenerator
      * @return
      * @throws IOException
      * @throws GeneralSecurityException
-     * @throws ConfigurationException 
      */
     public SSLServerSocketFactory getSSLServerSocketFactory() throws IOException,
-            GeneralSecurityException, ConfigurationException
+            GeneralSecurityException
     {
         // --- No alias defined. Use default SSL socket factory ---
         if (this.alias == null)

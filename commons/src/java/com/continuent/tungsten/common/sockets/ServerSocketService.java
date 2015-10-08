@@ -30,15 +30,10 @@ import java.net.SocketTimeoutException;
 import java.nio.channels.ServerSocketChannel;
 import java.security.GeneralSecurityException;
 
-import javax.net.SocketFactory;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 
 import org.apache.log4j.Logger;
-
-import com.continuent.tungsten.common.config.cluster.ConfigurationException;
-import com.continuent.tungsten.common.security.AuthenticationInfo;
-import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Provides a wrapper for managing server-side Socket connections. This class
@@ -122,9 +117,8 @@ public class ServerSocketService
     /**
      * Connect to the server socket.
      * @throws GeneralSecurityException 
-     * @throws ConfigurationException 
      */
-    public ServerSocket bind() throws IOException, GeneralSecurityException, ConfigurationException
+    public ServerSocket bind() throws IOException, GeneralSecurityException
     {
         // Create the serverSocket.
         if (useSSL)

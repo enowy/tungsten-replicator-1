@@ -28,7 +28,6 @@ import java.util.List;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cluster.resource.OpenReplicatorParams;
-import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.InSequenceNotification;
 import com.continuent.tungsten.replicator.OutOfSequenceNotification;
 import com.continuent.tungsten.replicator.ReplicatorException;
@@ -191,7 +190,6 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
 
     /**
      * {@inheritDoc}
-     * @throws ConfigurationException 
      * 
      * @see com.continuent.tungsten.replicator.extractor.Extractor#extract()
      */
@@ -297,10 +295,6 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
             // Remember which event we just read and ask for the next one.
             lastEvent = (ReplDBMSEvent) replEvent;
             return (ReplDBMSEvent) replEvent;
-        }
-        catch (ConfigurationException e)
-        {
-            throw new ExtractorException(e.getMessage(), e);            
         }
         catch (THLException e)
         {
@@ -426,7 +420,7 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     }
 
     // Reconnect a failed connection.
-    private void reconnect() throws InterruptedException, ReplicatorException, ConfigurationException
+    private void reconnect() throws InterruptedException, ReplicatorException
     {
         synchronized (this)
         {
@@ -463,10 +457,9 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
      * 
      * @throws ReplicatorException
      * @throws InterruptedException
-     * @throws ConfigurationException 
      */
     private void openConnector() throws ReplicatorException,
-            InterruptedException, ConfigurationException
+            InterruptedException
     {
         // Set up for connection to remote URI.
         ConnectUriManager uriManager = new ConnectUriManager(uriList);
