@@ -13,9 +13,11 @@
 	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 	See the License for the specific language governing permissions and
 	limitations under the License.
- 
-	Initial developer(s): Robert Hodges, Linas Virbalas
-	Contributor(s):
+
+	Initial developer(s): Linas Virbalas, Robert Hodges
+	Contributor(s): MC Brown
+
+	Velocity template for Tungsten.
  
 *##parse("includes/table-counter.vm")
 ## Print header or help above the first table.
@@ -67,6 +69,8 @@ DATETIME##
 TIMESTAMP##
 #elseif ( $col.getTypeDescription().contains("DATE") )
 DATE##
+#elseif ( $col.getTypeDescription().contains("YEAR") )
+DECIMAL(4)##
 #elseif ( $col.getTypeDescription().contains("TIME") )
 TIME##
 #elseif ( $col.getTypeDescription().startsWith("TINYINT") )
@@ -78,9 +82,9 @@ INT##
 #elseif ( $col.getTypeDescription().startsWith("INT") )
 INT##
 #elseif ( $col.getTypeDescription().startsWith("BIGINT") )
-NUMBER##
-#elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )
-$col.getTypeDescription()##
+BIGINT##
+#elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )## DECIMAL(p,s)
+$col.getTypeDescription().replaceFirst("DECIMAL","NUMBER").replaceFirst(" UNSIGNED","")##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
 #if ( $col.getLength() <= 65000 )
 VARCHAR($col.getLength())##

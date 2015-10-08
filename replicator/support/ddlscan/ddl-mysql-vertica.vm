@@ -13,10 +13,10 @@
 	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 	See the License for the specific language governing permissions and
 	limitations under the License.
- 
-	Initial developer(s): Robert Hodges, Linas Virbalas
-	Contributor(s):
- 
+
+	Initial developer(s): Linas Virbalas, Robert Hodges
+	Contributor(s): MC Brown
+
 	Velocity template for Tungsten.
 
 *##parse("includes/table-counter.vm")
@@ -69,6 +69,8 @@ DATETIME##
 TIMESTAMP##
 #elseif ( $col.getTypeDescription().contains("DATE") )
 DATE##
+#elseif ( $col.getTypeDescription().contains("YEAR") )
+DECIMAL(4)##
 #elseif ( $col.getTypeDescription().contains("TIME") )
 TIME##
 #elseif ( $col.getTypeDescription().startsWith("TINYINT") )
@@ -80,9 +82,9 @@ INT##
 #elseif ( $col.getTypeDescription().startsWith("INT") )
 INT##
 #elseif ( $col.getTypeDescription().startsWith("BIGINT") )
-NUMBER##
-#elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )
-$col.getTypeDescription()##
+BIGINT##
+#elseif ( $col.getTypeDescription().startsWith("DECIMAL(") )## DECIMAL(p,s)
+$col.getTypeDescription().replaceFirst("DECIMAL","NUMBER").replaceFirst(" UNSIGNED","")##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
 #if ( $col.getLength() <= 65000 )
 VARCHAR($col.getLength())##
@@ -115,11 +117,32 @@ $col.getTypeDescription() /* ERROR: unrecognized (type=$col.getType(), length=$c
 #end ## End of if-then-then...-else.
 #end ## End of column loop. 
 ) ##
-## Order by on primary key. 
+
+#set ( $tryPkInclude = "${table.getSchema()}.${table.getName()}.pk" )
+#set ( $tryInclude = "${table.getSchema()}.${table.getName()}.ddl" )
+## Primary key.
 #if ( $table.getPrimaryKey() )
-ORDER BY ##
-$table.getPrimaryKey().getColumns().get(0).getName()##
+  ORDER BY ##
+#foreach ( $key in $table.getPrimaryKey().getColumns() )
+$key.getName()##
+#if( $foreach.hasNext ), #else #end
+#end
+#elseif ( $velocity.resourceExists($tryPkInclude) )
+
+  /* INFO: PK error ignored, because include found */
+  /* BEGIN OF $tryPkInclude */
+#include($tryPkInclude)
+  /* END OF $tryPkInclude */##
 #else
+
   /* ERROR: table must have a primary key! */##
 #end
+#set ( $tryInclude = "${table.getSchema()}.${table.getName()}.ddl" )
+#if ( $velocity.resourceExists($tryInclude) )
+
+  /* BEGIN OF $tryInclude */
+#include($tryInclude)
+  /* END OF $tryInclude */##
+#end
+
 ;
