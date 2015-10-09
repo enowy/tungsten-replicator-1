@@ -93,6 +93,34 @@ module ConfigureDeploymentStepDeployment
       end
     end
     
+    # Write the tungsten-cookbook/INSTALLED* files
+    write_tungsten_cookbook_installed_recipe()
+    
+    # Remove any deploy.cfg files in the installed directory
+    FileUtils.rm(Dir.glob("#{prepare_dir}/#{Configurator::DATASERVICE_CONFIG}*"))
+    
+    # Write the tungsten.cfg file to the installed directory as a record
+    # of the configuration at this time
+    config_file = prepare_dir + '/' + Configurator::HOST_CONFIG
+    debug("Write #{config_file}")
+    host_config = @config.dup()
+    ph = ConfigurePromptHandler.new(host_config)
+    ph.prepare_saved_server_config()
+    host_config.store(config_file)
+
+    external_type = @config.getNestedProperty([DEPLOYMENT_EXTERNAL_CONFIGURATION_TYPE])
+    external_source = @config.getNestedProperty([DEPLOYMENT_EXTERNAL_CONFIGURATION_SOURCE])
+    installed_tungsten_ini = "#{prepare_dir}/tungsten.ini"
+    if external_type == "ini" && File.exists?(external_source)
+      # Create a symlink of the INI file into the installed directory
+      if File.exists?(installed_tungsten_ini)
+        FileUtils.rm_f(installed_tungsten_ini)
+      end
+      FileUtils.ln_sf(external_source, installed_tungsten_ini)
+    end
+  end
+  
+  def write_tungsten_security_files
     # Write the cluster-home/conf/security.properties file
     transform_host_template("cluster-home/conf/security.properties",
       "cluster-home/samples/conf/security.properties.tpl")
@@ -149,46 +177,16 @@ module ConfigureDeploymentStepDeployment
     end
     
     jmxremote = @config.getTemplateValue(JAVA_JMXREMOTE_ACCESS_PATH)
-    unless File.exist?(jmxremote)
-      File.open(jmxremote, "w") {
-        |f|
-        f.puts("#{rmi_user}        readwrite \\
-  create javax.management.monitor.*,javax.management.timer.* \\
-  unregister")
-      }
-    end
+    File.open(jmxremote, "w") {
+      |f|
+      f.puts("#{rmi_user}        readwrite \\
+create javax.management.monitor.*,javax.management.timer.* \\
+unregister")
+    }
     
     password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
-    unless File.exist?(password_store)
-cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
+      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
       cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
-    end
-    
-    # Write the tungsten-cookbook/INSTALLED* files
-    write_tungsten_cookbook_installed_recipe()
-    
-    # Remove any deploy.cfg files in the installed directory
-    FileUtils.rm(Dir.glob("#{prepare_dir}/#{Configurator::DATASERVICE_CONFIG}*"))
-    
-    # Write the tungsten.cfg file to the installed directory as a record
-    # of the configuration at this time
-    config_file = prepare_dir + '/' + Configurator::HOST_CONFIG
-    debug("Write #{config_file}")
-    host_config = @config.dup()
-    ph = ConfigurePromptHandler.new(host_config)
-    ph.prepare_saved_server_config()
-    host_config.store(config_file)
-
-    external_type = @config.getNestedProperty([DEPLOYMENT_EXTERNAL_CONFIGURATION_TYPE])
-    external_source = @config.getNestedProperty([DEPLOYMENT_EXTERNAL_CONFIGURATION_SOURCE])
-    installed_tungsten_ini = "#{prepare_dir}/tungsten.ini"
-    if external_type == "ini" && File.exists?(external_source)
-      # Create a symlink of the INI file into the installed directory
-      if File.exists?(installed_tungsten_ini)
-        FileUtils.rm_f(installed_tungsten_ini)
-      end
-      FileUtils.ln_sf(external_source, installed_tungsten_ini)
-    end
   end
   
   def write_tungsten_cookbook_installed_recipe
@@ -496,6 +494,7 @@ EOF
     write_undeployall()
     write_startall()
     write_stopall()
+    write_tungsten_security_files()
   end
   
   def write_dataservices_properties

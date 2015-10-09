@@ -5,6 +5,7 @@ class UpdateCommand
     include RemoteCommand
     include ResetBasenamePackageModule
     include ProvisionNewSlavesPackageModule
+    include ClusterSecurityFiles
   end
   
   include ClusterCommandModule
@@ -18,9 +19,20 @@ class UpdateCommand
    
     if @restart_replicators == false
       override_promotion_setting(RESTART_REPLICATORS, false)
+    else
+      if @replace_tls_certificate == true
+        override_promotion_setting(RESTART_REPLICATORS, true)
+      end
     end
     if @restart_managers == false
       override_promotion_setting(RESTART_MANAGERS, false)
+    else
+      if @replace_tls_certificate == true
+        override_promotion_setting(RESTART_MANAGERS, true)
+      end
+      if @replace_jgroups_certificate == true
+        override_promotion_setting(RESTART_MANAGERS, true)
+      end
     end
     if @restart_connectors == false
       override_promotion_setting(RESTART_CONNECTORS, false)
@@ -28,12 +40,24 @@ class UpdateCommand
     
     is_valid?()
   end
+  
+  def prepare_config_for_command(config)
+    if @replace_tls_certificate == true
+      generate_tls_certificate(config)
+    end
+    
+    if @replace_jgroups_certificate == true
+      generate_jgroups_certificate(config)
+    end
+  end
 
   def parsed_options?(arguments)
     @restart_replicators = nil
     @restart_managers = nil
     @restart_connectors = nil
     @replace_release = false
+    @replace_jgroups_certificate = false
+    @replace_tls_certificate = false
     
     arguments = super(arguments)
 
@@ -59,6 +83,8 @@ class UpdateCommand
       }
     else
       opts.on("--replace-release") { @replace_release = true }
+      opts.on("--replace-jgroups-certificate") { @replace_jgroups_certificate = true }
+      opts.on("--replace-tls-certificate") { @replace_tls_certificate = true }
     end
     
     opts = Configurator.instance.run_option_parser(opts, arguments)
@@ -86,6 +112,8 @@ class UpdateCommand
       output_usage_line("--no-restart", "Do not restart any component on the server")
     else
       output_usage_line("--replace-release", "Replace the current release directory on each host with a copy of this directory")
+      output_usage_line("--replace-tls-certificate", "Replace the certificate used for RMI and THL encryption")
+      output_usage_line("--replace-jgroups-certificate", "Replace the certificate used for JGroups encryption")
     end
     
     OutputHandler.queue_usage_output?(true)
@@ -94,7 +122,7 @@ class UpdateCommand
   end
   
   def get_bash_completion_arguments
-    super() + ["--no-connectors", "--no-restart", "--replace-release"] + get_cluster_bash_completion_arguments()
+    super() + ["--no-connectors", "--no-restart", "--replace-release", "--replace-tls-certificate", "--replace-jgroups-certificate"] + get_cluster_bash_completion_arguments()
   end
   
   def output_completion_text
