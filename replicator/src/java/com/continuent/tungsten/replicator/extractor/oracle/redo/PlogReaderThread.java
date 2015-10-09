@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Stephane Giron
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -406,7 +406,8 @@ public class PlogReaderThread extends Thread
                 }
                 else if (tag.id == PlogLCRTag.TAG_OBJ_ID)
                 {
-                    objectId = tag.valueInt();
+                    objectId = tag.valueInt();                    
+                    rawLCR.tableId = objectId;
                 }
                 else /* will be processed later */
                 {

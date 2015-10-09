@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Stephane Giron
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -70,6 +70,7 @@ class PlogLCR implements Serializable
     public java.sql.Timestamp timestamp;
     public String             tableOwner   = "";
     public String             tableName    = "";
+    public int                tableId      = -1;
     ArrayList<oneColVal>      columnValues = new ArrayList<oneColVal>();
 
     public String SQLText       = "";

@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Stephane Giron
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -430,6 +430,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
         OneRowChange oneRowChange = new OneRowChange(LCR.tableOwner,
                 LCR.tableName, LCR.subtypeAsActionType());
+        oneRowChange.setTableId(LCR.tableId);
         rowData.appendOneRowChange(oneRowChange);
 
         LCR.parseDataTypes(oneRowChange);
@@ -447,11 +448,9 @@ class PlogTransaction implements Comparable<PlogTransaction>
         valValuesArray.add(valValues);
 
         if (logger.isDebugEnabled())
-        {
             logger.debug("Row Change: " + oneRowChange.getAction().toString()
                     + ":" + oneRowChange.getSchemaName() + "."
                     + oneRowChange.getTableName());
-        }
 
         HashMap<String, Integer> columnsPresentAny = new HashMap<String, Integer>();
         HashMap<Integer, PlogLCR.oneColVal> columnsPresentKey = new HashMap<Integer, PlogLCR.oneColVal>();
