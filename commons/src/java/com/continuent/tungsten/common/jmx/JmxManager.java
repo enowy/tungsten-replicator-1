@@ -84,7 +84,7 @@ public class JmxManager implements NotificationListener
     public final static String        CREATE_MBEAN_HELPER = "createHelper";
 
     // Authentication and Encryption parameters
-    private static AuthenticationInfo authenticationInfo  = null;
+    private static volatile AuthenticationInfo authenticationInfo  = null;
 
     /**
      * Creates an instance to manage a JMX service
@@ -288,6 +288,12 @@ public class JmxManager implements NotificationListener
                             .getEnabledProtocols().toArray(new String[0]);
                     String[] cipherArray = authenticationInfo
                             .getEnabledCipherSuites().toArray(new String[0]);
+                    
+                    if (protocolArray.length == 0)
+                        protocolArray = null;
+                    if (cipherArray.length == 0)
+                        cipherArray = null;
+                    
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
                     SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
                             cipherArray, protocolArray, false);
