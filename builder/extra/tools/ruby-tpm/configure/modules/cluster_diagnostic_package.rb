@@ -29,7 +29,7 @@ module ClusterDiagnosticPackage
     out.close
   end
 
-  def run_command(config,command)
+  def run_command(config,command, ignore_error=true)
 
     ret=nil
 
@@ -39,8 +39,12 @@ module ClusterDiagnosticPackage
       if path != ""
         ret=ssh_result(command, config.getProperty(HOST), config.getProperty(USERID))
       end
-    rescue
-      ret=nil
+    rescue CommandError => ce
+      if ignore_error == false
+        raise ce
+      else
+        ret = nil
+      end
     end
     ret
   end
@@ -205,8 +209,13 @@ module ClusterDiagnosticPackage
       write_file("#{diag_dir}/#{h_alias}/os_info/java_info.txt",run_command(config,"java -version 2>&1") )
       write_file("#{diag_dir}/#{h_alias}/os_info/ruby_info.txt",run_command(config,"ruby -v") )
       write_file("#{diag_dir}/#{h_alias}/os_info/uptime.txt",run_command(config,"uptime") )
-      write_file("#{diag_dir}/#{h_alias}/tpm_validate.txt",run_command(config,"#{config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tools/tpm validate-update --tty") )
-
+      begin
+        validate_text = run_command(config,"#{config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tools/tpm validate-update --tty", false)
+      rescue CommandError => ce
+        validate_text = ce.result
+      end
+      write_file("#{diag_dir}/#{h_alias}/tpm_validate.txt", validate_text )
+      
     }
     
     require 'zip/zip'
