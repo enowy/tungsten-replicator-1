@@ -971,13 +971,16 @@ class THLSSL < ConfigurePrompt
   include ReplicationServicePrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN, default)
+    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN)
     add_command_line_alias("thl-ssl")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
   end
 end
 

@@ -1443,6 +1443,22 @@ class HostDataServiceName < ConfigurePrompt
   end
 end
 
+class HostDisableSecurityControls < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    super(DISABLE_SECURITY_CONTROLS, "Disable all security controls and file protection.", PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if Configurator.instance.default_security?() == true
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+end
+
 class HostSecurityDirectory < ConfigurePrompt
   include ClusterHostPrompt
   
@@ -1459,12 +1475,7 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, default)
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN)
     add_command_line_alias("jgroups-ssl")
   end
   
@@ -1476,6 +1487,14 @@ class HostEnableJgroupsSSL < ConfigurePrompt
       return "<ENCRYPT key_store_name=\"#{keystore}\"  store_password=\"#{ks_pass}\" key_password=\"#{ks_pass}\" alias=\"#{key_alias}\" />"
     else
       return ""
+    end
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
     end
   end
 end
@@ -1563,13 +1582,16 @@ class HostEnableRMIAuthentication < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, default)
+    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN)
     add_command_line_alias("rmi-authentication")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
   end
 end
 
@@ -1577,13 +1599,16 @@ class HostEnableRMISSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, default)
+    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN)
     add_command_line_alias("rmi-ssl")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
   end
 end
 
@@ -1891,10 +1916,10 @@ class HostProtectConfigurationFiles < ConfigurePrompt
   end
   
   def load_default_value
-    if Configurator.instance.default_security?() == true
-      @default = "true"
-    else
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
       @default = "false"
+    else
+      @default = "true"
     end
   end
 end
@@ -1912,10 +1937,10 @@ class HostFileProtectionLevel < ConfigurePrompt
     if @config.getProperty(get_member_key(PROTECT_CONFIGURATION_FILES)) == "false"
       @default = "none"
     else
-      if Configurator.instance.default_security?() == true
-        @default = "user"
-      else
+      if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
         @default = "none"
+      else
+        @default = "user"
       end
     end
   end

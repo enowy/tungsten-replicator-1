@@ -58,6 +58,7 @@ PORTS_FOR_CONNECTORS = "ports_for_connectors"
 PORTS_FOR_MANAGERS = "ports_for_managers"
 PORTS_FOR_REPLICATORS = "ports_for_replicators"
 
+DISABLE_SECURITY_CONTROLS = "disable_security_controls"
 SECURITY_DIRECTORY = "security_directory"
 ENABLE_RMI_AUTHENTICATION = "enable_rmi_authentication"
 ENABLE_RMI_SSL = "enable_rmi_ssl"
