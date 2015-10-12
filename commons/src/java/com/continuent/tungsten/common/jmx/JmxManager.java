@@ -68,23 +68,30 @@ import com.continuent.tungsten.common.security.SecurityHelper;
  */
 public class JmxManager implements NotificationListener
 {
-    private static final Logger       logger              = Logger.getLogger(JmxManager.class);
+    private static final Logger                logger              = Logger.getLogger(JmxManager.class);
 
     // RMI registry and connector server we are managing.
-    protected Registry                rmiRegistry;
-    protected JMXConnectorServer      jmxConnectorServer;
-  
+    protected Registry                         rmiRegistry;
+    protected JMXConnectorServer               jmxConnectorServer;
+
     // JMX server parameters.
-    private final String              host;
-    private final int                 registryPort;
-    private static int                beanPort;
+    private final String                       host;
+    private final int                          registryPort;
+    private static int                         beanPort;
 
-    private final String              serviceName;
+    private final String                       serviceName;
 
-    public final static String        CREATE_MBEAN_HELPER = "createHelper";
+    public final static String                 CREATE_MBEAN_HELPER = "createHelper";
 
     // Authentication and Encryption parameters
     private static volatile AuthenticationInfo authenticationInfo  = null;
+
+    public JmxManager(String host, int beanPort, int registryPort,
+            String serviceName, AuthenticationInfo authInfo)
+    {
+        this(host, beanPort, registryPort, serviceName);
+        authenticationInfo = authInfo;
+    }
 
     /**
      * Creates an instance to manage a JMX service
@@ -288,12 +295,12 @@ public class JmxManager implements NotificationListener
                             .getEnabledProtocols().toArray(new String[0]);
                     String[] cipherArray = authenticationInfo
                             .getEnabledCipherSuites().toArray(new String[0]);
-                    
+
                     if (protocolArray.length == 0)
                         protocolArray = null;
                     if (cipherArray.length == 0)
                         cipherArray = null;
-                    
+
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
                     SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
                             cipherArray, protocolArray, false);
@@ -317,10 +324,16 @@ public class JmxManager implements NotificationListener
 
             logger.info(MessageFormat
                     .format("JMXConnector: security.properties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
-                            (authenticationInfo != null) ? authenticationInfo.getParentPropertiesFileLocation() : "No security.properties file found !...",
-                            (authenticationInfo != null) ? authenticationInfo.isAuthenticationNeeded() : false,
-                            (authenticationInfo != null) ? authenticationInfo.isUseEncryptedPasswords(): false,
-                            (authenticationInfo != null) ? authenticationInfo.isEncryptionNeeded() : false));
+                            (authenticationInfo != null)
+                                    ? authenticationInfo
+                                            .getParentPropertiesFileLocation()
+                                    : "No security.properties file found !...",
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isAuthenticationNeeded() : false,
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isUseEncryptedPasswords() : false,
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isEncryptionNeeded() : false));
             logger.info(String.format("JMXConnector started at address %s",
                     serviceAddress));
 
@@ -533,8 +546,7 @@ public class JmxManager implements NotificationListener
             AuthenticationInfo authInfo = null;
             if (jmxProperties != null)
                 authInfo = (AuthenticationInfo) jmxProperties.getObject(
-                        AuthenticationInfo.SECURITY_INFO_PROPERTY, null,
-                        false);
+                        AuthenticationInfo.SECURITY_INFO_PROPERTY, null, false);
             if (authInfo == null) // Last chance: try the static member
                 authInfo = authenticationInfo;
 
