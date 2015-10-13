@@ -54,7 +54,7 @@ public class MySqlLvmDumpAgent extends AbstractBackupAgent
     private String        host               = "localhost";
     private int           port               = 3306;
     private String        user               = "tungsten";
-    private String        password           = "secret";
+    private String        password           = null;
     private String        volumeGroup        = "VolGroup00";
     private String        logicalVolume      = "LogGroup00";
     private String        logicalVolumeMount = "/";
