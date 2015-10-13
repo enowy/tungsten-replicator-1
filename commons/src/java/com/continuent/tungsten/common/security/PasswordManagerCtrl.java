@@ -68,36 +68,39 @@ public class PasswordManagerCtrl
     private String  keystorePassword               = null;
     private String  keystorePasswordFileLocation   = null;
     private String  passwordFileLocation           = null;
+    private String  userPasswordFileLocation       = null;
 
     // -- Define constants for command line arguments ---
-    private static final String HELP                      = "help";
-    private static final String _HELP                     = "h";
-    private static final String _AUTHENTICATE             = "a";
-    private static final String AUTHENTICATE              = "authenticate";
-    private static final String CREATE                    = "create";
-    private static final String _CREATE                   = "c";
-    private static final String DELETE                    = "delete";
-    private static final String _DELETE                   = "d";
-    private static final String FILE                      = "file";
-    private static final String _FILE                     = "f";
-    private static final String TARGET_APPLICATION        = "target";
-    private static final String _TARGET_APPLICATION       = "t";
-    private static final String _ENCRYPTED_PASSWORD       = "e";
-    private static final String ENCRYPTED_PASSWORD        = "encrypted.password";
-    private static final String _TRUSTSTORE_LOCATION      = "ts";
-    private static final String TRUSTSTORE_LOCATION       = "truststore.location";
-    private static final String _TRUSTSTORE_PASSWORD      = "tsp";
-    private static final String TRUSTSTORE_PASSWORD       = "truststore.password";
-    private static final String _TRUSTSTORE_PASSWORD_FILE = "tspf";
-    private static final String TRUSTSTORE_PASSWORD_FILE  = "truststore.password.file";
-    private static final String KEYSTORE_LOCATION         = "keystore.location";
-    private static final String _KEYSTORE_LOCATION        = "ks";
-    private static final String KEYSTORE_PASSWORD         = "keystore.password";
-    private static final String _KEYSTORE_PASSWORD        = "ksp";
-    private static final String KEYSTORE_PASSWORD_FILE    = "keystore.password.file";
-    private static final String _KEYSTORE_PASSWORD_FILE   = "kspf";
-    private static final String _PASSWORD_FILE_LOCATION   = "p";
-    private static final String PASSWORD_FILE_LOCATION    = "password_file.location";
+    private static final String HELP                         = "help";
+    private static final String _HELP                        = "h";
+    private static final String _AUTHENTICATE                = "a";
+    private static final String AUTHENTICATE                 = "authenticate";
+    private static final String CREATE                       = "create";
+    private static final String _CREATE                      = "c";
+    private static final String DELETE                       = "delete";
+    private static final String _DELETE                      = "d";
+    private static final String FILE                         = "file";
+    private static final String _FILE                        = "f";
+    private static final String TARGET_APPLICATION           = "target";
+    private static final String _TARGET_APPLICATION          = "t";
+    private static final String _ENCRYPTED_PASSWORD          = "e";
+    private static final String ENCRYPTED_PASSWORD           = "encrypted.password";
+    private static final String _TRUSTSTORE_LOCATION         = "ts";
+    private static final String TRUSTSTORE_LOCATION          = "truststore.location";
+    private static final String _TRUSTSTORE_PASSWORD         = "tsp";
+    private static final String TRUSTSTORE_PASSWORD          = "truststore.password";
+    private static final String _TRUSTSTORE_PASSWORD_FILE    = "tspf";
+    private static final String TRUSTSTORE_PASSWORD_FILE     = "truststore.password.file";
+    private static final String KEYSTORE_LOCATION            = "keystore.location";
+    private static final String _KEYSTORE_LOCATION           = "ks";
+    private static final String KEYSTORE_PASSWORD            = "keystore.password";
+    private static final String _KEYSTORE_PASSWORD           = "ksp";
+    private static final String KEYSTORE_PASSWORD_FILE       = "keystore.password.file";
+    private static final String _KEYSTORE_PASSWORD_FILE      = "kspf";
+    private static final String _PASSWORD_FILE_LOCATION      = "p";
+    private static final String PASSWORD_FILE_LOCATION       = "password.file.location";
+    private static final String _USER_PASSWORD_FILE_LOCATION = "upf";
+    private static final String USER_PASSWORD_FILE_LOCATION  = "user.password.file.location";
 
     private static Option create;
     private static Option authenticate;
@@ -193,6 +196,11 @@ public class PasswordManagerCtrl
                 .withLongOpt(PASSWORD_FILE_LOCATION).withArgName("filename")
                 .hasArg().withDescription("Location of the password file")
                 .create(_PASSWORD_FILE_LOCATION);
+        Option userPasswordFileLocation = OptionBuilder
+                .withLongOpt(USER_PASSWORD_FILE_LOCATION)
+                .withArgName("filename").hasArg()
+                .withDescription("Location of the user password file")
+                .create(_USER_PASSWORD_FILE_LOCATION);
 
         // --- Add options to the list ---
         // --- Help
@@ -210,6 +218,7 @@ public class PasswordManagerCtrl
         this.options.addOption(keystorePassword);
         this.options.addOption(keystorePasswordFile);
         this.options.addOption(passwordFileLocation);
+        this.options.addOption(userPasswordFileLocation);
 
         this.options.addOption(targetApplication);
     }
@@ -271,24 +280,57 @@ public class PasswordManagerCtrl
             {
                 securityPropertiesFileLocation = line.getOptionValue(_FILE);
             }
+
             if (line.hasOption(_AUTHENTICATE))
-            { // Make sure username + password are provided
+            {
                 String[] authenticateArgs = line.getOptionValues(_AUTHENTICATE);
-                if (authenticateArgs.length < 2)
-                    throw new MissingArgumentException(authenticate);
-
-                username = authenticateArgs[0];
-                password = authenticateArgs[1];
+                if (!line.hasOption(_USER_PASSWORD_FILE_LOCATION))
+                {
+                    // Make sure username + password are provided
+                    if (authenticateArgs.length < 2)
+                        throw new MissingArgumentException(authenticate);
+                    else
+                    {
+                        // Credentials on command line
+                        username = authenticateArgs[0];
+                        password = authenticateArgs[1];
+                    }
+                }
+                else
+                {
+                    // Credentials on command line and file
+                    username = authenticateArgs[0];
+                    pwd.userPasswordFileLocation = line
+                            .getOptionValue(USER_PASSWORD_FILE_LOCATION);
+                    password = null;
+                }
             }
+
             if (line.hasOption(_CREATE))
-            { // Make sure username + password are provided
-                String[] createArgs = line.getOptionValues(_CREATE);
-                if (createArgs.length < 2)
-                    throw new MissingArgumentException(create);
-
-                username = createArgs[0];
-                password = createArgs[1];
+            {
+                String[] authenticateArgs = line.getOptionValues(_CREATE);
+                if (!line.hasOption(_USER_PASSWORD_FILE_LOCATION))
+                {
+                    // Make sure username + password are provided
+                    if (authenticateArgs.length < 2)
+                        throw new MissingArgumentException(authenticate);
+                    else
+                    {
+                        // Credentials on command line
+                        username = authenticateArgs[0];
+                        password = authenticateArgs[1];
+                    }
+                }
+                else
+                {
+                    // Credentials on command line and file
+                    username = authenticateArgs[0];
+                    pwd.userPasswordFileLocation = line
+                            .getOptionValue(USER_PASSWORD_FILE_LOCATION);
+                    password = null;
+                }
             }
+
             // --- Options to replace values in security.properties file ---
             if (line.hasOption(_ENCRYPTED_PASSWORD))
                 pwd.useEncryptedPassword = true;
@@ -320,6 +362,10 @@ public class PasswordManagerCtrl
                 AuthenticationInfo authenticationInfo = pwd.passwordManager
                         .getAuthenticationInfo();
                 // --- Substitute with user provided options
+                if (pwd.userPasswordFileLocation != null)
+                    password = pwd
+                            .getPassewordFromFile(pwd.userPasswordFileLocation);
+
                 if (pwd.useEncryptedPassword != null)
                     authenticationInfo
                             .setUseEncryptedPasswords(pwd.useEncryptedPassword);
@@ -353,28 +399,34 @@ public class PasswordManagerCtrl
                 // --- Display summary of used parameters ---
                 logger.info("Using parameters: ");
                 logger.info("-----------------");
+                if (pwd.userPasswordFileLocation != null)
+                    logger.info(MessageFormat.format("{0} \t = {1}",
+                            USER_PASSWORD_FILE_LOCATION,
+                            pwd.userPasswordFileLocation));
+
                 if (authenticationInfo
                         .getParentPropertiesFileLocation() != null)
                     logger.info(MessageFormat.format(
-                            "security.properties \t = {0}", authenticationInfo
+                            "security.properties \t\t = {0}", authenticationInfo
                                     .getParentPropertiesFileLocation()));
+                logger.info(MessageFormat.format(
+                        "password.file.location \t\t = {0}",
+                        authenticationInfo.getPasswordFileLocation()));
                 logger.info(
-                        MessageFormat.format("password_file.location \t = {0}",
-                                authenticationInfo.getPasswordFileLocation()));
-                logger.info(MessageFormat.format("encrypted.password \t = {0}",
-                        authenticationInfo.isUseEncryptedPasswords()));
+                        MessageFormat.format("encrypted.password \t\t = {0}",
+                                authenticationInfo.isUseEncryptedPasswords()));
 
                 // --- Keystore
                 if (line.hasOption(_AUTHENTICATE))
                 {
                     logger.info(
-                            MessageFormat.format("keystore.location \t = {0}",
+                            MessageFormat.format("keystore.location \t\t = {0}",
                                     authenticationInfo.getKeystoreLocation()));
 
                     // Keystore password from command line
                     if (pwd.keystorePasswordFileLocation == null)
                         logger.info(MessageFormat.format(
-                                "keystore.password \t = {0}",
+                                "keystore.password \t\t = {0}",
                                 getHiddenPassword(authenticationInfo
                                         .getKeystorePassword())));
                     // Keystore password from file
@@ -388,12 +440,12 @@ public class PasswordManagerCtrl
                 if (authenticationInfo.isUseEncryptedPasswords())
                 {
                     logger.info(MessageFormat.format(
-                            "truststore.location \t = {0}",
+                            "truststore.location \t\t = {0}",
                             authenticationInfo.getTruststoreLocation()));
                     // Truststore password from command line
                     if (pwd.truststorePasswordFileLocation == null)
                         logger.info(MessageFormat.format(
-                                "truststore.password \t = {0}",
+                                "truststore.password \t\t = {0}",
                                 getHiddenPassword(authenticationInfo
                                         .getTruststorePassword())));
                     // Truststore password from file
