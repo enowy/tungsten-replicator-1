@@ -70,9 +70,11 @@ public class LargeObjectArray<T extends Serializable>
      */
     public void release()
     {
-        this.byteCache.deallocate(key);
-        this.byteCache = null;
-        this.key = null;
+        if (byteCache != null)
+        {
+            this.byteCache.deallocate(key);
+            this.byteCache = null;
+        }
     }
 
     /**

@@ -38,6 +38,7 @@ import java.util.concurrent.BlockingQueue;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.cache.RawByteCache;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -45,7 +46,7 @@ import com.continuent.tungsten.replicator.plugin.PluginContext;
 /**
  * Defines a replication event extractor, which reads events from plog file,
  * which abstracts Oracle REDO records. This is a thread that actually does the
- * extraction and passes it in queue to PlogExtractor
+ * extraction and passes it in queue to PlogExtractor. 
  */
 public class PlogReaderThread extends Thread
 {
@@ -58,12 +59,13 @@ public class PlogReaderThread extends Thread
 
     private BlockingQueue<DBMSEvent> queue;
 
-    private String plogDirectory;
-    private int    sleepSizeInMilliseconds;
-    private int    transactionFragSize = 0;
-    private String replicateConsoleScript;
-    private String replicateApplyName;
-    private String tungstenSchema;
+    private String       plogDirectory;
+    private int          sleepSizeInMilliseconds;
+    private int          transactionFragSize = 0;
+    private String       replicateConsoleScript;
+    private String       replicateApplyName;
+    private String       tungstenSchema;
+    private RawByteCache cache;
 
     /*
      * dict cache enabled / disabled for current plog
@@ -85,6 +87,8 @@ public class PlogReaderThread extends Thread
      */
     private int             lastReportedObsolePlogSeq = 0;
 
+    // Currently open transactions. Each transaction *must* also be released to
+    // free resources from the cache.
     HashMap<String, PlogTransaction> openTransactions = new HashMap<String, PlogTransaction>();
 
     long   restartEventCommitSCN = 0;
@@ -575,13 +579,26 @@ public class PlogReaderThread extends Thread
     }
 
     /**
+     * Set the last event processed and parse to determine internal position.
+     * 
+     * @param restartEventId last processed event id
+     * @throws IOException
+     */
+    public void setLastEventId(String restartEventId) throws ReplicatorException
+    {
+        lastProcessedEventId = restartEventId;
+        setInternalLastEventId(restartEventId);
+    }
+
+    /**
      * Parse lastEventId handed to us by PlogExtractor init, break it into
      * components and set our internal state.
      * 
      * @param restartEventId last processed event id
      * @throws IOException
      */
-    public int setLastEventId(String restartEventId) throws ReplicatorException
+    private int setInternalLastEventId(String restartEventId)
+            throws ReplicatorException
     {
         int firstSequence = 0;
 
@@ -714,12 +731,14 @@ public class PlogReaderThread extends Thread
      *            transactions)
      * @param replicateConsoleScript property set by user (start-console.sh)
      * @param replicateApplyName property set by user (name of apply)
+     * @param cache Vector cache to hold pending transactions
      * @throws IOException We can fail on disk open or charset conversion
      */
     public PlogReaderThread(PluginContext context,
             BlockingQueue<DBMSEvent> queue, String plogDirectory,
             int sleepSizeInMilliseconds, int transactionFragSize,
-            String replicateConsoleScript, String replicateApplyName)
+            String replicateConsoleScript, String replicateApplyName,
+            RawByteCache cache)
     {
 
         logger.info("PlogReaderThread: " + plogDirectory + "/"
@@ -732,8 +751,15 @@ public class PlogReaderThread extends Thread
         this.replicateConsoleScript = replicateConsoleScript;
         this.replicateApplyName = replicateApplyName;
         this.tungstenSchema = context.getReplicatorSchemaName().toLowerCase();
+        this.cache = cache;
 
         this.registerThisExtractorAtMine();
+    }
+
+    /** Returns the last processed event ID. */
+    public String getLastProcessedEventId()
+    {
+        return lastProcessedEventId;
     }
 
     /**
@@ -762,7 +788,7 @@ public class PlogReaderThread extends Thread
 
             if (lastProcessedEventId != null)
             {
-                firstSequence = setLastEventId(lastProcessedEventId);
+                firstSequence = setInternalLastEventId(lastProcessedEventId);
             }
             else
             {
@@ -866,7 +892,8 @@ public class PlogReaderThread extends Thread
                                                       * throw away all LCRs from
                                                       * open transactions
                                                       */
-                                    setLastEventId(lastProcessedEventId);
+                                    setInternalLastEventId(
+                                            lastProcessedEventId);
                                     plogFilename = latestPlogFilename;
                                     openFile(plogFilename);
                                     readHeader();
@@ -953,6 +980,7 @@ public class PlogReaderThread extends Thread
                                         queue, minimalSCNInOpenTransactions(),
                                         transactionFragSize, oldestPlogId - 1);
                                 openTransactions.remove(t.XID);
+                                t.release();
                             }
                         }
                         for (PlogTransaction t : tranAtSameSCN)
@@ -963,6 +991,7 @@ public class PlogReaderThread extends Thread
                                         queue, minimalSCNInOpenTransactions(),
                                         transactionFragSize, oldestPlogId - 1);
                                 openTransactions.remove(t.XID);
+                                t.release();
                             }
                         }
                         tranAtSameSCN.clear();
@@ -973,7 +1002,7 @@ public class PlogReaderThread extends Thread
                         PlogTransaction t = openTransactions.get(r1.XID);
                         if (t == null)
                         {
-                            t = new PlogTransaction(r1.XID);
+                            t = new PlogTransaction(cache, r1.XID);
                             openTransactions.put(r1.XID, t);
                         }
                         t.putLCR(r1);
@@ -981,37 +1010,31 @@ public class PlogReaderThread extends Thread
                         {
                             if (t.isEmpty())
                             {
-                                openTransactions
-                                        .remove(r1.XID); /*
-                                                          * empty transaction,
-                                                          * throw away
-                                                          */
+                                // Empty transaction, throw way.
+                                openTransactions.remove(r1.XID);
+                                t.release();
                             }
                             else if (t.commitSCN < restartEventCommitSCN)
                             {
+                                // Pre-restart transaction, throw away.
                                 logger.info(r1.XID + " committed at "
                                         + t.commitSCN + ", before restart SCN "
                                         + restartEventCommitSCN);
-                                openTransactions.remove(
-                                        r1.XID); /*
-                                                  * pre-restart transaction,
-                                                  * throw away
-                                                  */
+                                openTransactions.remove(r1.XID);
+                                t.release();
                             }
                             else
                                 if (t.commitSCN == restartEventCommitSCN
                                         && t.XID.compareTo(restartEventXID) < 0)
                             {
+                                // Pre-restart transaction, throw away.
                                 logger.info(r1.XID + " committed at "
                                         + t.commitSCN + "= restart SCN "
                                         + restartEventCommitSCN
                                         + ", but it's before restart XID "
                                         + restartEventXID);
-                                openTransactions.remove(
-                                        r1.XID); /*
-                                                  * pre-restart transaction,
-                                                  * throw away
-                                                  */
+                                openTransactions.remove(r1.XID);
+                                t.release();
                             }
                             else
                                     if (t.commitSCN == restartEventCommitSCN
@@ -1036,7 +1059,10 @@ public class PlogReaderThread extends Thread
                             }
                             else
                             {
-                                logger.info("XID: " + t.XID);
+                                if (logger.isDebugEnabled())
+                                {
+                                    logger.debug("XID: " + t.XID);
+                                }
                                 t.setSkipSeq(0);
                                 tranAtSameSCN.add(t);
                                 SCNAtSameSCN = t.commitSCN;
@@ -1140,7 +1166,7 @@ public class PlogReaderThread extends Thread
      * 
      * @param plogId seq# of plog
      */
-    private void throwAwayAllLCRsInPlog(int plogId)
+    private void throwAwayAllLCRsInPlog(int plogId) throws ReplicatorException
     {
         Collection<PlogTransaction> allTrans = openTransactions.values();
 

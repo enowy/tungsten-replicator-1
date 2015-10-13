@@ -68,6 +68,10 @@ import com.continuent.tungsten.replicator.datasource.SqlDataSource;
 import com.continuent.tungsten.replicator.datasource.UniversalDataSource;
 import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.extractor.Extractor;
+import com.continuent.tungsten.replicator.extractor.ExtractorWrapper;
+import com.continuent.tungsten.replicator.extractor.RawExtractor;
+import com.continuent.tungsten.replicator.extractor.mysql.MySQLExtractor;
+import com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor;
 import com.continuent.tungsten.replicator.heartbeat.HeartbeatTable;
 import com.continuent.tungsten.replicator.management.OpenReplicatorContext;
 import com.continuent.tungsten.replicator.management.OpenReplicatorPlugin;
@@ -792,10 +796,51 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
             props.setString(ReplicatorConf.RESOURCE_JDBC_INIT_SCRIPT,
                     initScript);
 
-        heartbeat(props);
+        // We have a choice because MySQL and Oracle treat event IDs
+        // differently. This code breaks encapsulation but there's currently
+        // not an easy way to handle this logic.
+        String currentEventId = null;
+        Extractor head = pipeline.getHeadExtractor();
+        if (head instanceof ExtractorWrapper)
+        {
+            RawExtractor rawExtractor = ((ExtractorWrapper) head)
+                    .getExtractor();
+            if (rawExtractor instanceof MySQLExtractor)
+            {
+                // Issue the heartbeat, then get the event ID. This will be
+                // equal or greater than the binlog offset of the heartbeat
+                // transaction but corresponds to an extractable transaction,
+                // so it is safe to wait on it.
+                heartbeat(props);
+                currentEventId = pipeline.getHeadExtractor()
+                        .getCurrentResourceEventId();
+            }
+            else if (rawExtractor instanceof PlogExtractor)
+            {
+                // Get the Oracle SCN first, then issue the heartbeat. This
+                // value will be less than or equal to the actual event ID of
+                // the heartbeat, so it is likewise safe to wait on it.
+                currentEventId = pipeline.getHeadExtractor()
+                        .getCurrentResourceEventId();
+                heartbeat(props);
+            }
+            else
+            {
+                throw new ReplicatorException(
+                        "Heartbeat is not supported for this extractor type: "
+                                + rawExtractor.getClass().getName());
+            }
+        }
+        else
+        {
+            throw new ReplicatorException(
+                    "Heartbeat is not supported for this extractor type: "
+                            + head.getClass().getName());
+        }
 
         // Wait for the event we were seeking to show up.
-        Future<ReplDBMSHeader> expectedEvent = runtime.getPipeline().flush();
+        Future<ReplDBMSHeader> expectedEvent = runtime.getPipeline()
+                .flush(currentEventId);
         ReplDBMSHeader event = null;
         try
         {

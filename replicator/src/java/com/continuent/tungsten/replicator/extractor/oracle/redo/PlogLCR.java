@@ -20,6 +20,7 @@
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
 
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -30,8 +31,6 @@ import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-
-//import javax.sql.rowset.serial.SerialBlob;
 import javax.sql.rowset.serial.SerialException;
 
 import org.apache.log4j.Logger;
@@ -45,16 +44,18 @@ import com.continuent.tungsten.replicator.dbms.RowChangeData.ActionType;
 import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
 
 /**
- * Represents one logical change record (=one entry in the plog)
+ * Represents one logical change record (=one entry in the plog). 
  */
-class PlogLCR
+class PlogLCR implements Serializable
 {
+    private static final long serialVersionUID = 1L;
+
     private static Logger logger = Logger.getLogger(PlogLCR.class);
 
     LinkedList<PlogLCRTag> rawTags;
-    public int                length;
-    public int                type;
-    public int                subtype;
+    public int             length;
+    public int             type;
+    public int             subtype;
 
     /* Replicator event Id (set on transaction commit) */
     public String eventId;
@@ -472,6 +473,7 @@ class PlogLCR
                  * upper 32-bit of length... ignore for now, we handle chunks
                  * <4GB only
                  */
+                @SuppressWarnings("unused")
                 int rawLengthUpper32 = b.getInt();
                 int actualLength;
                 if (this.datatype.equals("CLOB_UTF16")
@@ -505,6 +507,7 @@ class PlogLCR
                  * upper 32-bit of length... ignore for now, we handle chunks
                  * <4GB only
                  */
+                @SuppressWarnings("unused")
                 int rawLengthUpper32 = b.getInt();
                 int actualLength = lobLength > 0 ? (int) lobLength : rawLength;
                 if (logger.isDebugEnabled())
@@ -615,8 +618,8 @@ class PlogLCR
                 }
                 break;
             default :
-                typeStr = " ?"+this.type+"/";
-                subtypeStr = "?"+this.subtype;
+                typeStr = " ?" + this.type + "/";
+                subtypeStr = "?" + this.subtype;
         }
         return typeStr + subtypeStr;
     }
@@ -655,7 +658,8 @@ class PlogLCR
     {
         oneColVal currentCol = null;
         columnValues = new ArrayList<oneColVal>();
-        for (Iterator<PlogLCRTag> iterator = rawTags.iterator(); iterator.hasNext();)
+        for (Iterator<PlogLCRTag> iterator = rawTags.iterator(); iterator
+                .hasNext();)
         {
             PlogLCRTag tag = iterator.next();
             switch (tag.id)
@@ -750,7 +754,9 @@ class PlogLCR
                 case PlogLCRTag.TAG_PLOGNAME :
                     // these are present, but of no interest for us
                 default :
-                    /* ignore all others - not present in current plog version */
+                    /*
+                     * ignore all others - not present in current plog version
+                     */
             }
         }
         return parent.new IncludePlog(filename);
@@ -792,7 +798,8 @@ class PlogLCR
                 return ActionType.UPDATE;
             default :
                 throw new ReplicatorException(
-                    "subtypeAsActionType: unsupported data LCR subtype " + subtype);
+                        "subtypeAsActionType: unsupported data LCR subtype "
+                                + subtype);
         }
     }
 

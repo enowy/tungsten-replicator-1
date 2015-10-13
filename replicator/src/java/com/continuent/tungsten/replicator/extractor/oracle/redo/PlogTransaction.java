@@ -20,17 +20,20 @@
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 
 import javax.sql.rowset.serial.SerialException;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.cache.LargeObjectArray;
+import com.continuent.tungsten.common.cache.LargeObjectScanner;
+import com.continuent.tungsten.common.cache.RawByteCache;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.dbms.DBMSData;
@@ -44,17 +47,20 @@ import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
 
 /**
- * Represents one transaction.
+ * Represents one transaction. The LCR entries are stored in a large object
+ * array, which is allocated on a RawByteCache instance. Transactions
+ * <em>must</em> be released to avoid resource leaks that will cause the
+ * replicator to fail.
  */
 class PlogTransaction implements Comparable<PlogTransaction>
 {
     private static Logger logger = Logger.getLogger(PlogTransaction.class);
 
-    public ArrayList<PlogLCR> LCRList;
-    public String                XID;
-    private boolean              committed = false;
-    private boolean              empty     = true;
-    private java.sql.Timestamp   commitTime;
+    private final LargeObjectArray<PlogLCR> LCRList;
+    final String                            XID;
+    boolean                                 committed = false;
+    boolean                                 empty     = true;
+    java.sql.Timestamp                      commitTime;
 
     public long startSCN  = 0;
     public long commitSCN = 0;
@@ -70,10 +76,19 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param XID = transaction id
      */
-    public PlogTransaction(String XID)
+    public PlogTransaction(RawByteCache cache, String XID)
     {
         this.XID = XID;
-        LCRList = new ArrayList<PlogLCR>();
+        this.LCRList = new LargeObjectArray<PlogLCR>(cache);
+    }
+
+    /**
+     * Release large object array, which frees cache resources. This
+     * <em>must</em> be called to avoid resource leaks.
+     */
+    public void release()
+    {
+        LCRList.release();
     }
 
     /**
@@ -92,7 +107,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param LCR LCR to add
      */
-    public void putLCR(PlogLCR LCR)
+    public void putLCR(PlogLCR LCR) throws ReplicatorException
     {
         if (startSCN == 0)
         {
@@ -109,7 +124,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
         if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
                 && LCR.subtype == PlogLCR.ESTYPE_TRAN_COMMIT)
-        { /* Commit: say we are done */
+        {
+            // Commit: say we are done.
             committed = true;
             commitSCN = LCR.SCN;
             commitTime = LCR.timestamp;
@@ -118,26 +134,29 @@ class PlogTransaction implements Comparable<PlogTransaction>
         else
             if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
                     && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK)
-        { /* Rollback tran: say we are done, but we are empty */
+        {
+            // Rollback tran: say we are done, but we are empty.
+            // We may want to release LCRList but resizing to 0 is OK too.
             empty = true;
-            LCRList = null;
+            LCRList.resize(0);
             committed = true;
-
         }
         else
                 if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
                         && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK_TO_SAVEPOINT)
-        { /* Rollback to savepoint: discard rolled back changes */
-            while (LCRList.size() > 0 && LCRList
-                    .get(LCRList.size() - 1).LCRid >= LCR.LCRSavepointId)
+        {
+            // Rollback to savepoint: discard rolled back changes by resizing to
+            // before the last value that is at or above save point ID.
+            int last = LCRList.size() - 1;
+            while (last > 0 && LCRList.get(last).LCRid >= LCR.LCRSavepointId)
             {
-                PlogLCR L = LCRList.get(LCRList.size() - 1);
-                LCRList.remove(LCRList.size() - 1);
+                last--;
             }
-
+            LCRList.resize(last);
         }
         else if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
-        { /* We have some data = we are not empty */
+        {
+            /* We have some data = we are not empty */
             empty = false;
             LCRList.add(LCR);
             if (LCR.subtype == PlogLCR.ESTYPE_LCR_DDL)
@@ -207,69 +226,89 @@ class PlogTransaction implements Comparable<PlogTransaction>
             ArrayList<DBMSData> data = new ArrayList<DBMSData>();
             int fragSize = 0;
 
-            for (Iterator<PlogLCR> iterator = LCRList.iterator(); iterator.hasNext();)
+            LargeObjectScanner<PlogLCR> scanner = null;
+            try
             {
-                PlogLCR LCR = iterator.next();
-                if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
-                { /* add only data */
-                    if (LCR.subtype == PlogLCR.ESTYPE_LCR_DDL)
-                        throw new ReplicatorException(
-                                "Internal corruption: DDL statement in a DML transaction.");
-                    if (transactionFragSize > 0
-                            && fragSize >= transactionFragSize )
-                    {
-                        logger.debug("Fragmenting");
-                        // Time to fragment
-                        DBMSEvent event = new DBMSEvent(lastLCR.eventId, data,
-                                false, commitTime);
-
-                        event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
-                                Database.ORACLE);
-                        // Strings are converted to UTF8 rather than using bytes
-                        // for this extractor.
-                        event.setMetaDataOption(ReplOptionParams.STRINGS,
-                                "utf8");
-                        q.put(event);
-
-                        data = new ArrayList<DBMSData>(); /*
-                                                           * clear array for
-                                                           * next fragment
-                                                           */
-                        fragSize = 0;
-                    }
-
-                    count++;
-                    fragSize++;
-                    if (count > skipSeq)
-                    {
-                        LCR.eventId = "" + commitSCN + "#" + XID + "#" + count
-                                + "#" + minSCN + "#" + lastObsoletePlogSeq;
-                        lastLCR = LCR;
-
-                        data.add(convertLCRtoDBMSDataDML(LCR));
-                        lastProcessedEventId = LCR.eventId;
-
+                scanner = LCRList.scanner();
+                while (scanner.hasNext())
+                {
+                    PlogLCR LCR = scanner.next();
+                    if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
+                    { /* add only data */
+                        if (LCR.subtype == PlogLCR.ESTYPE_LCR_DDL)
+                            throw new ReplicatorException(
+                                    "Internal corruption: DDL statement in a DML transaction.");
+                        if (transactionFragSize > 0
+                                && fragSize >= transactionFragSize)
                         {
-                            PlogLCR r2 = LCR;
-                            if (logger.isDebugEnabled())
-                            {
-                                logger.debug("LCR: " + r2.type + "." + r2.subtype
-                                        + ":" + r2.typeAsString() + ", XID="
-                                        + r2.XID + ", LCRid=" + r2.LCRid
-                                        + " eventId=" + r2.eventId);
-                                logger.debug("EventId#1 set to " + r2.eventId);
-                            }
+                            logger.debug("Fragmenting");
+                            // Time to fragment
+                            DBMSEvent event = new DBMSEvent(lastLCR.eventId,
+                                    data, false, commitTime);
+
+                            event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
+                                    Database.ORACLE);
+                            // Strings are converted to UTF8 rather than using
+                            // bytes
+                            // for this extractor.
+                            event.setMetaDataOption(ReplOptionParams.STRINGS,
+                                    "utf8");
+                            q.put(event);
+
+                            data = new ArrayList<DBMSData>(); /*
+                                                               * clear array for
+                                                               * next fragment
+                                                               */
+                            fragSize = 0;
                         }
 
-                    }
+                        count++;
+                        fragSize++;
+                        if (count > skipSeq)
+                        {
+                            LCR.eventId = "" + commitSCN + "#" + XID + "#"
+                                    + count + "#" + minSCN + "#"
+                                    + lastObsoletePlogSeq;
+                            lastLCR = LCR;
 
-                    iterator.remove(); /* LCR processed, discard it immediatelly */
+                            data.add(convertLCRtoDBMSDataDML(LCR));
+                            lastProcessedEventId = LCR.eventId;
+
+                            {
+                                PlogLCR r2 = LCR;
+                                if (logger.isDebugEnabled())
+                                {
+                                    logger.debug("LCR: " + r2.type + "."
+                                            + r2.subtype + ":"
+                                            + r2.typeAsString() + ", XID="
+                                            + r2.XID + ", LCRid=" + r2.LCRid
+                                            + " eventId=" + r2.eventId);
+                                    logger.debug(
+                                            "EventId#1 set to " + r2.eventId);
+                                }
+                            }
+
+                        }
+                    }
+                    else
+                    {
+                        throw new RuntimeException("Type " + LCR.type
+                                + " in queue, should be only data");
+                    }
                 }
-                else
-                {
-                    throw new RuntimeException("Type " + LCR.type
-                            + " in queue, should be only data");
-                }
+            }
+            catch (IOException e)
+            {
+                logger.error("Transaction scanner error occured: XID="
+                        + this.XID + " key=" + LCRList.getKey() + " cache="
+                        + LCRList.getByteCache().toString());
+                throw new RuntimeException(
+                        "Unable to read transaction from cache: " + this.XID);
+            }
+            finally
+            {
+                if (scanner != null)
+                    scanner.close();
             }
             if (lastLCR != null)
             { /* last LCR set = transaction is not empty */
@@ -303,31 +342,50 @@ class PlogTransaction implements Comparable<PlogTransaction>
             PlogLCR lastLCR = null;
             String lastProcessedEventId = null;
 
-            for (PlogLCR LCR : LCRList)
+            LargeObjectScanner<PlogLCR> scanner = null;
+            try
             {
-                if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
-                { /* add only data */
-                    if (LCR.subtype != PlogLCR.ESTYPE_LCR_DDL)
-                    {
-                        throw new ReplicatorException(
-                                "Internal corruption: DML statement in a DDL transaction.");
-                    }
-                    LCR.eventId = "" + commitSCN + "#" + XID + "#" + "LAST"
-                            + "#" + minSCN + "#" + lastObsoletePlogSeq;
-                    data.add(convertLCRtoDBMSDataDDL(LCR));
-                    lastLCR = LCR;
-                    lastProcessedEventId = LCR.eventId;
-                    if (logger.isDebugEnabled())
-                    {
-                        logger.info("DDL: [" + LCR.currentSchema + "]["
-                                + LCR.eventId + "]: " + LCR.SQLText);
-                    }
-                }
-                else
+                scanner = LCRList.scanner();
+                while (scanner.hasNext())
                 {
-                    throw new RuntimeException("Type " + LCR.type
-                            + " in queue, should be only data");
+                    PlogLCR LCR = scanner.next();
+                    if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
+                    { /* add only data */
+                        if (LCR.subtype != PlogLCR.ESTYPE_LCR_DDL)
+                        {
+                            throw new ReplicatorException(
+                                    "Internal corruption: DML statement in a DDL transaction.");
+                        }
+                        LCR.eventId = "" + commitSCN + "#" + XID + "#" + "LAST"
+                                + "#" + minSCN + "#" + lastObsoletePlogSeq;
+                        data.add(convertLCRtoDBMSDataDDL(LCR));
+                        lastLCR = LCR;
+                        lastProcessedEventId = LCR.eventId;
+                        if (logger.isDebugEnabled())
+                        {
+                            logger.info("DDL: [" + LCR.currentSchema + "]["
+                                    + LCR.eventId + "]: " + LCR.SQLText);
+                        }
+                    }
+                    else
+                    {
+                        throw new RuntimeException("Type " + LCR.type
+                                + " in queue, should be only data");
+                    }
                 }
+            }
+            catch (IOException e)
+            {
+                logger.error("Transaction scanner error occured: XID="
+                        + this.XID + " key=" + LCRList.getKey() + " cache="
+                        + LCRList.getByteCache().toString());
+                throw new RuntimeException(
+                        "Unable to read transaction from cache: " + this.XID);
+            }
+            finally
+            {
+                if (scanner != null)
+                    scanner.close();
             }
 
             if (!data.isEmpty())
@@ -388,9 +446,12 @@ class PlogTransaction implements Comparable<PlogTransaction>
         ArrayList<OneRowChange.ColumnVal> valValues = new ArrayList<ColumnVal>();
         valValuesArray.add(valValues);
 
-        logger.info("Row Change: " + oneRowChange.getAction().toString() + ":"
-                + oneRowChange.getSchemaName() + "."
-                + oneRowChange.getTableName());
+        if (logger.isDebugEnabled())
+        {
+            logger.debug("Row Change: " + oneRowChange.getAction().toString()
+                    + ":" + oneRowChange.getSchemaName() + "."
+                    + oneRowChange.getTableName());
+        }
 
         HashMap<String, Integer> columnsPresentAny = new HashMap<String, Integer>();
         HashMap<Integer, PlogLCR.oneColVal> columnsPresentKey = new HashMap<Integer, PlogLCR.oneColVal>();
@@ -447,9 +508,9 @@ class PlogTransaction implements Comparable<PlogTransaction>
             }
             if (logger.isDebugEnabled())
             {
-                logger.debug("Col [[" + p + "] #" + oneCol.id + "->" + thisKey + " "
-                        + oneCol.name + "[" + oneCol.datatype + "] "
-                        + oneCol.imageType );
+                logger.debug("Col [[" + p + "] #" + oneCol.id + "->" + thisKey
+                        + " " + oneCol.name + "[" + oneCol.datatype + "] "
+                        + oneCol.imageType);
             }
         }
 
@@ -466,7 +527,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                 {
                     logger.debug("Col [KEY] #" + oneCol.id + "->" + idx + " "
                             + oneCol.name + "[" + oneCol.datatype + "] "
-                            + oneCol.imageType );
+                            + oneCol.imageType);
                 }
             }
             if (columnsPresentVal.containsKey(idx))
@@ -479,7 +540,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                 {
                     logger.debug("Col [VAL] #" + oneCol.id + "->" + idx + " "
                             + oneCol.name + "[" + oneCol.datatype + "] "
-                            + oneCol.imageType );
+                            + oneCol.imageType);
                 }
             }
             else
@@ -491,9 +552,9 @@ class PlogTransaction implements Comparable<PlogTransaction>
                 valValues.add(oneCol.columnVal);
                 if (logger.isDebugEnabled())
                 {
-                    logger.debug("Col [KEY->VAL]#" + oneCol.id + "->" + idx + " "
-                            + oneCol.name + "[" + oneCol.datatype + "] "
-                            + oneCol.imageType );
+                    logger.debug("Col [KEY->VAL]#" + oneCol.id + "->" + idx
+                            + " " + oneCol.name + "[" + oneCol.datatype + "] "
+                            + oneCol.imageType);
                 }
             }
         }

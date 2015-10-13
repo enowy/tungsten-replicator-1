@@ -20,17 +20,19 @@
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
 
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.GregorianCalendar;
 import java.sql.Timestamp;
+import java.util.GregorianCalendar;
 
 /**
  * Represents one tag in an LCR entry and the data contained within.
  */
-class PlogLCRTag
+class PlogLCRTag implements Serializable
 {
+    private static final long serialVersionUID = 1L;
     int[] rawData;
     int   length;
     int   id;

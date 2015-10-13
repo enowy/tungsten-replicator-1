@@ -95,8 +95,14 @@ public class LargeObjectScanner<T extends Serializable> implements AutoCloseable
      * @see java.lang.AutoCloseable#close()
      */
     @Override
-    public void close() throws Exception
+    public void close()
     {
-        byteInput.close();
+        try
+        {
+            byteInput.close();
+        }
+        catch (IOException e)
+        {
+        }
     }
 }

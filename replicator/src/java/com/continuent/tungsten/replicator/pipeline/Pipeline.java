@@ -63,7 +63,8 @@ import com.continuent.tungsten.replicator.util.Watch;
  */
 public class Pipeline implements ReplicatorPlugin
 {
-    private static Logger                    logger               = Logger.getLogger(Pipeline.class);
+    private static Logger                    logger               = Logger
+            .getLogger(Pipeline.class);
     private PluginContext                    context;
     private String                           name;
     private LinkedList<Stage>                stages               = new LinkedList<Stage>();
@@ -74,7 +75,7 @@ public class Pipeline implements ReplicatorPlugin
     private boolean                          autoSync             = false;
     private boolean                          syncTHLWithExtractor = true;
     private ExecutorService                  shutdownTaskExec     = Executors
-                                                                          .newCachedThreadPool();
+            .newCachedThreadPool();
     private TreeMap<String, Future<?>>       offlineRequests      = new TreeMap<String, Future<?>>();
     private int                              channels             = -1;
 
@@ -211,8 +212,8 @@ public class Pipeline implements ReplicatorPlugin
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#configure(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void configure(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void configure(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         logger.info("Configuring pipeline: " + name);
         this.context = context;
@@ -247,8 +248,8 @@ public class Pipeline implements ReplicatorPlugin
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#prepare(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void prepare(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void prepare(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         logger.info("Preparing pipeline: " + name);
 
@@ -344,8 +345,8 @@ public class Pipeline implements ReplicatorPlugin
         ArrayList<Future<ReplDBMSHeader>> taskShutdownFutures = new ArrayList<Future<ReplDBMSHeader>>();
         for (int i = 0; i < stages.size(); i++)
         {
-            taskShutdownFutures.add(stages.get(i)
-                    .watchForProcessedSequenceNumber(seqno, true));
+            taskShutdownFutures.add(
+                    stages.get(i).watchForProcessedSequenceNumber(seqno, true));
         }
 
         return scheduleWait("Offline at sequence number: " + seqno,
@@ -365,8 +366,8 @@ public class Pipeline implements ReplicatorPlugin
         ArrayList<Future<ReplDBMSHeader>> taskShutdownFutures = new ArrayList<Future<ReplDBMSHeader>>();
         for (int i = 0; i < stages.size(); i++)
         {
-            taskShutdownFutures.add(stages.get(i).watchForProcessedEventId(
-                    eventId, true));
+            taskShutdownFutures
+                    .add(stages.get(i).watchForProcessedEventId(eventId, true));
         }
 
         return scheduleWait("Offline at native event ID: " + eventId,
@@ -385,8 +386,8 @@ public class Pipeline implements ReplicatorPlugin
         ArrayList<Future<ReplDBMSHeader>> taskShutdownFutures = new ArrayList<Future<ReplDBMSHeader>>();
         for (int i = 0; i < stages.size(); i++)
         {
-            taskShutdownFutures.add(stages.get(i).watchForProcessedHeartbeat(
-                    name, true));
+            taskShutdownFutures
+                    .add(stages.get(i).watchForProcessedHeartbeat(name, true));
         }
 
         return scheduleWait("Offline at heartbeat event: " + name,
@@ -407,8 +408,8 @@ public class Pipeline implements ReplicatorPlugin
         ArrayList<Future<ReplDBMSHeader>> taskShutdownFutures = new ArrayList<Future<ReplDBMSHeader>>();
         for (int i = 0; i < stages.size(); i++)
         {
-            taskShutdownFutures.add(stages.get(i).watchForProcessedTimestamp(
-                    timestamp, true));
+            taskShutdownFutures.add(
+                    stages.get(i).watchForProcessedTimestamp(timestamp, true));
         }
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
         return scheduleWait("Offline at time: " + sdf.format(timestamp),
@@ -613,8 +614,8 @@ public class Pipeline implements ReplicatorPlugin
             {
                 if (store instanceof ParallelStore)
                 {
-                    ((ParallelStore) store).insertWatchSyncEvent(watch
-                            .getPredicate());
+                    ((ParallelStore) store)
+                            .insertWatchSyncEvent(watch.getPredicate());
                 }
             }
         }
@@ -665,14 +666,28 @@ public class Pipeline implements ReplicatorPlugin
      * @throws InterruptedException
      * @throws ReplicatorException
      */
-    public Future<ReplDBMSHeader> flush() throws InterruptedException,
-            ReplicatorException
+    public Future<ReplDBMSHeader> flush()
+            throws InterruptedException, ReplicatorException
     {
         Extractor extractor = stages.getFirst().getExtractor0();
         String currentEventId = extractor.getCurrentResourceEventId();
-        logger.info("Scheduling pipeline flush on current event ID: "
-                + currentEventId);
-        return watchForProcessedEventId(currentEventId);
+        return flush(currentEventId);
+    }
+
+    /**
+     * Wait until the log reaches at least a particular event ID.
+     * 
+     * @param eventId An event ID that must be reached.
+     * @return A Future on the ReplDBMSEvent that has this eventId or a greater
+     *         one.
+     * @throws InterruptedException
+     * @throws ReplicatorException
+     */
+    public Future<ReplDBMSHeader> flush(String eventId)
+            throws InterruptedException, ReplicatorException
+    {
+        logger.info("Scheduling pipeline flush on event ID: " + eventId);
+        return watchForProcessedEventId(eventId);
     }
 
     public void setSyncTHLWithExtractor(boolean syncTHLWithExtractor)
@@ -713,7 +728,8 @@ public class Pipeline implements ReplicatorPlugin
 // Interruptible task to wait for stage tasks to read a watch point.
 class DeferredShutdownTask implements Callable<Pipeline>
 {
-    private static final Logger                logger = Logger.getLogger(DeferredShutdownTask.class);
+    private static final Logger                logger = Logger
+            .getLogger(DeferredShutdownTask.class);
     private final Pipeline                     pipeline;
     private final List<Future<ReplDBMSHeader>> taskWaits;
 

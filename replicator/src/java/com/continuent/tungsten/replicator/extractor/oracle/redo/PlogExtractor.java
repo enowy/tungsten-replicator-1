@@ -20,11 +20,19 @@
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
 
+import java.io.File;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.cache.RawByteCache;
 import com.continuent.tungsten.replicator.ReplicatorException;
+import com.continuent.tungsten.replicator.conf.ReplicatorRuntimeConf;
+import com.continuent.tungsten.replicator.database.Database;
+import com.continuent.tungsten.replicator.datasource.SqlDataSource;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.extractor.RawExtractor;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -61,15 +69,22 @@ class PlogDBMSErrorMessage extends DBMSEvent
  * PlogExtractor class. This is the main entry point for this Replicate plugin.
  * It just spawns PlogReaderThread (so it can run in the background) and this
  * class then just passes the already parsed DBMSEvents to the caller.
+ * <p/>
+ * This extractor converts interleaved Oracle transactions to the fully
+ * serialized Tungsten format. The conversion requires that large transactions
+ * be buffered in order to await a final commit. The class uses a byte vector
+ * cache for this purpose. For best performance the cache should have as much
+ * memory as possible allocated. Serializing buffered transactions to storage
+ * may be too orders of memory slower than using memory, hence should be avoided
+ * except for very large transactions.
  */
 public class PlogExtractor implements RawExtractor
 {
     private static Logger logger = Logger.getLogger(PlogExtractor.class);
 
-    private int    seq     = 1;
-    private String lastSCN = null;
-
+    // Properties.
     private String plogDirectory = null;
+    private String dataSource    = "extractor";
 
     private PlogReaderThread              readerThread;
     private ArrayBlockingQueue<DBMSEvent> queue;
@@ -84,6 +99,16 @@ public class PlogExtractor implements RawExtractor
     private String replicateConsoleScript;
     private String replicateApplyName      = "TungstenApply";
 
+    // Cache used for storing byte vectors.
+    private RawByteCache byteCache;
+    private File         cacheDir;
+    private long         cacheMaxTotalBytes  = 50000000;
+    private long         cacheMaxObjectBytes = 1000000;
+    private int          cacheMaxOpenFiles   = 50;
+
+    // Data source used to get DBMS connections.
+    private SqlDataSource dataSourceImpl;
+
     /**
      * {@inheritDoc}
      * 
@@ -93,6 +118,11 @@ public class PlogExtractor implements RawExtractor
     public void configure(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        if (cacheDir == null)
+        {
+            File home = ReplicatorRuntimeConf.locateReplicatorHomeDir();
+            cacheDir = new File(home, "var/cache");
+        }
     }
 
     /**
@@ -104,10 +134,26 @@ public class PlogExtractor implements RawExtractor
     public void prepare(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        // Set up the byte cache for large objects.
+        byteCache = new RawByteCache(cacheDir, cacheMaxTotalBytes,
+                cacheMaxObjectBytes, cacheMaxOpenFiles);
+        byteCache.prepare();
+
+        // Set up the data source so we can fetch current SCN, etc.
+        // Locate our data source from which we are extracting.
+        logger.info("Connecting to data source");
+        dataSourceImpl = (SqlDataSource) context.getDataSource(dataSource);
+        if (dataSourceImpl == null)
+        {
+            throw new ReplicatorException(
+                    "Unable to locate data source: name=" + dataSource);
+        }
+
+        // Set up the reader thread.
         queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
         readerThread = new PlogReaderThread(context, queue, plogDirectory,
                 sleepSizeInMilliseconds, transactionFragSize,
-                replicateConsoleScript, replicateApplyName);
+                replicateConsoleScript, replicateApplyName, byteCache);
 
         readerThread.prepare();
     }
@@ -213,6 +259,38 @@ public class PlogExtractor implements RawExtractor
         this.replicateApplyName = replicateApplyName;
     }
 
+    /** Directory that contains the object cache files. */
+    public void setCacheDir(File cacheDir)
+    {
+        this.cacheDir = cacheDir;
+    }
+
+    /**
+     * Total number of bytes in the object cache for in-memory objects. Any
+     * write that would exceed this limit goes to storage.
+     */
+    public void setCacheMaxTotalBytes(long cacheMaxTotalBytes)
+    {
+        this.cacheMaxTotalBytes = cacheMaxTotalBytes;
+    }
+
+    /**
+     * Maximum in-memory size for a single object. After this point, writes to
+     * the object go to storage.
+     */
+    public void setCacheMaxObjectBytes(long cacheMaxObjectBytes)
+    {
+        this.cacheMaxObjectBytes = cacheMaxObjectBytes;
+    }
+
+    /**
+     * Maximum number of cache files open for writing at any given time.
+     */
+    public void setCacheMaxOpenFiles(int cacheMaxOpenFiles)
+    {
+        this.cacheMaxOpenFiles = cacheMaxOpenFiles;
+    }
+
     /**
      * {@inheritDoc}
      * 
@@ -224,7 +302,10 @@ public class PlogExtractor implements RawExtractor
         if (!readerThread.isAlive())
             readerThread.start();
 
-        logger.info("Extractor start");
+        if (logger.isDebugEnabled())
+        {
+            logger.debug("Extractor start");
+        }
 
         while (!cancelled)
         {
@@ -267,7 +348,8 @@ public class PlogExtractor implements RawExtractor
     public DBMSEvent extract(String eventId)
             throws ReplicatorException, InterruptedException
     {
-        return null;
+        setLastEventId(eventId);
+        return extract();
     }
 
     /**
@@ -279,7 +361,72 @@ public class PlogExtractor implements RawExtractor
     public String getCurrentResourceEventId()
             throws ReplicatorException, InterruptedException
     {
-        return null;
+        // select dbms_flashback.get_system_change_number current_scn from dual;
+        // If we are not prepared, we cannot get status because we won't have a
+        // data source available.
+        if (dataSourceImpl == null)
+            return "NONE";
+
+        // Fetch SCN.
+        Database conn = null;
+        Statement st = null;
+        ResultSet rs = null;
+        try
+        {
+            // Try to get a connection. If we cannot, return NONE as above.
+            conn = dataSourceImpl.getUnmanagedConnection();
+            if (conn == null)
+                return "NONE";
+
+            st = conn.createStatement();
+            String query = "select dbms_flashback.get_system_change_number current_scn from dual";
+            rs = st.executeQuery(query);
+            if (!rs.next())
+                throw new ReplicatorException(
+                        "Oracle SCN query returned no rows: " + query);
+            String scn = rs.getString(1);
+            logger.info("Found an SCN: " + scn);
+            return scn;
+        }
+        catch (SQLException e)
+        {
+            logger.warn("Oracle SCN query failed: query=" + e.getMessage());
+            throw new ReplicatorException(
+                    "Oracle SCN query failed: " + e.getMessage(), e);
+        }
+        finally
+        {
+            cleanUpDatabaseResources(conn, st, rs);
+        }
     }
 
+    // Utility method to close result, statement, and connection objects.
+    private void cleanUpDatabaseResources(Database conn, Statement st,
+            ResultSet rs)
+    {
+        if (rs != null)
+        {
+            try
+            {
+                rs.close();
+            }
+            catch (SQLException ignore)
+            {
+            }
+        }
+        if (st != null)
+        {
+            try
+            {
+                st.close();
+            }
+            catch (SQLException ignore)
+            {
+            }
+        }
+        if (conn != null)
+        {
+            conn.close();
+        }
+    }
 }
