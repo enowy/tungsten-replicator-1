@@ -59,7 +59,7 @@ public class OracleCDCExtractor implements RawExtractor
 
     private String                       url        = null;
     private String                       user       = "root";
-    private String                       password   = "rootpass";
+    private String                       password   = null;
     private Database                     connection = null;
 
     List<OracleCDCSource>                sources;
