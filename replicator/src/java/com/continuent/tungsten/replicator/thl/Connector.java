@@ -28,6 +28,7 @@ import java.net.URISyntaxException;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.sockets.ClientSocketWrapper;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
@@ -96,8 +97,9 @@ public class Connector implements ReplicatorPlugin
 
     /**
      * Connect to master. 
+     * @throws ConfigurationException 
      */
-    public void connect() throws ReplicatorException, IOException
+    public void connect() throws ReplicatorException, IOException, ConfigurationException
     {
         if (logger.isDebugEnabled())
             logger.debug("Connecting to " + host + ":" + port + " useSSL="

@@ -28,9 +28,14 @@ import java.net.Socket;
 import java.nio.channels.SocketChannel;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 import org.apache.log4j.Logger;
+
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Provides a wrapper for client connections via sockets. This class
@@ -111,15 +116,35 @@ public class ClientSocketWrapper extends SocketWrapper
 
     /**
      * Connect to the server.
+     * @throws ConfigurationException 
      */
-    public Socket connect() throws IOException
+    public Socket connect() throws IOException, ConfigurationException
     {
         // Create the socket.
         if (useSSL)
         {
+         // Read security-related information 
+            AuthenticationInfo authInfo = SecurityHelper
+                    .loadAuthenticationInformation();
             // Create an SSL socket.
             sslFactory = SSLSocketFactory.getDefault();
-            socket = sslFactory.createSocket();
+            SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
+            // Set cipher suites and protocols
+            String[] supportedCiphers = sslSocket.getSupportedCipherSuites();
+            String[] enabledCiphers = (String[]) authInfo
+                    .getEnabledCipherSuites().toArray();
+            // Enable ciphers which are both supported by socket service and
+            // configured by user
+            sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
+                    supportedCiphers, enabledCiphers));
+            // Enable protocols which are both supported by socket and
+            // configured by user.
+            String[] supportedProtocols = sslSocket.getSupportedProtocols();
+            String[] enabledProtocols = (String[]) authInfo
+                    .getEnabledProtocols().toArray();
+            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
+                    supportedProtocols, enabledProtocols));
+            socket = sslSocket;
         }
         else
         {
