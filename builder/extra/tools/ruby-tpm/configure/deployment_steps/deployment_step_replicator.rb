@@ -83,6 +83,7 @@ module ConfigureDeploymentStepReplicator
     out.puts("command.onResourceNotification=#{echo_event_sh}")
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     
     info "GENERATED FILE: " + svc_properties

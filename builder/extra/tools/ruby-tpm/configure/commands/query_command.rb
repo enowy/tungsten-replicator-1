@@ -12,12 +12,13 @@ class QueryCommand
   QUERY_DEFAULT = "default"
   QUERY_VALUES = "values"
   QUERY_MODIFIED_FILES = "modified-files"
+  QUERY_UNSECURED_FILES = "unsecured-files"
   QUERY_USERMAP = "usermap"
   QUERY_DEPLOYMENTS = "deployments"
   QUERY_PRODUCT = "product"
   
   def allowed_subcommands
-    [QUERY_VERSION, QUERY_MANIFEST, QUERY_CONFIG, QUERY_TOPOLOGY, QUERY_DATASERVICES, QUERY_STAGING, QUERY_DEFAULT, QUERY_VALUES, QUERY_MODIFIED_FILES, QUERY_USERMAP, QUERY_DEPLOYMENTS, QUERY_EXTERNAL_CONFIGURATION, QUERY_PRODUCT]
+    [QUERY_VERSION, QUERY_MANIFEST, QUERY_CONFIG, QUERY_TOPOLOGY, QUERY_DATASERVICES, QUERY_STAGING, QUERY_DEFAULT, QUERY_VALUES, QUERY_MODIFIED_FILES, QUERY_USERMAP, QUERY_DEPLOYMENTS, QUERY_EXTERNAL_CONFIGURATION, QUERY_PRODUCT, QUERY_UNSECURED_FILES]
   end
   
   def allow_multiple_tpm_commands?
@@ -50,6 +51,8 @@ class QueryCommand
       output_values()
     when QUERY_MODIFIED_FILES
       output_modified_files()
+    when QUERY_UNSECURED_FILES
+      output_unsecured_files()
     when QUERY_USERMAP
       output_usermap_summary()
     when QUERY_DEPLOYMENTS
@@ -276,6 +279,58 @@ class QueryCommand
       
       build_topologies(cfg)
       Configurator.instance.output(cfg.to_s())
+    }
+  end
+  
+  def output_unsecured_files
+    base = Configurator.instance.get_base_path()
+    
+    if Configurator.instance.is_locked?()
+      max_perms = sprintf("%04d", 777-sprintf("%o", File.umask()).to_i())
+    else
+      max_perms = sprintf("%o", File.stat(base).mode)
+    end
+    max_user=max_perms[-3,1].to_i()
+    max_group=max_perms[-2,1].to_i()
+    max_other=max_perms[-1,1].to_i()
+    
+    tested_modes = {}
+    Dir.glob("#{base}/**/*").each {
+      |f|
+      mode = File.stat(f).mode
+      if tested_modes.has_key?(mode)
+        if tested_modes[mode] == false
+          Configurator.instance.output(f)
+          next
+        end
+      end
+      
+      begin
+        octal_mode = sprintf("%o", mode)
+        
+        file_user=octal_mode[-3,1].to_i()
+        match_user = max_user & file_user
+        if match_user != file_user
+          raise "Invalid user permission"
+        end
+        
+        file_group=octal_mode[-2,1].to_i()
+        match_group = max_group & file_group
+        if match_group != file_group
+          raise "Invalid group permission"
+        end
+        
+        file_other=octal_mode[-1,1].to_i()
+        match_other = max_other & file_other
+        if match_other != file_other
+          raise "Invalid other permission"
+        end
+            
+        tested_modes[mode] = true
+      rescue
+        Configurator.instance.output(f)
+        tested_modes[mode] = false
+      end
     }
   end
   

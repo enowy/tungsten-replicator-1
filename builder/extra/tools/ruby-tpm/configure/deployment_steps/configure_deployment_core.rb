@@ -237,6 +237,7 @@ module ConfigureDeploymentCore
     
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     info "GENERATED FILE: " + svc_properties
     WatchFiles.watch_file(svc_properties, @config)

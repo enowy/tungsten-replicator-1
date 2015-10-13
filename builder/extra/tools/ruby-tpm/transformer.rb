@@ -276,6 +276,7 @@ class Transformer
         |f|
         if mode() != nil
           f.chmod(mode())
+          Configurator.instance.limit_file_permissions(f.path())
         end
         
         if timestamp?()

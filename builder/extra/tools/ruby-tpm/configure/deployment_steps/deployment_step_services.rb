@@ -191,6 +191,7 @@ module ConfigureDeploymentStepServices
     @services.sort.reverse.each { |svc| out.puts svc + " start" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     info "GENERATED FILE: " + script
   end
@@ -206,6 +207,7 @@ module ConfigureDeploymentStepServices
     @services.sort.each { |svc| out.puts svc + " stop" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     info "GENERATED FILE: " + script
   end
@@ -232,6 +234,7 @@ module ConfigureDeploymentStepServices
       }
       out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
       out.chmod(0755)
+      Configurator.instance.limit_file_permissions(out.path())
       out.close
       info "GENERATED FILE: " + script
     end
@@ -258,6 +261,7 @@ module ConfigureDeploymentStepServices
       }
       out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
       out.chmod(0755)
+      Configurator.instance.limit_file_permissions(out.path())
       out.close
       info "GENERATED FILE: " + script
     end
