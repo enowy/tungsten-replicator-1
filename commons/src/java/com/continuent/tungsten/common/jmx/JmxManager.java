@@ -108,20 +108,6 @@ public class JmxManager implements NotificationListener
         this.registryPort = registryPort;
         this.serviceName = serviceName;
         JmxManager.beanPort = beanPort;
-        
-        // Load security information from security.properties
-        // CONT-1069
-        if (authenticationInfo==null)
-        {
-            try
-            {
-                authenticationInfo = SecurityHelper.loadAuthenticationInformation();
-            }
-            catch (ConfigurationException e)
-            {
-               logger.error(MessageFormat.format("Could not get security information. Will use default values: {0}", e));
-            }
-        }
     }
 
     /**
