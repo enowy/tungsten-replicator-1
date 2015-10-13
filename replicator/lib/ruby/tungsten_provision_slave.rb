@@ -23,7 +23,23 @@ class TungstenReplicatorProvisionSlave
   end
   
   def provision_with_xtrabackup
+    initial_dir_mode = {}
     begin
+      [
+        @options[:mysqldatadir],
+        @options[:mysqlibdatadir],
+        @options[:mysqliblogdir]
+      ].uniq().each{
+        |dir|
+        if dir.to_s() == ""
+          next
+        end
+        
+        if File.exist?(dir)
+          initial_dir_mode[dir] = sprintf("%o",File.stat(dir).mode)[-4,4].to_i(8)
+        end
+      }
+      
       # Does this version of innobackupex-1.5.1 support the faster 
       # --move-back instead of --copy-back
       supports_move_back = xtrabackup_supports_argument("--move-back")
@@ -100,6 +116,9 @@ class TungstenReplicatorProvisionSlave
           next
         end
         
+        if initial_dir_mode.has_key?(dir)
+          File.chmod(initial_dir_mode[dir], dir)
+        end
         TU.cmd_result("#{sudo_prefix()}chown -RL #{@options[:mysqluser]}: #{dir}")
       }
 
