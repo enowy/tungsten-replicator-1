@@ -100,7 +100,7 @@ public class JdbcPrefetcher implements RawApplier
     protected String                  driver               = null;
     protected String                  url                  = null;
     protected String                  user                 = "root";
-    protected String                  password             = "rootpass";
+    protected String                  password             = null;
     protected String                  ignoreSessionVars    = null;
 
     protected String                  metadataSchema       = null;
