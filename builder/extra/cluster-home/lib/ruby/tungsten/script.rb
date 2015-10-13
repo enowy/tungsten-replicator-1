@@ -53,6 +53,7 @@ module TungstenScript
     TU.debug("Begin #{$0} #{ARGV.join(' ')}")
     
     begin
+      prepare_environment()
       configure()
       @option_definitions.each{
         |option_key,definition|
@@ -132,6 +133,24 @@ module TungstenScript
       :default => false,
       :hidden => true
     })
+  end
+  
+  def prepare_environment
+    target_umask = nil
+    if TI != nil
+      install_umask = TI.setting(TI.setting_key(HOSTS, "file_protection_umask"))
+      if install_umask.to_s() != ""
+        target_umask = install_umask.to_i(8)
+      end
+    else
+      library_mode = sprintf("%o", File.stat(File.dirname(__FILE__)).mode)
+      library_umask = 777 - library_mode[-3,3].to_i()
+      target_umask = sprintf("%04d", library_umask).to_i(8)
+    end
+    
+    if target_umask != nil
+      File.umask(target_umask)
+    end
   end
   
   def opt(option_key, value = nil)

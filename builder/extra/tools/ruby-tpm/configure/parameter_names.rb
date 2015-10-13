@@ -87,6 +87,7 @@ SSL_CERT = "ssl_cert"
 SSL_KEY = "ssl_key"
 PROTECT_CONFIGURATION_FILES = "protect_configuration_files"
 FILE_PROTECTION_LEVEL = "file_protection_level"
+FILE_PROTECTION_UMASK = "file_protection_umask"
 
 ENABLE_HETEROGENOUS_SERVICE = "enable_heterogenous_service"
 ENABLE_HETEROGENOUS_MASTER = "enable_heterogenous_master"

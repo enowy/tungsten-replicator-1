@@ -1957,6 +1957,19 @@ class HostFileProtectionLevel < ConfigurePrompt
   end
 end
 
+class HostFileProtectionUmask < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(FILE_PROTECTION_UMASK, "Protection umask for Continuent files", PV_ANY)
+  end
+  
+  def load_default_value
+    @default = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
+  end
+end
+
 class HostServiceControlType < ConfigurePrompt
   include ClusterHostPrompt
   include ConstantValueModule
