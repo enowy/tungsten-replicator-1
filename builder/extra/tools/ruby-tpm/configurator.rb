@@ -1122,8 +1122,15 @@ class Configurator
               else
                 @release_details[:is_open_source] = false
               end
+            elsif parsed['product'] =~ /VMware Continuent Replication/
+              @release_details[:is_enterprise_package] = false
             else
               @release_details[:is_enterprise_package] = true
+            end
+            
+            if parsed["git"]["URL"] =~ /github\.com/
+              @release_details[:is_open_source] = true
+            else
               @release_details[:is_open_source] = false
             end
           rescue JSON::ParserError
