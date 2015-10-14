@@ -1441,3 +1441,14 @@ module DatabaseTypeDeploymentStep
     @submodules || []
   end
 end
+
+module ContinuentDeploymentStep
+  def self.included(subclass)
+    @submodules ||= []
+    @submodules << subclass
+  end
+
+  def self.submodules
+    @submodules || []
+  end
+end

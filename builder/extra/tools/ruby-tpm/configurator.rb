@@ -299,6 +299,12 @@ class Configurator
       rescue IgnoreError
       end
     end
+    Dir[File.dirname(__FILE__) + '/configure/extensions/*.rb'].sort().each do |file| 
+      begin
+        require File.dirname(file) + '/' + File.basename(file, File.extname(file))
+      rescue IgnoreError
+      end
+    end
   end
   
   def get_default_filenames

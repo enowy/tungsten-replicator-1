@@ -455,7 +455,7 @@ replicator.extractor.parallel-q-extractor.storeName=parallel-queue
 # APPLIERS #
 ############
 
-@{include(REPL_SVC_APPLIER_CONFIG)}}
+@{include(REPL_SVC_APPLIER_CONFIG)}
 
 # Durable THL applier. This applier does not auto-flush hence only makes
 # fully durable transactions visible to downstream clients.  This is the 

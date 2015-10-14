@@ -177,6 +177,10 @@ class ConfigureDatabasePlatform
     ""
   end
   
+  def getExternalLibraryDirectory()
+    nil
+  end
+  
   def get_default_master_log_directory
     raise "Undefined function: #{self.class.name}.get_default_master_log_directory"
   end

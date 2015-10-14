@@ -925,11 +925,44 @@ class JavaExternalLibDir < ConfigurePrompt
   include ClusterHostPrompt
   include AdvancedPromptModule
   include MigrateFromReplicationServices
+  include OptionalPromptModule
 
   def initialize
     super(REPL_JAVA_EXTERNAL_LIB_DIR, 
       "Directory for 3rd party Jar files required by replicator",
-      PV_FILENAME, "")
+      PV_FILENAME)
+  end
+  
+  def load_default_value
+    lib_directories = []
+    @config.getPropertyOr([REPL_SERVICES], {}).keys().each{
+      |rs_alias|
+      if rs_alias == DEFAULTS
+        next
+      end
+      
+      config_prefix = [REPL_SERVICES, rs_alias]
+      ds = ConfigureDatabasePlatform.build(config_prefix, @config)
+      lib = ds.getExternalLibraryDirectory()
+      if lib.to_s() != ""
+        lib_directories << lib
+      end
+      
+      ds = ConfigureDatabasePlatform.build(config_prefix, @config, true)
+      lib = ds.getExternalLibraryDirectory()
+      if lib.to_s() != ""
+        lib_directories << lib
+      end
+    }
+    
+    lib_directories.uniq!()
+    if lib_directories.size() > 1
+      raise MessageError.new("Multiple replication services require an external library. This is not supported.")
+    elsif lib_directories.size() == 1
+      @default = lib_directories[0]
+    else
+      @default = nil
+    end
   end
 end
 

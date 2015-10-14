@@ -10,6 +10,7 @@ REPL_ORACLE_SCHEMA = "repl_oracle_schema"
 REPL_ORACLE_LICENSED_SLAVE = "repl_oracle_licensed_slave"
 REPL_ORACLE_SCAN = "repl_datasource_oracle_scan"
 REPL_ORACLE_EXTRACTOR_METHOD = "repl_oracle_extractor_method"
+REPL_ORACLE_REDO_MINER_DIRECTORY = "repl_oracle_redo_miner_directory"
 
 EXTRACTOR_REPL_ORACLE_SERVICE = "repl_direct_datasource_oracle_service"
 EXTRACTOR_REPL_ORACLE_SID = "repl_direct_datasource_oracle_sid"
@@ -102,6 +103,18 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   
   def getVendor()
     "oracle"
+  end
+  
+  def getExternalLibraryDirectory()
+    oracle_home = @config.getProperty(get_key(REPL_ORACLE_HOME))
+    if oracle_home.to_s() != ""
+      jdbc_directory = "#{oracle_home}/jdbc/lib"
+      if File.exist?(jdbc_directory)
+        return jdbc_directory
+      end
+    end
+    
+    return nil
   end
 
   def get_extractor_template
@@ -239,6 +252,24 @@ class OracleService < OracleConfigurePrompt
   end
 end
 
+class OracleHome < OracleConfigurePrompt
+  include DatasourcePrompt
+  
+  def initialize
+    super(REPL_ORACLE_HOME, "Oracle Home", PV_FILENAME)
+  end
+  
+  def required?
+    false
+  end
+  
+  def load_default_value
+    if ENV.has_key?("ORACLE_HOME")
+      @default = ENV["ORACLE_HOME"]
+    end
+  end
+end
+
 class OracleSID < OracleConfigurePrompt
   include DatasourcePrompt
   
@@ -248,6 +279,12 @@ class OracleSID < OracleConfigurePrompt
   
   def required?
     false
+  end
+  
+  def load_default_value
+    if ENV.has_key?("ORACLE_SID")
+      @default = ENV["ORACLE_SID"]
+    end
   end
 end
 
@@ -273,10 +310,6 @@ class OracleExtractorMethod < OracleConfigurePrompt
 
   def required?
     false
-  end
-
-  def load_default_value
-    @default = @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD))
   end
 end
 
@@ -325,6 +358,28 @@ class OracleExtractorSCAN < OracleConfigurePrompt
   
   def load_default_value
     @default = @config.getProperty(get_member_key(REPL_ORACLE_SCAN))
+  end
+end
+
+class OracleExtractorRedoMinerDirectory < OracleConfigurePrompt
+  include DatasourcePrompt
+  
+  def initialize
+    super(REPL_ORACLE_REDO_MINER_DIRECTORY, "Oracle Redo Miner Directory", PV_FILENAME)
+  end
+  
+  def enabled?
+    super() && (@config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) == "redo")
+  end
+  
+  def load_default_value
+    if @config.getProperty(get_member_key(DEPLOYMENT_DATASERVICE)).to_s == ""
+      return
+    end
+    
+    home = @config.getProperty(HOME_DIRECTORY)
+    ds = @config.getProperty(get_member_key(DEPLOYMENT_DATASERVICE))
+    @default = "#{home}/plog/#{ds}"
   end
 end
 
@@ -389,5 +444,37 @@ class DirectOracleServiceSIDCheck < ConfigureValidationCheck
   
   def enabled?
     super() && get_topology().is_a?(DirectTopology)
+  end
+end
+
+class OracleRedoMinerCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+  
+  def set_vars
+    @title = "Check for a valid Redo Miner"
+  end
+  
+  def validate
+    redo_directory = @config.getProperty(get_member_key(REPL_ORACLE_REDO_MINER_DIRECTORY))
+    begin
+      if File.exist?(redo_directory) != true
+        raise MessageError.new("The redo directory #{redo_directory} does not exist")
+      end
+      
+      if File.readable?(redo_directory) != true
+        raise MessageError.new("The redo directory #{redo_directory} is not readable")
+      end
+      
+      if File.writable?(redo_directory) != true
+        raise MessageError.new("The redo directory #{redo_directory} is not writable")
+      end
+    rescue MessageError => me
+      error(me.message)
+    end
+  end
+  
+  def enabled?
+    super() && (@config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) == "redo")
   end
 end

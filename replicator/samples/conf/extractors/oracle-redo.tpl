@@ -2,7 +2,7 @@
 replicator.extractor.dbms=com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor
 
 # Location of directory containing plog files. 
-replicator.extractor.dbms.plogDirectory=/opt/continuent/plogdir
+replicator.extractor.dbms.plogDirectory=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/mine
 
 # The fragment size for transactions. A value of 0 means that transactions
 # will not be fragmented. 

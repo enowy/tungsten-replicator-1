@@ -60,6 +60,12 @@ module ClusterCommandModule
     
       modules << klass
     }
+    
+    ContinuentDeploymentStep.submodules().each{
+      |klass|
+    
+      modules << klass
+    }
 
     modules
   end
