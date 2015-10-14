@@ -1339,7 +1339,11 @@ module ConfigureCommand
     else
       Configurator.instance.synchronize("ConfigureCommandGetTempDirectory") do
         if @temp_directory == nil
-          @temp_directory = Dir.mktmpdir()
+          # Create a temporary file and then convert it to a directory
+          tempfile = Tempfile.new("tpmcommand")
+          @temp_directory = tempfile.path
+          tempfile.unlink()
+          Dir.mkdir(@temp_directory, 0700)
         end
       
         return @temp_directory
