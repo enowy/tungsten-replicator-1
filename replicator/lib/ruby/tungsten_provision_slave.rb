@@ -36,7 +36,7 @@ class TungstenReplicatorProvisionSlave
         end
         
         if File.exist?(dir)
-          initial_dir_mode[dir] = sprintf("%o",File.stat(dir).mode)[-4,4].to_i(8)
+          initial_dir_mode[dir] = sprintf("%o",File.stat(dir).mode)[-4,4]
         end
       }
       
@@ -117,7 +117,7 @@ class TungstenReplicatorProvisionSlave
         end
         
         if initial_dir_mode.has_key?(dir)
-          File.chmod(initial_dir_mode[dir], dir)
+          TU.cmd_result("#{sudo_prefix()}chmod #{initial_dir_mode[dir]} #{dir}")
         end
         TU.cmd_result("#{sudo_prefix()}chown -RL #{@options[:mysqluser]}: #{dir}")
       }

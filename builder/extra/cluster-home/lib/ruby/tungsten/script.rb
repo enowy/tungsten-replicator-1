@@ -709,7 +709,7 @@ module OfflineServicesScript
                   
                   begin
                     if use_manager == true
-                      get_manager_api.call("#{ds}/#{TI.hostname()}", 'shun')
+                      TU.cmd_result("echo 'datasource #{TI.hostname()} shun' | #{TI.cctrl()}")
                     end
                   
                     # The trepctl offline command is required even when using 
@@ -727,8 +727,6 @@ module OfflineServicesScript
             raise("The replication #{TU.pluralize(ds_list, "service", "services")} #{TU.pluralize(ds_list, "is", "are")} taking too long to go offline. Check the status for more information or use the --offline-timeout argument.")
           end
         end
-      rescue => e
-        TU.exception(e)
       end
     end
   end
