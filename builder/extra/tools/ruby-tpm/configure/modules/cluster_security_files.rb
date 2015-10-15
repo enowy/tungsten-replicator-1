@@ -35,10 +35,11 @@ module ClusterSecurityFiles
   
   def generate_tls_certificate(config)
     ks_pass = config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    lifetime = config.getProperty(JAVA_TLS_KEY_LIFETIME)
     
     tls_ks = HostJavaTLSKeystorePath.build_keystore(
       staging_temp_directory(),
-      config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, ks_pass
+      config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, ks_pass, lifetime
     )
     local_tls_ks = Tempfile.new("tlssec")
     local_tls_ks.close()

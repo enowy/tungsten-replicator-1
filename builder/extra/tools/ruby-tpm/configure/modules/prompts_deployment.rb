@@ -1835,6 +1835,15 @@ class GlobalHostJavaPasswordStorePath < ConfigurePrompt
   end
 end
 
+class HostTLSKeyLifetime < ConfigurePrompt
+  include ClusterHostPrompt
+  include PrivateArgumentModule
+  
+  def initialize
+    super(JAVA_TLS_KEY_LIFETIME, "Lifetime for the Java TLS key", PV_INTEGER, 365)
+  end
+end
+
 class HostTLSAlias < ConfigurePrompt
   include ClusterHostPrompt
   include PrivateArgumentModule
@@ -1859,7 +1868,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, keypass, storepass, lifetime)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1878,6 +1887,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       
       cmd = ["keytool -genkey -alias #{keyalias}",
         "-keyalg RSA -keystore #{path}",
+        "-validity #{lifetime}",
         "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
         "-storepass #{storepass} -keypass #{keypass}"]
       cmd_result(cmd.join(" "))
