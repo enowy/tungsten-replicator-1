@@ -185,8 +185,30 @@ unregister")
     }
     
     password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
-      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
-      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
+    
+    ks_pass_file = Tempfile.new("ks")
+    ks_pass_file.puts(ks_pass)
+    ks_pass_file.close()
+    
+    ts_pass_file = Tempfile.new("ts")
+    ts_pass_file.puts(ts_pass)
+    ts_pass_file.close()
+    
+    user_pass_file = Tempfile.new("user")
+    user_pass_file.puts(ks_pass)
+    user_pass_file.close()
+    
+    tpasswd = "#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd"
+    tpasswd_options = [
+      "-c #{rmi_user}", "-e",
+      "-p #{password_store}",
+      "-upf #{ks_pass_file.path()}",
+      "-ts #{ts}",
+      "-tspf #{ts_pass_file.path()}"
+    ]
+    
+    cmd_result("#{tpasswd} #{tpasswd_options.join(' ')}")
+    cmd_result("#{tpasswd} #{tpasswd_options.join(' ')} -target rmi_jmx")
   end
   
   def write_tungsten_cookbook_installed_recipe

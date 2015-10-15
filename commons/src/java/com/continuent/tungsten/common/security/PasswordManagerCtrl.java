@@ -374,8 +374,9 @@ public class PasswordManagerCtrl
                             .setTruststoreLocation(pwd.truststoreLocation);
                 // Truststore password
                 if (pwd.truststorePasswordFileLocation != null)
-                    pwd.truststorePassword = pwd.getPassewordFromFile(
-                            pwd.truststorePasswordFileLocation);
+                    authenticationInfo
+                            .setTruststorePassword(pwd.getPassewordFromFile(
+                            pwd.truststorePasswordFileLocation));
                 else if (pwd.truststorePassword != null)
                     authenticationInfo
                             .setTruststorePassword(pwd.truststorePassword);
