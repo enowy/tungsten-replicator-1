@@ -912,7 +912,7 @@ class ConnectorEnableBridgeMode < ConfigurePrompt
   include ConnectorPrompt
   
   def initialize
-    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN, "true")
+    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN, "false")
     override_command_line_argument("connector-bridge-mode")
   end
   
