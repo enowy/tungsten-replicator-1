@@ -376,7 +376,7 @@ public class PasswordManagerCtrl
                 if (pwd.truststorePasswordFileLocation != null)
                     authenticationInfo
                             .setTruststorePassword(pwd.getPassewordFromFile(
-                            pwd.truststorePasswordFileLocation));
+                                    pwd.truststorePasswordFileLocation));
                 else if (pwd.truststorePassword != null)
                     authenticationInfo
                             .setTruststorePassword(pwd.truststorePassword);
@@ -474,7 +474,12 @@ public class PasswordManagerCtrl
             {
                 logger.error(sre.getLocalizedMessage());
                 // AuthenticationInfo consistency check : failed
-                DisplayHelpAndExit(EXIT_CODE.EXIT_ERROR);
+                Exit(EXIT_CODE.EXIT_ERROR);
+            }
+            catch (Exception e)
+            {
+                logger.error(e);
+                Exit(EXIT_CODE.EXIT_ERROR);
             }
 
             // --- Perform commands ---
@@ -496,6 +501,7 @@ public class PasswordManagerCtrl
                     logger.error(MessageFormat.format(
                             "Error while authenticating user: {0}",
                             e.getMessage()));
+                    Exit(EXIT_CODE.EXIT_ERROR);
                 }
             }
             // ######### Create ##########
@@ -511,6 +517,7 @@ public class PasswordManagerCtrl
                 {
                     logger.error(MessageFormat.format(
                             "Error while creating user: {0}", e.getMessage()));
+                    Exit(EXIT_CODE.EXIT_ERROR);
                 }
             }
 
@@ -529,6 +536,7 @@ public class PasswordManagerCtrl
                 {
                     logger.error(MessageFormat.format(
                             "Error while deleting user: {0}", e.getMessage()));
+                    Exit(EXIT_CODE.EXIT_ERROR);
                 }
             }
 
@@ -536,9 +544,15 @@ public class PasswordManagerCtrl
         catch (ParseException exp)
         {
             logger.error(exp.getMessage());
-
             DisplayHelpAndExit(EXIT_CODE.EXIT_ERROR);
         }
+        catch (Exception e)
+        {
+            logger.error(e.getMessage());
+            Exit(EXIT_CODE.EXIT_ERROR);
+        }
+
+        Exit(EXIT_CODE.EXIT_OK);
     }
 
     /**
