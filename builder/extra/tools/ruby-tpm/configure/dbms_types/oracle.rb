@@ -280,12 +280,6 @@ class OracleSID < OracleConfigurePrompt
   def required?
     false
   end
-  
-  def load_default_value
-    if ENV.has_key?("ORACLE_SID")
-      @default = ENV["ORACLE_SID"]
-    end
-  end
 end
 
 class OracleSCAN < OracleConfigurePrompt
