@@ -6,7 +6,7 @@ module ConfigureDeploymentStepServices
       ConfigureCommitmentMethod.new("stop_replication_services", -1, 1),
       ConfigureDeploymentMethod.new("apply_config_services", 0, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT),
       ConfigureCommitmentMethod.new("update_metadata", 1, 0),
-      ConfigureCommitmentMethod.new("deploy_services", 1, 1),
+      ConfigureCommitmentMethod.new("deploy_services", 1, 40),
       ConfigureCommitmentMethod.new("start_replication_services_unless_provisioning", 2, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT-1, ConfigureDeploymentStepParallelization::BY_SERVICE),
       ConfigureCommitmentMethod.new("wait_for_manager", 2, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT, ConfigureDeploymentStepParallelization::BY_SERVICE),
       ConfigureCommitmentMethod.new("start_connector", 4, 1, ConfigureDeploymentStepParallelization::NONE),

@@ -242,13 +242,10 @@ end
 
 class OracleService < OracleConfigurePrompt
   include DatasourcePrompt
+  include OptionalPromptModule
   
   def initialize
     super(REPL_ORACLE_SERVICE, "Oracle Service", PV_ANY)
-  end
-  
-  def required?
-    false
   end
 end
 
@@ -272,13 +269,10 @@ end
 
 class OracleSID < OracleConfigurePrompt
   include DatasourcePrompt
+  include OptionalPromptModule
   
   def initialize
     super(REPL_ORACLE_SID, "Oracle SID", PV_ANY)
-  end
-  
-  def required?
-    false
   end
 end
 

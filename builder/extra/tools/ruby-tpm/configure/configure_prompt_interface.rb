@@ -70,6 +70,7 @@ module ConfigurePromptInterface
   def required?
     enabled?()
   end
+  alias_method :orig_required?, :required?
   
   # Does the user need to answer this prompt
   def enabled?
