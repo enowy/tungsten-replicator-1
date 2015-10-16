@@ -112,6 +112,21 @@ if [ ! -z "$REPLICATOR_USER_TIMEZONE" ]; then
   JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_USER_TIMEZONE"
 fi
 
+# Set the port for JVM remote debugging.
+if [ ! -z "$REPLICATOR_DEBUG_PORT" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_DEBUG_PORT"
+fi
+
+# Set options for debugging.
+if [ ! -z "$REPLICATOR_DEBUG_OPTS" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_DEBUG_OPTS"
+fi
+
+# Set RMI options, defaults to allowing remote access.
+if [ ! -z "$REPLICATOR_RMI_OPTS" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_RMI_OPTS"
+fi
+
 # Set the platform charset if available.
 if [ ! -z "$REPLICATOR_FILE_ENCODING" ]; then
   JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_FILE_ENCODING"
