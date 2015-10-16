@@ -201,9 +201,9 @@ $> tungsten_set_position.sh --seqno=35 --epoch=23")
     })
     
     add_option(:replicate_statements, {
-      :on => "--replicate-statements String",
+      :on => "--replicate-statements [String]",
       :default => false,
-      :parse => method(:parse_boolean_option),
+      :parse => method(:parse_boolean_option_blank_is_true),
       :help => "Execute the events so they will be replicated if the service is a master"
     })
     
