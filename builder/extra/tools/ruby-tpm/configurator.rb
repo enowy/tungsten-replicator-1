@@ -1802,7 +1802,7 @@ def which(cmd)
   if ! cmd
     nil
   else 
-    path = cmd_result("which #{cmd}")
+    path = cmd_result("which #{cmd} 2>/dev/null", true)
     path.chomp!
     if File.executable?(path)
       path

@@ -34,6 +34,11 @@ module ClusterSecurityFiles
   end
   
   def generate_tls_certificate(config)
+    if config.getProperty(REPL_ENABLE_THL_SSL) != "true" || config.getProperty(ENABLE_RMI_SSL) != "true"
+      # Do nothing because the TLS certificate is not used
+      return
+    end
+    
     ks_pass = config.getProperty(JAVA_KEYSTORE_PASSWORD)
     lifetime = config.getProperty(JAVA_TLS_KEY_LIFETIME)
     
@@ -53,6 +58,11 @@ module ClusterSecurityFiles
   end
   
   def generate_jgroups_certificate(config)
+    if config.getProperty(ENABLE_JGROUPS_SSL) != "true"
+      # Do nothing because the Jgroups certificate is not used
+      return
+    end
+    
     ks_pass = config.getProperty(JAVA_KEYSTORE_PASSWORD)
     
     jgroups_ks = HostJavaJgroupsKeystorePath.build_keystore(

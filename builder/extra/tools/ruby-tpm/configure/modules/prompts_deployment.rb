@@ -1582,6 +1582,11 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
         return @keystores[keyalias]
       end
       
+      keytool = which("keytool")
+      if keytool == nil
+        raise "Unable to generate a file for --java-jgroups-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--jgroups-ssl=false'."
+      end
+      
       ks = Tempfile.new("jgroupssec")
       ks.close()
       File.unlink(ks.path())
@@ -1878,6 +1883,11 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       
       if @keystores[keyalias] != nil
         return @keystores[keyalias]
+      end
+      
+      keytool = which("keytool")
+      if keytool == nil
+        raise "Unable to generate a file for --java-tls-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--rmi-ssl=false --thl-ssl=false'."
       end
       
       ks = Tempfile.new("tlssec")
