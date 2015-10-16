@@ -50,20 +50,20 @@ import com.continuent.tungsten.common.security.SecurityHelper;
  */
 public class ServerSocketService
 {
-    private static Logger       logger        = Logger.getLogger(ServerSocketService.class);
+    private static Logger      logger        = Logger.getLogger(ServerSocketService.class);
 
     // Properties
-    InetSocketAddress           address;
-    private boolean             useSSL;
-    private String              keystoreAlias = null;
-    private AuthenticationInfo  securityInfo  = null;
-    private int                 acceptTimeout = 1000;
+    InetSocketAddress          address;
+    private boolean            useSSL;
+    private String             keystoreAlias = null;
+    private AuthenticationInfo securityInfo  = null;
+    private int                acceptTimeout = 1000;
 
     // Currently open server socket.
-    private ServerSocket        serverSocket  = null;
+    private ServerSocket       serverSocket  = null;
 
     // Flag to signal service has been shut down.
-    private volatile boolean    done          = false;
+    private volatile boolean   done          = false;
 
     /** Creates a new wrapper for client connections. */
     public ServerSocketService()
@@ -121,23 +121,28 @@ public class ServerSocketService
 
     /**
      * Connect to the server socket.
-     * @throws GeneralSecurityException 
-     * @throws ConfigurationException 
+     * 
+     * @throws GeneralSecurityException
+     * @throws ConfigurationException
      */
-    public ServerSocket bind() throws IOException, GeneralSecurityException, ConfigurationException
+    public ServerSocket bind() throws IOException, GeneralSecurityException,
+            ConfigurationException
     {
         // Create the serverSocket.
         if (useSSL)
         {
             // Create an SSL socket.
-            // Use custom Socket Factory Generator to allow multiple aliases in single keystore
+            // Use custom Socket Factory Generator to allow multiple aliases in
+            // single keystore
             // TUC-23399
             SSLSocketFactoryGenerator sslFactoryGenerator = new SSLSocketFactoryGenerator(
                     this.keystoreAlias, this.securityInfo);
 
             // Will use default ssl socket factory if no alias was specified
-            SSLServerSocketFactory sslserverSocketFactory  = sslFactoryGenerator.getSSLServerSocketFactory();
-            serverSocket = (SSLServerSocket)sslserverSocketFactory.createServerSocket();
+            SSLServerSocketFactory sslserverSocketFactory = sslFactoryGenerator
+                    .getSSLServerSocketFactory();
+            serverSocket = (SSLServerSocket) sslserverSocketFactory
+                    .createServerSocket();
         }
         else
         {
