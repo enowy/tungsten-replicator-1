@@ -37,8 +37,8 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
  */
 public class RealmJMXAuthenticator implements JMXAuthenticator
 {
-//    private static final Logger logger                 = Logger.getLogger(JmxManager.class);
-//    private TungstenProperties  passwordProps          = null;
+    // private static final Logger logger = Logger.getLogger(JmxManager.class);
+    // private TungstenProperties passwordProps = null;
 
     private AuthenticationInfo  authenticationInfo     = null;
 
@@ -47,13 +47,16 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
     private static final String INVALID_CREDENTIALS    = "Invalid credentials";
     private static final String AUTHENTICATION_PROBLEM = "Error while trying to authenticate";
 
-    public RealmJMXAuthenticator(AuthenticationInfo authenticationInfo) throws ConfigurationException
+    public RealmJMXAuthenticator(AuthenticationInfo authenticationInfo)
+            throws ConfigurationException
     {
         this.authenticationInfo = authenticationInfo;
-        this.passwordManager    = new PasswordManager(authenticationInfo.getParentPropertiesFileLocation(), ClientApplicationType.RMI_JMX);
+        this.passwordManager = new PasswordManager(
+                authenticationInfo.getParentPropertiesFileLocation(),
+                ClientApplicationType.RMI_JMX);
 
-//        this.passwordProps = SecurityHelper
-//                .loadPasswordsFromAuthenticationInfo(authenticationInfo);
+        // this.passwordProps = SecurityHelper
+        // .loadPasswordsFromAuthenticationInfo(authenticationInfo);
     }
 
     /**
@@ -70,18 +73,19 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
         // --- Get auth parameters ---
         String username = (String) aCredentials[0];
         String password = (String) aCredentials[1];
-//        String realm = (String) aCredentials[2];
+        // String realm = (String) aCredentials[2];
 
         // --- Perform authentication ---
         try
         {
             // Password file syntax:
             // username=password
-//            String goodPassword = this.passwordProps.get(username);
-            String goodPassword = this.passwordManager.getClearTextPasswordForUser(username);
-//            this.authenticationInfo.setPassword(goodPassword);
-//            // Decrypt password if needed
-//            goodPassword = this.authenticationInfo.getPassword();
+            // String goodPassword = this.passwordProps.get(username);
+            String goodPassword = this.passwordManager
+                    .getClearTextPasswordForUser(username);
+            // this.authenticationInfo.setPassword(goodPassword);
+            // // Decrypt password if needed
+            // goodPassword = this.authenticationInfo.getPassword();
 
             if (goodPassword.equals(password))
                 authenticationOK = true;
@@ -96,8 +100,9 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
 
         if (authenticationOK)
         {
-            return new Subject(true, Collections.singleton(new JMXPrincipal(
-                    username)), Collections.EMPTY_SET, Collections.EMPTY_SET);
+            return new Subject(true,
+                    Collections.singleton(new JMXPrincipal(username)),
+                    Collections.EMPTY_SET, Collections.EMPTY_SET);
         }
         else
         {
@@ -127,14 +132,14 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
         // Verify that the array contains three elements
         // (username/password/realm).
         final String[] aCredentials = (String[]) credentials;
-        if (aCredentials.length != 3)
-        {
-            throw new SecurityException("Credentials should have 3 elements");
-        }
+        // if (aCredentials.length != 3)
+        // {
+        // throw new SecurityException("Credentials should have 3 elements");
+        // }
 
         return aCredentials;
     }
-    
+
     /**
      * Returns the authenticationInfo value.
      * 

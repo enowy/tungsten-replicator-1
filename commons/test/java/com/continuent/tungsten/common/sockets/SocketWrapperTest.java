@@ -20,20 +20,23 @@
 
 package com.continuent.tungsten.common.sockets;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
-import junit.framework.Assert;
-
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Test;
 
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
+
+import junit.framework.Assert;
 
 /**
  * Implements a test of client and server socket wrappers using SSL and non-SSL
@@ -51,8 +54,11 @@ public class SocketWrapperTest
     private static Logger logger = Logger.getLogger(SocketWrapperTest.class);
     private EchoServer    server;
     private SocketHelper  helper = new SocketHelper();
+    
+    Level debugLevel_socket = null;
 
-    /** Terminate echo server if still running. */
+    /** Terminate echo server if still running. 
+     * @throws ClassNotFoundException */
     @After
     public void teardown()
     {
@@ -62,6 +68,7 @@ public class SocketWrapperTest
             server.shutdown();
         }
     }
+   
 
     /**
      * Verify that we can connect using a non-SSL socket and get a value back
@@ -71,7 +78,7 @@ public class SocketWrapperTest
     public void testNonSSLConnection() throws Exception
     {
         logger.info("### testNonSSLConnection");
-        verifyConnection(2113, false, null, null, null);
+        verifyConnection(2113, false, null, null, null, false);
     }
 
     /**
@@ -83,7 +90,7 @@ public class SocketWrapperTest
     {
         logger.info("### testSSLConnection");
         helper.loadSecurityProperties();
-        verifyConnection(2114, true, null, null, null);
+        verifyConnection(2114, true, null, null, null, false);
     }
 
     /**
@@ -100,8 +107,16 @@ public class SocketWrapperTest
         String server_masterAlias = securityInfo
                 .getKeystoreAliasForConnectionType(
                         SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
-        verifyConnection(2114, true, server_masterAlias, server_masterAlias,
-                securityInfo);
+        try
+        {
+            verifyConnection(2114, true, server_masterAlias, server_masterAlias,
+                    securityInfo, false);
+        }
+        catch (Exception e)
+        {
+            assertFalse("No exception should have been thrown", true);
+        }
+
     }
 
     /**
@@ -121,8 +136,12 @@ public class SocketWrapperTest
                         SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
         try
         {
-            verifyConnection(2114, true, "alias_that_does_not_exist",
-                    client_slaveAlias, securityInfo);
+            // Change debug level so that trace messages are shown
+            debugLevel_socket = LogManager.getLogger(Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager")).getLevel();
+            LogManager.getLogger(Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager")).setLevel(Level.TRACE);
+            
+            verifyConnection(2114, true, "alias_that_does_not_exist_but it's ok it's the expected result",
+                    client_slaveAlias, securityInfo, true);
             assertTrue(
                     "The server should not have started: we used a non existing alias in the keystore",
                     false);
@@ -132,6 +151,10 @@ public class SocketWrapperTest
             assertTrue(
                     "This exception is expected as we're trying to use a non existant server alias in the keystore",
                     true);
+        }
+        finally
+        {
+            LogManager.getLogger(Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager")).setLevel(debugLevel_socket);
         }
     }
 
@@ -144,7 +167,7 @@ public class SocketWrapperTest
         // Start an SSL server.
         logger.info("### testSSLConnectionIncompatibility");
         helper.loadSecurityProperties();
-        server = new EchoServer("127.0.0.1", 2115, true, null, null);
+        server = new EchoServer("127.0.0.1", 2115, true, null, null, true);
         server.start();
 
         // Connect with non-SSL socket.
@@ -182,7 +205,7 @@ public class SocketWrapperTest
     public void testNonSSLClientsBasic() throws Exception
     {
         logger.info("### testNonSSLClientsBasic");
-        verifyClients(2116, 5, false);
+        verifyClients(2116, 5, false, false);
     }
 
     /**
@@ -194,7 +217,7 @@ public class SocketWrapperTest
     {
         logger.info("### testSSLClientsBasic");
         helper.loadSecurityProperties();
-        verifyClients(2117, 5, true);
+        verifyClients(2117, 5, true, false);
     }
 
     /**
@@ -202,10 +225,10 @@ public class SocketWrapperTest
      */
     private void verifyConnection(int port, boolean useSSL,
             String serverKeystoreAlias, String clientKeystoreAlias,
-            AuthenticationInfo securityInfo) throws Exception
+            AuthenticationInfo securityInfo, boolean silentFail) throws Exception
     {
         server = new EchoServer("127.0.0.1", port, useSSL, serverKeystoreAlias,
-                securityInfo);
+                securityInfo, silentFail);
         server.start();
 
         ClientSocketWrapper clientWrapper = new ClientSocketWrapper();
@@ -226,11 +249,11 @@ public class SocketWrapperTest
      * Verify that multiple clients can connect to the server and that the
      * server can stop when the clients are idle.
      */
-    public void verifyClients(int port, int numberOfClients, boolean useSSL)
+    public void verifyClients(int port, int numberOfClients, boolean useSSL, boolean silentFail)
             throws Exception
     {
         // Start a server.
-        server = new EchoServer("127.0.0.1", port, useSSL, null, null);
+        server = new EchoServer("127.0.0.1", port, useSSL, null, null, silentFail);
         server.start();
 
         // Launch echo clients with 100ms think time between

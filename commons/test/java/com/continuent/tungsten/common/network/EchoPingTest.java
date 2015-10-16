@@ -50,7 +50,7 @@ public class EchoPingTest extends TestCase
 
     protected void setUp() throws Exception
     {
-        server = new EchoServer(LOCALHOST_IP, PORT, NO_SSL, null, null);
+        server = new EchoServer(LOCALHOST_IP, PORT, NO_SSL, null, null, false);
         server.start();
     }
 

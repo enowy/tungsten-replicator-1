@@ -44,11 +44,11 @@ import com.continuent.tungsten.common.security.SecurityHelper;
  */
 public class AliasSelectorKeyManager implements X509KeyManager
 {
-    private static final Logger logger = Logger
+    private static final Logger logger           = Logger
             .getLogger(AliasSelectorKeyManager.class);
 
-    private X509KeyManager sourceKeyManager = null;
-    private String         alias;
+    private X509KeyManager      sourceKeyManager = null;
+    private String              alias;
 
     public AliasSelectorKeyManager(X509KeyManager keyManager, String alias)
     {
@@ -57,7 +57,6 @@ public class AliasSelectorKeyManager implements X509KeyManager
 
     }
 
-    
     @Override
     public String chooseClientAlias(String[] keyType, Principal[] issuers,
             Socket socket)
@@ -87,13 +86,24 @@ public class AliasSelectorKeyManager implements X509KeyManager
             }
 
             if (aliasFound)
+            {
+                if (logger.isTraceEnabled())
+                    logger.trace(MessageFormat.format(
+                            "Alias Found !: {0} for keyType: {1} in keystore: {2}",
+                            this.alias, keyType,
+                            SecurityHelper.getKeyStoreLocation()));
                 return alias;
+            }
+
             else
             {
                 String keyStoreLocation = SecurityHelper.getKeyStoreLocation();
-                logger.error(MessageFormat.format(
-                        "Could not find alias: {0} in keystore: {1}",
-                        this.alias, keyStoreLocation));
+                // Not finding the alias is not an error at this stage, it only
+                // means that we could not find the alias for a given keyType
+                // (i.e.:EC_EC), it may exist for the desired keyType (i.e.:RSA)
+                logger.trace(MessageFormat.format(
+                        "Could not find alias: {0} for keyType: {1} in keystore: {2}",
+                        this.alias, keyType, keyStoreLocation));
             }
         }
 
