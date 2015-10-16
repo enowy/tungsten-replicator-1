@@ -89,8 +89,8 @@ public class SocketWrapperTest
     public void testSSLConnection() throws Exception
     {
         logger.info("### testSSLConnection");
-        helper.loadSecurityProperties();
-        verifyConnection(2114, true, null, null, null, false);
+        AuthenticationInfo securityInfo = helper.loadSecurityProperties();
+        verifyConnection(2114, true, null, null, securityInfo);
     }
 
     /**
@@ -105,18 +105,9 @@ public class SocketWrapperTest
         AuthenticationInfo securityInfo = helper
                 .loadSecurityProperties_keystoreWithAlias();
         String server_masterAlias = securityInfo
-                .getKeystoreAliasForConnectionType(
-                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
-        try
-        {
-            verifyConnection(2114, true, server_masterAlias, server_masterAlias,
-                    securityInfo, false);
-        }
-        catch (Exception e)
-        {
-            assertFalse("No exception should have been thrown", true);
-        }
-
+                .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+        verifyConnection(2114, true, server_masterAlias, server_masterAlias,
+                securityInfo);
     }
 
     /**
@@ -127,13 +118,11 @@ public class SocketWrapperTest
     public void testSSLConnection_keystoreWithAlias_wrong_server_alias()
             throws Exception
     {
-        logger.info(
-                "### testSSLConnection with alias selection: wrong server alias");
+        logger.info("### testSSLConnection with alias selection: wrong server alias");
         AuthenticationInfo securityInfo = helper
                 .loadSecurityProperties_keystoreWithAlias();
         String client_slaveAlias = securityInfo
-                .getKeystoreAliasForConnectionType(
-                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+                .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
         try
         {
             // Change debug level so that trace messages are shown
@@ -233,6 +222,17 @@ public class SocketWrapperTest
 
         ClientSocketWrapper clientWrapper = new ClientSocketWrapper();
         clientWrapper.setUseSSL(useSSL);
+
+        if (useSSL)
+        {
+            Assert.assertTrue(securityInfo != null);
+            String[] enabledProtocols = (String[]) securityInfo
+                    .getEnabledProtocols().toArray();
+            String[] enabledCiphers = (String[]) securityInfo
+                    .getEnabledCipherSuites().toArray();
+            clientWrapper.setEnabledCiphers(enabledCiphers);
+            clientWrapper.setEnabledProtocols(enabledProtocols);
+        }
         clientWrapper.setAddress(new InetSocketAddress("127.0.0.1", port));
         clientWrapper.connect();
 
@@ -278,10 +278,8 @@ public class SocketWrapperTest
                 // Ensure we can shut down the client.
                 Assert.assertTrue("Shut down client: " + client.getName(),
                         client.shutdown());
-                Assert.assertTrue(
-                        "Expect least 10 operations per client: "
-                                + client.getName(),
-                        client.getEchoCount() >= 10);
+                Assert.assertTrue("Expect least 10 operations per client: "
+                        + client.getName(), client.getEchoCount() >= 10);
                 Assert.assertNull(
                         "Do not expect errors for client: " + client.getName(),
                         client.getThrowable());

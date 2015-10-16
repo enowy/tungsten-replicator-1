@@ -36,7 +36,7 @@ import com.continuent.tungsten.common.security.SecurityHelper;
 public class SocketHelper
 {
     /** Validate and load security properties. */
-    public void loadSecurityProperties() throws ConfigurationException
+    public AuthenticationInfo loadSecurityProperties() throws ConfigurationException
     {
         AuthenticationInfo authInfo = SecurityHelper
                 .loadAuthenticationInformation("sample.security.properties");
@@ -46,6 +46,7 @@ public class SocketHelper
             throw new ServerRuntimeException(
                     "Unable to locate security information; ensure security.properties file is configured");
         }
+        return authInfo;
     }
     
     /** Validate and load security properties that uses a keystore containing multiple aliases. */

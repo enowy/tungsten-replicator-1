@@ -40,26 +40,68 @@ import com.continuent.tungsten.common.security.SecurityHelper;
 /**
  * Provides a wrapper for client connections via sockets. This class
  * encapsulates logic for timeouts, SSL vs. non-SSL operation, and closing the
- * connection.  This class assumes properties required for SSL operation 
- * have been previously set before SSL sockets are allocated. 
+ * connection. This class assumes properties required for SSL operation have
+ * been previously set before SSL sockets are allocated.
  * 
  * @author <a href="mailto:robert.hodges@continuent.com">Robert Hodges</a>
  */
 public class ClientSocketWrapper extends SocketWrapper
 {
-    private static Logger    logger = Logger.getLogger(ClientSocketWrapper.class);
+    private static Logger logger = Logger.getLogger(ClientSocketWrapper.class);
 
     // Properties
-    InetSocketAddress        address;
-    private boolean          useSSL;
-    private int              connectTimeout;
-    private int              readTimeout;
+    InetSocketAddress     address;
+    private boolean       useSSL;
+    private int           connectTimeout;
+    private int           readTimeout;
+    String[]              enabledProtocols;
+    String[]              enabledCiphers;
+
+    /**
+     * Returns the enabledProtocols value.
+     * 
+     * @return Returns the enabledProtocols.
+     */
+    public String[] getEnabledProtocols()
+    {
+        return enabledProtocols;
+    }
+
+    /**
+     * Sets the enabledProtocols value.
+     * 
+     * @param enabledProtocols The enabledProtocols to set.
+     */
+    public void setEnabledProtocols(String[] enabledProtocols)
+    {
+        this.enabledProtocols = enabledProtocols;
+    }
+
+    /**
+     * Returns the enabledCiphers value.
+     * 
+     * @return Returns the enabledCiphers.
+     */
+    public String[] getEnabledCiphers()
+    {
+        return enabledCiphers;
+    }
+
+    /**
+     * Sets the enabledCiphers value.
+     * 
+     * @param enabledCiphers The enabledCiphers to set.
+     */
+    public void setEnabledCiphers(String[] enabledCiphers)
+    {
+        this.enabledCiphers = enabledCiphers;
+    }
 
     // Socket factory for new SSL connections.
     private SocketFactory    sslFactory;
 
     // Flag to signal service has been shut down.
-    private volatile boolean done   = false;
+    private volatile boolean done = false;
 
     /** Creates a new wrapper for client connections. */
     public ClientSocketWrapper()
@@ -116,23 +158,36 @@ public class ClientSocketWrapper extends SocketWrapper
 
     /**
      * Connect to the server.
-     * @throws ConfigurationException 
+     * 
+     * @throws ConfigurationException
      */
     public Socket connect() throws IOException, ConfigurationException
     {
         // Create the socket.
         if (useSSL)
         {
-         // Read security-related information 
-            AuthenticationInfo authInfo = SecurityHelper
-                    .loadAuthenticationInformation();
+            // Read security-related information
+            /**
+             * AuthenticationInfo authInfo = SecurityHelper
+             * .loadAuthenticationInformation();
+             */
+            if (enabledCiphers == null || enabledCiphers.length == 0)
+            {
+                throw new ConfigurationException(
+                        "No ciphers are enabled in security properties.");
+            }
+            if (enabledProtocols == null || enabledProtocols.length == 0)
+            {
+                throw new ConfigurationException(
+                        "No protocols are enabled in security properties.");
+            }
             // Create an SSL socket.
             sslFactory = SSLSocketFactory.getDefault();
             SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
             // Set cipher suites and protocols
             String[] supportedCiphers = sslSocket.getSupportedCipherSuites();
-            String[] enabledCiphers = (String[]) authInfo
-                    .getEnabledCipherSuites().toArray();
+            // String[] enabledCiphers = (String[]) authInfo
+            // .getEnabledCipherSuites().toArray();
             // Enable ciphers which are both supported by socket service and
             // configured by user
             sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
@@ -140,8 +195,8 @@ public class ClientSocketWrapper extends SocketWrapper
             // Enable protocols which are both supported by socket and
             // configured by user.
             String[] supportedProtocols = sslSocket.getSupportedProtocols();
-            String[] enabledProtocols = (String[]) authInfo
-                    .getEnabledProtocols().toArray();
+            // String[] enabledProtocols = (String[]) authInfo
+            // .getEnabledProtocols().toArray();
             sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
                     supportedProtocols, enabledProtocols));
             socket = sslSocket;
