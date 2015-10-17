@@ -1,6 +1,7 @@
 module ConfigureDeploymentCore
   include ConfigureMessages
   include EventHandler
+  include TransformerMethods
   
   def initialize(config)
     super()
@@ -144,28 +145,6 @@ module ConfigureDeploymentCore
     method_name
   end
   
-  # Create a directory if it is absent. 
-  def mkdir_if_absent(dirname)
-    if dirname == nil
-      return
-    end
-    
-    if File.exists?(dirname)
-      if File.directory?(dirname)
-        debug("Found directory, no need to create: #{dirname}")
-        
-        unless File.writable?(dirname)
-          raise "Directory already exists but is not writable: #{dirname}"
-        end
-      else
-        raise "Directory already exists as a file: #{dirname}"
-      end
-    else
-      debug("Creating missing directory: #{dirname}")
-      FileUtils.mkdir_p(dirname)
-    end
-  end
-  
   def get_root_prefix()
     prefix = @config.getProperty(ROOT_PREFIX)
     if prefix == "true" or prefix == "sudo"
@@ -259,10 +238,6 @@ module ConfigureDeploymentCore
     @config.getProperty(DEPLOYMENT_HOST)
   end
   
-  def get_host_key(key)
-    [HOSTS, @config.getProperty(DEPLOYMENT_HOST), key]
-  end
-  
   def get_additional_property_key(key)
     [@config.getProperty(DEPLOYMENT_CONFIGURATION_KEY), key]
   end
@@ -278,40 +253,6 @@ module ConfigureDeploymentCore
   def get_message_host_key
     @config.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
   end
-	
-	def transform_host_values(matches)
-	  case matches.at(0)
-    when "HOST"
-      v = @config.getTemplateValue(get_host_key(Kernel.const_get(matches[1])))
-    else
-      v = @config.getTemplateValue(matches.map{
-        |match|
-        Kernel.const_get(match)
-      })
-    end
-    
-    return v
-	end
-	
-	def transform_service_values(matches)
-	  case matches.at(0)
-    when "APPLIER"
-      v = @config.getTemplateValue(get_service_key(Kernel.const_get(matches[1])))
-    when "EXTRACTOR"
-      v = @config.getTemplateValue(get_service_key(Kernel.const_get("EXTRACTOR_" + matches[1])))
-    when "SERVICE"
-      v = @config.getTemplateValue(get_service_key(Kernel.const_get(matches[1])))
-    when "HOST"
-      v = @config.getTemplateValue(get_host_key(Kernel.const_get(matches[1])))
-    else
-      v = @config.getTemplateValue(matches.map{
-        |match|
-        Kernel.const_get(match)
-      })
-    end
-    
-    return v
-	end
 	
 	def is_manager?
     (@config.getProperty(HOST_ENABLE_MANAGER) == "true")
@@ -647,75 +588,12 @@ module ConfigureDeploymentCore
     end
   end
   
-  def get_service_key(key)
-    svc = @config.getProperty(DEPLOYMENT_SERVICE)
-    if svc == nil
-      raise MessageError.new("Unable to find a service key for #{Configurator.instance.get_constant_symbol(key)}")
-    end
-    
-    [REPL_SERVICES, svc, key]
-  end
-  
-  def get_applier_key(key)
-    get_service_key(key)
-  end
-  
-  def get_extractor_key(key)
-    get_service_key(key)
-  end
-  
   def get_trepctl_cmd
     "#{get_deployment_basedir()}/tungsten-replicator/bin/trepctl -port #{@config.getProperty(REPL_RMI_PORT)}"
   end
   
   def get_thl_cmd
     "#{get_deployment_basedir()}/tungsten-replicator/bin/thl"
-  end
-  
-  def transform_host_template(path, template)
-    host_transformer(path) {
-      |t|
-      t.set_template(template)
-    }
-  end
-  
-  def host_transformer(path = nil, &block)
-    if path != nil
-      path = File.expand_path(path, get_deployment_basedir())
-    end
-    t = Transformer.new(@config, path)
-    t.set_transform_values_method(method(:transform_host_values))
-    t.set_fixed_properties(@config.getProperty(get_host_key(FIXED_PROPERTY_STRINGS)))
-    
-    if block
-      block.call(t)
-      t.output()
-    else
-      return t
-    end
-  end
-  
-  def transform_service_template(path, template)
-    service_transformer(path) {
-      |t|
-      t.set_template(template)
-    }
-  end
-  
-  def service_transformer(path = nil, &block)
-    if path != nil
-      path = File.expand_path(path, get_deployment_basedir())
-    end
-    t = Transformer.new(@config, path)
-    t.set_transform_values_method(method(:transform_service_values))
-    t.set_fixed_properties(@config.getProperty(get_service_key(FIXED_PROPERTY_STRINGS)))
-    
-    if block
-      block.call(t)
-      t.output()
-    else
-      return t
-    end
   end
   
   def initiate_composite_dataservices

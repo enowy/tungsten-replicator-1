@@ -1796,6 +1796,28 @@ def cmd_result(command, ignore_fail = false, hide_result = false)
   return result
 end
 
+# Create a directory if it is absent. 
+def mkdir_if_absent(dirname)
+  if dirname == nil
+    return
+  end
+  
+  if File.exists?(dirname)
+    if File.directory?(dirname)
+      debug("Found directory, no need to create: #{dirname}")
+      
+      unless File.writable?(dirname)
+        raise "Directory already exists but is not writable: #{dirname}"
+      end
+    else
+      raise "Directory already exists as a file: #{dirname}"
+    end
+  else
+    debug("Creating missing directory: #{dirname}")
+    FileUtils.mkdir_p(dirname)
+  end
+end
+
 # Find out the full executable path or return nil
 # if this is not executable. 
 def which(cmd)
