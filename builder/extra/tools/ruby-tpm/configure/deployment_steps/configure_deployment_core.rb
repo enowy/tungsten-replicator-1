@@ -145,6 +145,29 @@ module ConfigureDeploymentCore
     method_name
   end
   
+  # Create a directory if it is absent. 
+  def mkdir_if_absent(dirname)
+    if dirname == nil
+      return
+    end
+    
+    if File.exists?(dirname)
+      if File.directory?(dirname)
+        debug("Found directory, no need to create: #{dirname}")
+        
+        unless File.writable?(dirname)
+          raise "Directory already exists but is not writable: #{dirname}"
+        end
+      else
+        raise "Directory already exists as a file: #{dirname}"
+      end
+    else
+      debug("Creating missing directory: #{dirname}")
+      FileUtils.mkdir_p(dirname)
+      Configurator.instance.limit_file_permissions(dirname)
+    end
+  end
+  
   def get_root_prefix()
     prefix = @config.getProperty(ROOT_PREFIX)
     if prefix == "true" or prefix == "sudo"

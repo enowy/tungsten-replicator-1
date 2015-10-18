@@ -409,12 +409,15 @@ EOF
           if File.exists?(manager_dynamic_properties)
             info("Copy the previous manager dynamic properties")
             FileUtils.mv(manager_dynamic_properties, prepare_dir + '/tungsten-manager/conf')
+            Configurator.instance.limit_file_permissions(prepare_dir + '/tungsten-manager/conf/dynamic.properties')
           end
           
           Dir.glob("#{current_release_target_dir}/tungsten-replicator/conf/dynamic-*.properties") {
             |replicator_dynamic_properties|
+            basename = File.basename(replicator_dynamic_properties)
             info("Copy the previous replicator dynamic properties - #{File.basename(replicator_dynamic_properties)}")
-            FileUtils.mv(replicator_dynamic_properties, prepare_dir + '/tungsten-replicator/conf')
+            FileUtils.mv(replicator_dynamic_properties, prepare_dir + "/tungsten-replicator/conf")
+            Configurator.instance.limit_file_permissions(prepare_dir + "/tungsten-replicator/conf/#{basename}")
           }
           
           cluster_home_conf = current_release_target_dir + '/cluster-home/conf'
@@ -461,6 +464,13 @@ EOF
       debug("Create symlink to #{target_dir}")
       FileUtils.rm_f(current_release_directory)
       FileUtils.ln_s(target_dir, current_release_directory)
+      
+      # All files should be secured, but this is a safety valve
+      # to clean up any that aren't
+      MonitorUnsecuredFiles.find_unsecured_files(target_dir).each {
+        |f|
+        Configurator.instance.limit_file_permissions(f)
+      }
     end
     
     # Update the mtime for the directory so sorting is easier
@@ -502,6 +512,11 @@ EOF
             cmd_result("sed -i 's/uri=thls\\\\/uri=thl\\\\/' #{dynamic_properties}")
           end
         end
+      }
+      
+      Dir.glob("#{@config.getProperty(REPL_LOG_DIR)}/**/*") {
+        |thl_file|
+        Configurator.instance.limit_file_permissions(thl_file)
       }
     end
     

@@ -376,10 +376,13 @@ module ConfigureDeploymentStepServices
         if File.exists?(source_replicator_properties)
           info("Upgrade the previous replicator dynamic properties")
           FileUtils.mv(source_replicator_properties, target_dynamic_properties)
+          Configurator.instance.limit_file_permissions(target_dynamic_properties)
         end
         
         Dir[thl_directory + "/thl.*"].sort().each do |file| 
+          file_target = service_thl_directory + '/' + File.basename(file)
           FileUtils.mv(file, service_thl_directory)
+          Configurator.instance.limit_file_permissions(file_target)
         end
       rescue IgnoreError
       end
