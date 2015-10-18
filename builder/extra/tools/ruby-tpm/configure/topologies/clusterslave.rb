@@ -79,6 +79,10 @@ class ClusterSlaveTopology
     return REPL_ROLE_S
   end
   
+  def disable_extractor?
+    true
+  end
+  
   def master_preferred_role
     return REPL_ROLE_S
   end

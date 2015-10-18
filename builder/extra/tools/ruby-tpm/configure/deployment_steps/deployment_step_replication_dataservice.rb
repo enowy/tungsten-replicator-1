@@ -16,27 +16,28 @@ module ConfigureDeploymentStepReplicationDataservice
   end
 	
 	def get_replication_dataservice_template()
-    if @config.getProperty(REPL_ROLE) == REPL_ROLE_DI
+	  role = @config.getProperty(REPL_ROLE)
+	  disable_extractor = @config.getProperty(REPL_DISABLE_EXTRACTOR)
+	  
+    if role == REPL_ROLE_DI
       "tungsten-replicator/samples/conf/replicator.properties.direct"
+    elsif role == REPL_ROLE_ARCHIVE
+	    "tungsten-replicator/samples/conf/replicator.properties.archive"
+    elsif role == REPL_ROLE_S and disable_extractor == "true"
+      "tungsten-replicator/samples/conf/replicator.properties.slave"
 	  else
 	    begin
 	      # This will fail if extraction is not supported meaning this can never be a master
 	      extractor_template = get_extractor_datasource().get_extractor_template()
 	    rescue
-	      if @config.getProperty(REPL_ROLE) == REPL_ROLE_S
+	      if role == REPL_ROLE_S
 	        return "tungsten-replicator/samples/conf/replicator.properties.slave"
-	      elsif @config.getProperty(REPL_ROLE) == REPL_ROLE_ARCHIVE
-  	      return "tungsten-replicator/samples/conf/replicator.properties.archive"
   	    else
 	        raise "Unable to extract from #{get_extractor_datasource.get_connection_summary}"
 	      end
 	    end
-	  
-	    if @config.getProperty(REPL_ROLE) == REPL_ROLE_ARCHIVE
-	      "tungsten-replicator/samples/conf/replicator.properties.archive"
-	    else
-	      "tungsten-replicator/samples/conf/replicator.properties.masterslave"
-	    end
+	    
+	    "tungsten-replicator/samples/conf/replicator.properties.masterslave"
 	  end
 	end
 end

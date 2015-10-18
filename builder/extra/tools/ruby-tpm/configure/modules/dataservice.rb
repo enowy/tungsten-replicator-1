@@ -260,6 +260,34 @@ class ReplicationServiceEnableTHLListener < ConfigurePrompt
   end
 end
 
+class ReplicationServiceDisableExtractor < ConfigurePrompt
+  include ReplicationServicePrompt
+  
+  def initialize
+    super(REPL_DISABLE_EXTRACTOR, "Should this service support the master role?",
+      PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    topology = get_topology()
+    @default = topology.disable_extractor?().to_s()
+  end
+  
+  def validate_value(value)
+    val = super(value)
+    if is_valid?() == true
+      topology = get_topology()
+      if topology.is_a?(ClusterTopology)
+        if val == "true"
+          error("The --disable-extractor may not be set when --topology=clustered.")
+        end
+      end
+    end
+    
+    return val
+  end
+end
+
 class ReplicationServiceRole < ConfigurePrompt
   include ReplicationServicePrompt
   include AdvancedPromptModule
