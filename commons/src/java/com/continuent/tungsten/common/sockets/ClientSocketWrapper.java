@@ -166,52 +166,14 @@ public class ClientSocketWrapper extends SocketWrapper
         // Create the socket.
         if (useSSL)
         {
-            // Read security-related information
-            /**
-             * AuthenticationInfo authInfo = SecurityHelper
-             * .loadAuthenticationInformation();
-             */
-            if (enabledCiphers == null || enabledCiphers.length == 0)
-            {
-                throw new ConfigurationException(
-                        "No ciphers are enabled in security properties.");
-            }
-            if (enabledProtocols == null || enabledProtocols.length == 0)
-            {
-                throw new ConfigurationException(
-                        "No protocols are enabled in security properties.");
-            }
             // Create an SSL socket.
             sslFactory = SSLSocketFactory.getDefault();
             SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
-            // Set cipher suites and protocols
 
-            if (SecurityHelper
-                    .getMatchingStrings(sslSocket.getSupportedCipherSuites(), 
-                            enabledCiphers)
-                            .length == 0)
-            {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) cipher suites.");
-            }
-            // Enable ciphers which are both supported by socket service and
-            // configured by user
-            sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedCipherSuites(), enabledCiphers));
-            
-            if (SecurityHelper
-                    .getMatchingStrings(sslSocket.getSupportedProtocols(), 
-                            enabledProtocols)
-                            .length == 0)
-            {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) protocols.");
-            }
-
-            // Enable protocols which are both supported by socket and
-            // configured by user.
-            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedProtocols(), enabledProtocols));
+            // Check that at least one configured cipher and protocol match with
+            // those supported by the socket
+            SecurityHelper.setCiphersAndProtocolsToSSLSocket(sslSocket,
+                    enabledCiphers, enabledProtocols);
             socket = sslSocket;
         }
         else
