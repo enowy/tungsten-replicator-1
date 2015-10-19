@@ -992,7 +992,7 @@ module MySQLServiceScript
   # Read the configured value for a mysql variable
   def get_mysql_option(opt)
     begin
-      val = TU.cmd_result("my_print_defaults --config-file=#{@options[:my_cnf]} mysqld | grep -e'^--#{opt.gsub(/[\-\_]/, "[-_]")}'")
+      val = TU.cmd_result("my_print_defaults --config-file=#{@options[:my_cnf]} mysqld | grep -e'^--#{opt.gsub(/[\-\_]/, "[-_]")}='")
     rescue CommandError => ce
       return nil
     end
