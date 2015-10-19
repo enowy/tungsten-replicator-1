@@ -227,9 +227,9 @@ public class SocketWrapperTest
         {
             Assert.assertTrue(securityInfo != null);
             String[] enabledProtocols = (String[]) securityInfo
-                    .getEnabledProtocols().toArray();
+                    .getEnabledProtocols().toArray(new String[0]);
             String[] enabledCiphers = (String[]) securityInfo
-                    .getEnabledCipherSuites().toArray();
+                    .getEnabledCipherSuites().toArray(new String[0]);
             clientWrapper.setEnabledCiphers(enabledCiphers);
             clientWrapper.setEnabledProtocols(enabledProtocols);
         }

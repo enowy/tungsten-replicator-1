@@ -26,6 +26,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
@@ -675,15 +676,13 @@ public class SecurityHelper
      * 
      * @param str1
      * @param str2
-     * @return String array consisting of all common Strings in str1 and str2
-     * or null if the set is empty.
+     * @return String array consisting of all common Strings in str1 and str2.
+     * 
      */
     public static String [] getMatchingStrings(String [] str1, String [] str2)
     {
-        String [] resultStr = new String[0];
         String [] longerStr;
         String [] shorterStr;
-        int ri=0;
         
         if (str1.length > str2.length)
         {
@@ -695,19 +694,18 @@ public class SecurityHelper
             longerStr = str2;
             shorterStr = str1;
         }
+        ArrayList<String> resultList = new ArrayList<String>(shorterStr.length);
+
         for (int li=0; li<longerStr.length; li++)
         {
             for (int si=0; si<shorterStr.length; si++)
             {
                 if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
                 {
-                    resultStr[ri++] = new String(shorterStr[si]);
+                    resultList.add(shorterStr[si]);
                 }
             }
         }
-        if (resultStr.length == 0)
-            return null;
-        else
-            return resultStr;
+        return resultList.toArray(new String[0]);
     }
 }

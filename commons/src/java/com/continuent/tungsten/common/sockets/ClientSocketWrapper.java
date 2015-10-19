@@ -185,20 +185,33 @@ public class ClientSocketWrapper extends SocketWrapper
             sslFactory = SSLSocketFactory.getDefault();
             SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
             // Set cipher suites and protocols
-            String[] supportedCiphers = sslSocket.getSupportedCipherSuites();
-            // String[] enabledCiphers = (String[]) authInfo
-            // .getEnabledCipherSuites().toArray();
+
+            if (SecurityHelper
+                    .getMatchingStrings(sslSocket.getSupportedCipherSuites(), 
+                            enabledCiphers)
+                            .length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) cipher suites.");
+            }
             // Enable ciphers which are both supported by socket service and
             // configured by user
             sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                    supportedCiphers, enabledCiphers));
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers));
+            
+            if (SecurityHelper
+                    .getMatchingStrings(sslSocket.getSupportedProtocols(), 
+                            enabledProtocols)
+                            .length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) protocols.");
+            }
+
             // Enable protocols which are both supported by socket and
             // configured by user.
-            String[] supportedProtocols = sslSocket.getSupportedProtocols();
-            // String[] enabledProtocols = (String[]) authInfo
-            // .getEnabledProtocols().toArray();
             sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
-                    supportedProtocols, enabledProtocols));
+                    sslSocket.getSupportedProtocols(), enabledProtocols));
             socket = sslSocket;
         }
         else
