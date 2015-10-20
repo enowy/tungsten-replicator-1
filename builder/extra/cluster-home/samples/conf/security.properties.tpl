@@ -34,10 +34,26 @@ connector.security.keystore.password=@{JAVA_CONNECTOR_KEYSTORE_PASSWORD}
 connector.security.truststore.location=@{JAVA_CONNECTOR_TRUSTSTORE_PATH}
 connector.security.truststore.password=@{JAVA_CONNECTOR_TRUSTSTORE_PASSWORD}
 
-#################################
-# JGROUPS.SECURITY.PROPERTIES   #
-#################################
-jgroups.security.use.ssl=@{ENABLE_JGROUPS_SSL}
-jgroups.security.keystore.location=@{JAVA_KEYSTORE_PATH}
-jgroups.security.keystore.alias=jgroups
-jgroups.security.keystore.password=@{JAVA_KEYSTORE_PASSWORD}
+#####################################
+# REST.API.SECURITY.PROPERTIES      #
+#####################################
+
+# Keystore and security information for the REST APIs
+http.rest.api.security.ssl.useSsl = false
+http.rest.api.security.authentication = false
+http.rest.api.security.authentication.use.certificate=false
+http.rest.api.security.authentication.use.encrypted.password = false
+
+# Server keystore for https
+http.rest.api.security.keystore.location = ${security.dir}/restapi_keystore.jks
+http.rest.api.security.keystore.password = tungsten
+
+# Server truststore: holds certificates of trusted client: used for certificate based authentication
+# Client truststore: holds certificates of trusted servers: used for https
+http.rest.api.security.truststore.location = ${security.dir}/restapi_truststore.ts
+http.rest.api.security.truststore.password = tungsten
+
+# Client keystore: holds private key for the client
+# Used by the client for certificate based authentication
+http.rest.api.security.client.keystore.location =  ${security.dir}/client.jks
+http.rest.api.security.client.keystore.password = secret

@@ -60,7 +60,7 @@ public class SecurityHelper
     // TUC-1872
     public static enum TUNGSTEN_APPLICATION_NAME
     {
-        CONNECTOR, REPLICATOR, ANY;
+        CONNECTOR, REPLICATOR, REST_API, ANY;
     }
 
     /**
@@ -263,6 +263,22 @@ public class SecurityHelper
                     security_truststore_location = SecurityConf.CONNECTOR_SECURITY_TRUSTSTORE_LOCATION;
                     security_truststore_password = SecurityConf.CONNECTOR_SECURITY_TRUSTSTORE_PASSWORD;
                     break;
+
+                case REST_API :
+                    security_use_encryption = SecurityConf.HTTP_REST_API_SSL_USESSL;
+                    security_use_encryption_default = SecurityConf.HTTP_REST_API_SSL_USESSL_DEFAULT;
+
+                    security_use_authentication = SecurityConf.HTTP_REST_API_AUTHENTICATION;
+                    security_use_authentication_default = SecurityConf.HTTP_REST_API_AUTHENTICATION_DEFAULT;
+
+                    security_authentication_use_encrypted_password = SecurityConf.HTTP_REST_API_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD;
+                    security_authentication_use_encrypted_password_default = SecurityConf.HTTP_REST_API_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT;
+
+                    security_keystore_location = SecurityConf.HTTP_REST_API_KEYSTORE_LOCATION;
+                    security_keystore_password = SecurityConf.HTTP_REST_API_KEYSTORE_PASSWORD;
+                    security_truststore_location = SecurityConf.HTTP_REST_API_TRUSTSTORE_LOCATION;
+                    security_truststore_password = SecurityConf.HTTP_REST_API_TRUSTSTORE_PASSWORD;
+                    break;
                 default :
                     // Keep default values
                     break;
@@ -280,7 +296,11 @@ public class SecurityHelper
                     security_use_authentication,
                     security_use_authentication_default, false);
 
-            boolean authenticationByCertificateNeeded = false;
+            boolean authenticationByCertificateNeeded = securityProperties
+                    .getBoolean(
+                            SecurityConf.HTTP_REST_API_AUTHENTICATION_USE_CERTIFICATE,
+                            SecurityConf.HTTP_REST_API_AUTHENTICATION_USE_CERTIFICATE_DEFAULT,
+                            false);
 
             boolean useEncryptedPassword = securityProperties.getBoolean(
                     security_authentication_use_encrypted_password,
@@ -307,8 +327,18 @@ public class SecurityHelper
                     : null;
             String truststorePassword = securityProperties
                     .getString(security_truststore_password);
-            String clientKeystoreLocation = null;
-            String clientKeystorePassword = null;
+            String clientKeystoreLocation = securityProperties.getString(
+                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
+            clientKeystoreLocation = (clientKeystoreLocation != null
+                    && StringUtils.isNotBlank(clientKeystoreLocation))
+                            ? clientKeystoreLocation
+                            : null;
+            String clientKeystorePassword = securityProperties.getString(
+                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_PASSWORD);
+            clientKeystorePassword = (clientKeystorePassword != null
+                    && StringUtils.isNotBlank(clientKeystorePassword))
+                            ? clientKeystorePassword
+                            : null;
 
             String userName = securityProperties.getString(
                     SecurityConf.SECURITY_JMX_USERNAME, null, false);

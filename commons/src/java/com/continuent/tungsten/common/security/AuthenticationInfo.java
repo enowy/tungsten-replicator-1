@@ -211,6 +211,38 @@ public final class AuthenticationInfo
             }
         }
 
+        // --- Check that the keystore is not empty ---
+        if ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
+                && this.isEncryptionNeeded())
+                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
+                        && this.connectorUseSSL)
+                || this.isEncryptionNeeded())
+        {
+            // Check keystore: should be accessible, and not empty
+            SecurityHelper.checkAccessAndAliasesForKeystore(
+                    this.getKeystoreLocation(), this.getKeystorePassword(),
+                    true);
+        }
+
+        // --- Check that the keystore and truststore ---
+        if (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
+                && this.isEncryptionNeeded())
+        {
+            // Check truststore: should be accessible
+            SecurityHelper.checkAccessAndAliasesForKeystore(
+                    this.getTruststoreLocation(), this.getTruststorePassword(),
+                    false);
+
+            if (this.isAuthenticationNeeded()
+                    && this.isAuthenticationByCertificateNeeded())
+            {
+                // Check client keystore: should be accessible, and not empty
+                SecurityHelper.checkAccessAndAliasesForKeystore(
+                        this.getClientKeystoreLocation(),
+                        this.getClientKeystorePassword(), true);
+            }
+        }
+
         // --- Check Aliases are defined in the keystore ---
         if ((this.isEncryptionNeeded() && this.keystoreLocation != null)
                 || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR) && this
@@ -379,6 +411,53 @@ public final class AuthenticationInfo
         else if (this.isEncryptionNeeded() && this.truststoreLocation == null)
         {
             throw new ConfigurationException("truststore.location");
+        }
+
+        // --- Check client keystore location ---
+        // Used by the client for certificate based authentication
+        if (this.isAuthenticationNeeded()
+                && this.isAuthenticationByCertificateNeeded()
+                && tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
+                && this.clientKeystoreLocation != null)
+        {
+            // --- Check file location is specified ---
+            if (this.clientKeystoreLocation == null)
+            {
+                String msg = MessageFormat.format(
+                        "Configuration error: {0}={1} but: {2}={3}",
+                        SecurityConf.HTTP_REST_API_SSL_USESSL,
+                        this.isEncryptionNeeded(),
+                        SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION,
+                        this.clientKeystoreLocation);
+                CLUtils.println(msg, CLLogLevel.detailed);
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
+            }
+            File f = new File(this.clientKeystoreLocation);
+            // --- Find absolute path if needed
+            if (!f.isFile())
+            {
+                f = this.findAbsolutePath(f);
+                this.clientKeystoreLocation = f.getAbsolutePath();
+            }
+            // --- Check file is readable
+            if (!f.isFile() || !f.canRead())
+            {
+                String msg = MessageFormat.format(
+                        "Cannot find or read {0} file: {1}", KEYSTORE_LOCATION,
+                        this.clientKeystoreLocation);
+                CLUtils.println(msg, CLLogLevel.detailed);
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
+            }
+        }
+        else if (this.isAuthenticationNeeded()
+                && this.isAuthenticationByCertificateNeeded()
+                && tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
+                && this.clientKeystoreLocation == null)
+        {
+            throw new ConfigurationException(
+                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
         }
 
         // --- Check password for Truststore ---

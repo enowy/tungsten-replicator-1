@@ -505,4 +505,253 @@ public class SecurityHelperTest extends TestCase
         resetSecuritySystemProperties();
     }
 
+    /**
+     * Confirm that an Exception is thrown when the security.properties files
+     * does not pass validation. Confirm validation steps
+     * 
+     * @throws ConfigurationException
+     */
+    public void testValidateSecurityProperties()
+            throws ConfigurationException, ServerRuntimeException
+    {
+        // Reset info
+        resetSecuritySystemProperties();
+
+        // Confirm that initial values are OK
+        AuthenticationInfo authInfo = null;
+        AuthenticationInfo badAuthInfo = null;
+        try
+        {
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "test.validation.security.properties", true,
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        }
+        catch (ConfigurationException e)
+        {
+            assertFalse(
+                    "Initial values should not cause an exception as they are supposed to be OK",
+                    true);
+        }
+
+        // --- Try validations steps one after the other ---
+
+        // ###### REST API: If Authentication is on, Encryption can be off
+        badAuthInfo.setAuthenticationNeeded(true);
+        try
+        {
+            badAuthInfo.setAuthenticationNeeded(true);
+            assertFalse(badAuthInfo.isEncryptionNeeded()); // Encryption is off
+
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse(badAuthInfo.isEncryptionNeeded()); // Not Updated to
+                                                           // true
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue(
+                    "That should not throw an exception, just update values.",
+                    false);
+        }
+
+        // ############################## Check password file location ########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setPasswordFileLocation(
+                badAuthInfo.getPasswordFileLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Authentication not needed. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setAuthenticationNeeded(true);
+
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setPasswordFileLocation(
+                    badAuthInfo.getPasswordFileLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check keystore for https ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setKeystoreLocation(
+                badAuthInfo.getKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setKeystoreLocation(
+                    badAuthInfo.getKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check trustore for server ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setTruststoreLocation(
+                badAuthInfo.getTruststoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off, no exception should be thrown !", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setTruststoreLocation(
+                    badAuthInfo.getTruststoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (Exception ee)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check keystore for client ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setClientKeystoreLocation(
+                badAuthInfo.getClientKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setAuthenticationNeeded(true);
+        badAuthInfo.setAuthenticationByCertificateNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setClientKeystoreLocation(
+                    badAuthInfo.getClientKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ######################## Check non empty aliases in Keystore #######
+        // This also checks that the password can open the keystore
+        String EMPTY_KEYSTORE = "empty_keystore.jks";
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + bad value (empty aliases)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Feature on + bad value (wrong password)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+        badAuthInfo.setKeystorePassword("bad_password");
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Check that the trustore is accessible
+        // Feature on + bad value (empty aliases)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setTruststorePassword(
+                badAuthInfo.getTruststorePassword() + "_XXX");
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Reset info
+        resetSecuritySystemProperties();
+    }
 }
