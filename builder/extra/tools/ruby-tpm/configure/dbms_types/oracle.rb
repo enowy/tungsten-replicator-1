@@ -435,12 +435,12 @@ class DirectOracleServiceSIDCheck < ConfigureValidationCheck
   end
 end
 
-class OracleRedoMinerCheck < ConfigureValidationCheck
+class OracleRedoReaderCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include OracleCheck
   
   def set_vars
-    @title = "Check for a valid Redo Miner"
+    @title = "Check for a valid Redo Reader"
   end
   
   def validate
