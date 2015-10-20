@@ -100,17 +100,10 @@ public class SSLSocketFactoryGenerator
                         (X509KeyManager) keyManagers[i], alias);
             }
         }
-        /**
-         * Read protocols from security.properties and use the first on the
-         * list.
-         */
-        AuthenticationInfo authInfo = SecurityHelper
-                .loadAuthenticationInformation();
         // Use the first protocol in SSLContext - the fact that there may be
         // multiple configured protocols is not handled here;
         // SSLContext.getInstance only takes one
-        SSLContext context = SSLContext.getInstance(authInfo
-                .getEnabledProtocols().get(0));
+        SSLContext context = SSLContext.getInstance(SecurityHelper.getProtocol());
         context.init(keyManagers, trustManagers, null);
 
         return context;

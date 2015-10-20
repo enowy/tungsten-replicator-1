@@ -92,4 +92,8 @@ public class SecurityConf
     static public final String SECURITY_APPLICATION_CONNECTOR                                             = "connector";
     static public final String SECURITY_APPLICATION_REST_API                                              = "rest_api";
 
+    /** System variable names */
+    static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                       = "javax.rmi.ssl.client.enabledProtocols";
+    static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                         = "javax.rmi.ssl.client.enabledCiphers";
+
 }

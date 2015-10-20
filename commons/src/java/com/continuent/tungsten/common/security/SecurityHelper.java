@@ -52,7 +52,7 @@ import com.continuent.tungsten.common.utils.CLUtils;
 public class SecurityHelper
 {
     private static final Logger logger = Logger.getLogger(SecurityHelper.class);
-
+    
     /*
      * Defines the type of application requesting Security information. This
      * allows module specific configuration of security.
@@ -596,7 +596,33 @@ public class SecurityHelper
             }
         }
     }
-
+    
+    /**
+     * Read client's SSL protocols 
+     * 
+     * @return first value on the list or null if property doesn't have value.
+     */
+    public static String getProtocol()
+    {
+        if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
+            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",")[0];
+        else
+            return null;
+    }
+    
+    /**
+     * Read client's SSL ciphers 
+     * 
+     * @return first value on the list or null if property doesn't have value.
+     */
+    public static String getCipher()
+    {
+        if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
+            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",")[0];
+        else
+            return null;
+    }    
+    
     /**
      * Get the system keystore location
      * 
