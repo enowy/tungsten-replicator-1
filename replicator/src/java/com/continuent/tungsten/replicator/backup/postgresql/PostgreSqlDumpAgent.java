@@ -54,7 +54,7 @@ public class PostgreSqlDumpAgent extends AbstractBackupAgent
     private String   host               = "localhost";
     private int      port               = 5432;
     private String   user               = "postgres";
-    private String   password           = "";
+    private String   password           = null;
     private String   dumpDirName        = "/tmp";
     private String   pgdumpOptions      = "-Fc";
     private String   pgrestoreOptions   = "-Fc";
