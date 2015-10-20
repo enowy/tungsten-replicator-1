@@ -171,27 +171,29 @@ end
 class ReplicationServiceName < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(DEPLOYMENT_SERVICE, "What is the replication service name?", 
       PV_IDENTIFIER)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_dataservice_key(DATASERVICENAME))
+  def get_default_value
+    @config.getProperty(get_dataservice_key(DATASERVICENAME))
   end
 end
 
 class LocalReplicationServiceName < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(DSNAME, "What is the local service name?", PV_IDENTIFIER)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_dataservice_key(DATASERVICENAME))
+  def get_default_value
+    @config.getProperty(get_dataservice_key(DATASERVICENAME))
   end
 end
 

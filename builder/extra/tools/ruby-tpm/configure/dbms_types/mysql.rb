@@ -804,26 +804,28 @@ end
 class MySQLServiceConfigFile < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(REPL_MYSQL_SERVICE_CONF, "Path to my.cnf file customized for this service", PV_FILENAME)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.cnf"
+  def get_default_value
+    @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.cnf"
   end
 end
 
 class DirectMySQLServiceConfigFile < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(EXTRACTOR_REPL_MYSQL_SERVICE_CONF, "Path to my.cnf file customized for this service", PV_FILENAME)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.direct.cnf"
+  def get_default_value
+    @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.direct.cnf"
   end
 end
 
