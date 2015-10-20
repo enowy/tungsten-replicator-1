@@ -591,4 +591,8 @@ module TransformerMethods
   def get_extractor_key(key)
     get_service_key(key)
   end
+  
+  def get_deployment_basedir
+    @config.getProperty(PREPARE_DIRECTORY)
+  end
 end

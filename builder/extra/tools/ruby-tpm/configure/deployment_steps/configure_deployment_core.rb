@@ -137,10 +137,6 @@ module ConfigureDeploymentCore
     end
   end
   
-  def get_deployment_basedir
-    @config.getProperty(PREPARE_DIRECTORY)
-  end
-  
   def alter_deployment_method_name(method_name)
     method_name
   end
