@@ -56,7 +56,7 @@ public class DerbyDatabase extends AbstractDatabase
     @Override
     public SqlOperationMatcher getSqlNameMatcher() throws ReplicatorException
     {
-        // Return MySQL matcher for now. 
+        // Return MySQL matcher for now.
         return new MySQLOperationMatcher();
     }
 
@@ -84,7 +84,10 @@ public class DerbyDatabase extends AbstractDatabase
                 return "SMALLINT";
 
             case Types.CHAR :
-                return "CHAR(" + c.getLength() + ")";
+                if (c.getLength() == 1)
+                    return "BOOLEAN";
+                else
+                    return "CHAR(" + c.getLength() + ")";
 
             case Types.VARCHAR :
                 return "VARCHAR(" + c.getLength() + ")";
@@ -160,8 +163,8 @@ public class DerbyDatabase extends AbstractDatabase
         throw new UnsupportedOperationException("Not implemented.");
     }
 
-    public ResultSet getColumnsResultSet(DatabaseMetaData md,
-            String schemaName, String tableName) throws SQLException
+    public ResultSet getColumnsResultSet(DatabaseMetaData md, String schemaName,
+            String tableName) throws SQLException
     {
         return md.getColumns(null, schemaName.toUpperCase(),
                 tableName.toUpperCase(), null);
@@ -176,7 +179,7 @@ public class DerbyDatabase extends AbstractDatabase
 
     protected ResultSet getIndexResultSet(DatabaseMetaData md,
             String schemaName, String tableName, boolean unique)
-            throws SQLException
+                    throws SQLException
     {
         throw new UnsupportedOperationException("Not implemented.");
     }
