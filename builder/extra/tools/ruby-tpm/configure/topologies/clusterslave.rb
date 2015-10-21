@@ -80,7 +80,7 @@ class ClusterSlaveTopology
   end
   
   def disable_extractor?
-    true
+    true.to_s()
   end
   
   def master_preferred_role

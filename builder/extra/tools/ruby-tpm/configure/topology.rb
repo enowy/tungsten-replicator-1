@@ -80,7 +80,7 @@ module Topology
   end
   
   def disable_extractor?
-    false
+    false.to_s()
   end
   
   def get_dataservice_alias

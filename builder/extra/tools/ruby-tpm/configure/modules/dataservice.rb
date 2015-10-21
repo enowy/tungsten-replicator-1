@@ -264,6 +264,7 @@ end
 
 class ReplicationServiceDisableExtractor < ConfigurePrompt
   include ReplicationServicePrompt
+  include ConstantValueModule
   
   def initialize
     super(REPL_DISABLE_EXTRACTOR, "Should this service support the master role?",
@@ -271,8 +272,30 @@ class ReplicationServiceDisableExtractor < ConfigurePrompt
   end
   
   def load_default_value
-    topology = get_topology()
-    @default = topology.disable_extractor?().to_s()
+    role = get_member_value(REPL_ROLE)
+    if role == REPL_ROLE_M
+      @default = "false"
+    else
+      @default = get_member_value(REPL_DISABLE_SLAVE_EXTRACTOR)
+    end
+  end
+end
+
+class ReplicationServiceDisableSlaveExtractor < ConfigurePrompt
+  include ReplicationServicePrompt
+  
+  def initialize
+    super(REPL_DISABLE_SLAVE_EXTRACTOR, "Should slave servers support the master role?",
+      PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if get_member_value(ENABLE_HETEROGENOUS_SLAVE) == "true"
+      @default = "true"
+    else
+      topology = get_topology()
+      @default = topology.disable_extractor?()
+    end
   end
   
   def validate_value(value)
@@ -281,7 +304,7 @@ class ReplicationServiceDisableExtractor < ConfigurePrompt
       topology = get_topology()
       if topology.is_a?(ClusterTopology)
         if val == "true"
-          error("The --disable-extractor may not be set when --topology=clustered.")
+          error("The --disable-slave-extractor may not be set when --topology=clustered.")
         end
       end
     end

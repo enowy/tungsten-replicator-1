@@ -23,7 +23,7 @@ module ConfigureDeploymentStepReplicationDataservice
       "tungsten-replicator/samples/conf/replicator.properties.direct"
     elsif role == REPL_ROLE_ARCHIVE
 	    "tungsten-replicator/samples/conf/replicator.properties.archive"
-    elsif role == REPL_ROLE_S and disable_extractor == "true"
+    elsif disable_extractor == "true"
       "tungsten-replicator/samples/conf/replicator.properties.slave"
 	  else
 	    begin
