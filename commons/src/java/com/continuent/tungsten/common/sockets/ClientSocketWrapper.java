@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.channels.SocketChannel;
 
 import javax.net.SocketFactory;
@@ -142,6 +143,11 @@ public class ClientSocketWrapper extends SocketWrapper
         this.connectTimeout = connectTimeout;
     }
 
+    public void setSoTimeout(int timeout) throws SocketException
+    {
+        this.socket.setSoTimeout(timeout);
+    }
+    
     public long getReadTimeout()
     {
         return readTimeout;
@@ -154,6 +160,11 @@ public class ClientSocketWrapper extends SocketWrapper
     public void setReadTimeout(int readTimeout)
     {
         this.readTimeout = readTimeout;
+    }
+    
+    public void setTcpNoDelay(boolean value) throws SocketException
+    {
+        this.socket.setTcpNoDelay(value);
     }
 
     /**
