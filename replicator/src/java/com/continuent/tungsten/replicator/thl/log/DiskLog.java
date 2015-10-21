@@ -518,6 +518,8 @@ public class DiskLog
                             // The rotate event will be inserted again when THL
                             // needs it, as it stores a new event.
                             logFile.setLength(lastCompleteEventOffset);
+                            // Update the max indexed event
+                            index.setMaxIndexedSeqno(maxSeqno);
                         }
 
                         // Nothing left to read, so we break from inner
