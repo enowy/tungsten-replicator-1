@@ -38,9 +38,7 @@ import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
-import com.continuent.tungsten.common.security.SecurityConf;
 import com.continuent.tungsten.common.security.SecurityHelper;
-import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 
 /**
  * Implements an class to generate SSLSocketFactory instances. The author
@@ -54,8 +52,7 @@ import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATI
  */
 public class SSLSocketFactoryGenerator
 {
-    private static final Logger logger = Logger
-            .getLogger(SSLSocketFactoryGenerator.class);
+    private static final Logger logger                               = Logger.getLogger(SSLSocketFactoryGenerator.class);
 
     private String     alias                                = null;
     private String     keystoreLocation                     = null;
@@ -64,6 +61,7 @@ public class SSLSocketFactoryGenerator
 
     public SSLSocketFactoryGenerator(String alias,
             AuthenticationInfo securityPropertiesAuthenticationInfo)
+            throws ConfigurationException
     {
         this.alias = alias;
         this.securityPropertiesAuthenticationInfo = securityPropertiesAuthenticationInfo;
@@ -73,11 +71,29 @@ public class SSLSocketFactoryGenerator
         this.trustStoreLocation = (securityPropertiesAuthenticationInfo != null)
                 ? securityPropertiesAuthenticationInfo.getTruststoreLocation()
                 : SecurityHelper.getTrustStoreLocation();
+        this.checkConsistency();
     }
 
     /**
-     * Creates the SSLContext to be used when creating sockets or server sockets.
-     * This uses the custom alias selector
+     * Ensure that prerequisites are met.
+     * 
+     * @throws ConfigurationException
+     */
+    private void checkConsistency() throws ConfigurationException
+    {
+        if (this.securityPropertiesAuthenticationInfo == null
+                && this.alias != null) 
+        {
+            throw new ConfigurationException("\n\tError : "
+                    + "Both securityPropertiesAuthenticationInfo and alias are "
+                    + "null which makes it impossible to fetch the associated "
+                    + "key from keyStore.");
+        }
+    }
+
+    /**
+     * Creates the SSLContext to be used when creating sockets or server
+     * sockets. This uses the custom alias selector
      * 
      * @return
      * @throws IOException
@@ -103,7 +119,8 @@ public class SSLSocketFactoryGenerator
         // Use the first protocol in SSLContext - the fact that there may be
         // multiple configured protocols is not handled here;
         // SSLContext.getInstance only takes one
-        SSLContext context = SSLContext.getInstance(SecurityHelper.getProtocol());
+        SSLContext context = SSLContext.getInstance(SecurityHelper
+                .getProtocol());
         context.init(keyManagers, trustManagers, null);
 
         return context;
@@ -151,7 +168,7 @@ public class SSLSocketFactoryGenerator
         if (this.alias == null)
         {
             logger.debug("No keystore alias entry defined. Will use default SSLServerSocketFactory selecting 1st entry in keystore !");
-            return (SSLServerSocketFactory)SSLServerSocketFactory.getDefault();
+            return (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
         }
         // --- Alias defined. Use custom alias selector ---
         else

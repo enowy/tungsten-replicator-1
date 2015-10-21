@@ -27,12 +27,17 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import javax.net.ssl.SSLHandshakeException;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
+import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
 
@@ -56,6 +61,25 @@ public class SocketWrapperTest
     private SocketHelper  helper            = new SocketHelper();
 
     Level                 debugLevel_socket = null;
+
+    /**
+     * Make sure that tests are terminated if prerequirements are not met.
+     * 
+     * @throws ConfigurationException
+     */
+    @Before
+    public void checkConfiguration() throws ConfigurationException
+    {
+        if (!System.getProperty("user.dir").endsWith("commons/build/work"))
+        {
+            throw new ConfigurationException("\n\tInvalid working directory : "
+                    + System.getProperty("user.dir") + ".\n"
+                    + "\tWorking directory must be "
+                    + "../commons/build/work in order to test work.\n"
+                    + "\tHINT: in Eclipse, set working directory to "
+                    + "${workspace_loc:commons/build/work} in arguments.");
+        }
+    }
 
     /**
      * Terminate echo server if still running.
@@ -127,38 +151,43 @@ public class SocketWrapperTest
      */
     @Test
     public void testSSLConnection_keystoreWithAlias_wrong_server_alias()
-            throws Exception
+            throws ConfigurationException, Exception
     {
         logger.info("### testSSLConnection with alias selection: wrong server alias");
         AuthenticationInfo securityInfo = helper
                 .loadSecurityProperties_keystoreWithAlias();
         String client_slaveAlias = securityInfo
-                .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+                .getKeystoreAliasForConnectionType(SecurityConf
+                        .KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
         try
         {
             // Change debug level so that trace messages are shown
             debugLevel_socket = LogManager
                     .getLogger(
-                            Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager"))
+                            Class.forName("com.continuent.tungsten.common"
+                                    + ".sockets.AliasSelectorKeyManager"))
                     .getLevel();
             LogManager
                     .getLogger(
-                            Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager"))
+                            Class.forName("com.continuent.tungsten.common"
+                                    + ".sockets.AliasSelectorKeyManager"))
                     .setLevel(Level.TRACE);
 
             verifyConnection(
                     2114,
                     true,
                     "alias_that_does_not_exist_but it's ok it's the expected result",
-                    client_slaveAlias, securityInfo, true);
+                    client_slaveAlias, securityInfo, securityInfo, true);
             assertTrue(
-                    "The server should not have started: we used a non existing alias in the keystore",
+                    "The server should not have started: we used a non existing "
+                    + "alias in the keystore",
                     false);
         }
-        catch (Exception e)
+        catch (SSLHandshakeException e)
         {
             assertTrue(
-                    "This exception is expected as we're trying to use a non existant server alias in the keystore",
+                    "This exception is expected as we're trying to use a non "
+                    + "existant server alias in the keystore",
                     true);
         }
         finally
@@ -248,7 +277,7 @@ public class SocketWrapperTest
             String serverKeystoreAlias, String clientKeystoreAlias,
             AuthenticationInfo securityInfo,
             AuthenticationInfo serverSecurityInfo, boolean silentFail)
-            throws Exception
+            throws Exception, ConfigurationException
     {
         server = new EchoServer("127.0.0.1", port, useSSL, serverKeystoreAlias,
                 serverSecurityInfo, silentFail);

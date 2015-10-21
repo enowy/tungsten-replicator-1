@@ -62,10 +62,11 @@ public class EchoServer implements Runnable
 
     /**
      * Create a new echo server instance.
+     * @throws ConfigurationException 
      */
     public EchoServer(String host, int port, boolean useSSL,
             String serverKeystoreAlias, AuthenticationInfo securityInfo,
-            boolean silentFail)
+            boolean silentFail) throws ConfigurationException
     {
         this.host = host;
         this.port = port;
@@ -73,8 +74,22 @@ public class EchoServer implements Runnable
         this.keystoreAlias = serverKeystoreAlias;
         this.securityInfo = securityInfo;
         this.silentFail = silentFail;
+        this.checkConsistency();
     }
 
+    private void checkConsistency() throws ConfigurationException
+    {
+        if (this.useSSL 
+                && this.keystoreAlias != null 
+                && this.securityInfo == null)
+        {
+            throw new ConfigurationException("\n\tError : "
+                    + "keystoreAlias is specified but securityInfo is null. "
+                    + "It makes it impossible to fetch the key from keyStore "
+                    + "from security properties by using the alias.");
+        }
+    }
+    
     public Throwable getThrowable()
     {
         return throwable;
