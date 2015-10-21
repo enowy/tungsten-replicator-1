@@ -289,10 +289,7 @@ public class DiskLogExtendedTest extends TestCase
         log.release();
 
         // Get the log files and make the last log file 0 length.
-        String[] logFileNames = log.getLogFileNames();
-        int fileCount = logFileNames.length;
-        assertTrue("More than two logs generated", fileCount > 2);
-        String lastLogName = logFileNames[fileCount - 1];
+        String lastLogName = getLastLogName(log);
         File lastLog = new File(logDir, lastLogName);
         assertTrue("lastLog is non-zero length: " + lastLog.toString(),
                 lastLog.length() > 0);
@@ -325,6 +322,8 @@ public class DiskLogExtendedTest extends TestCase
                 + scanSeqno2);
         log2.release();
 
+        lastLogName = getLastLogName(log2);
+        lastLog = new File(logDir, lastLogName);
         // Truncate the log again.
         truncate(lastLog);
         assertEquals("lastLog is zero length: " + lastLog.toString(), 0,
@@ -346,6 +345,15 @@ public class DiskLogExtendedTest extends TestCase
 
         // All done!
         log3.release();
+    }
+
+    private String getLastLogName(DiskLog log)
+    {
+        String[] logFileNames = log.getLogFileNames();
+        int fileCount = logFileNames.length;
+        assertTrue("More than two logs generated", fileCount > 2);
+        String lastLogName = logFileNames[fileCount - 1];
+        return lastLogName;
     }
 
     /**
