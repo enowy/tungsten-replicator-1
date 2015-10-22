@@ -119,10 +119,15 @@ public class Connector implements ReplicatorPlugin
             clientSocket = new ClientSocketWrapper();
             clientSocket.setAddress(address);
             clientSocket.setUseSSL(useSSL);
-            if (useSSL && SecurityHelper.getCiphers() == null)
+            if (useSSL)
             {
-                SecurityHelper.loadAuthenticationInformation(
-                        TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+                if (SecurityHelper.getCiphers() == null)
+                {
+                    SecurityHelper.loadAuthenticationInformation(
+                            TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+                }
+                clientSocket.setEnabledCiphers(SecurityHelper.getCiphers());
+                clientSocket.setEnabledProtocols(SecurityHelper.getProtocols());
             }
             clientSocket.setConnectTimeout(heartbeatMillis);
             // Timeout at 10 times the heartbeat interval. This is longer than
