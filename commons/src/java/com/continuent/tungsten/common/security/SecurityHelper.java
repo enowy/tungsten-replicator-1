@@ -429,7 +429,7 @@ public class SecurityHelper
         {
             String enabledProtocols = StringUtils.join(
                     authInfo.getEnabledProtocols(), ",");
-            setSystemProperty("javax.rmi.ssl.client.enabledProtocols",
+            setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
                     enabledProtocols, verbose);
             setSystemProperty("https.protocols",
                     enabledProtocols, verbose);
@@ -439,7 +439,7 @@ public class SecurityHelper
         {
             String enabledCipherSuites = StringUtils.join(
                     authInfo.getEnabledCipherSuites(), ",");
-            setSystemProperty("javax.rmi.ssl.client.enabledCipherSuites",
+            setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
                     enabledCipherSuites, verbose);
         }
     }
@@ -609,6 +609,15 @@ public class SecurityHelper
         else
             return null;
     }
+
+    public static String [] getProtocols()
+    {
+        if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
+            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",");
+        else
+            return null;
+    }
+
     
     /**
      * Read client's SSL ciphers 
@@ -619,6 +628,14 @@ public class SecurityHelper
     {
         if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
             return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",")[0];
+        else
+            return null;
+    }    
+    
+    public static String [] getCiphers()
+    {
+        if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
+            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",");
         else
             return null;
     }    

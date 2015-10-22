@@ -29,6 +29,8 @@ import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 import com.continuent.tungsten.common.sockets.ClientSocketWrapper;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
@@ -117,6 +119,11 @@ public class Connector implements ReplicatorPlugin
             clientSocket = new ClientSocketWrapper();
             clientSocket.setAddress(address);
             clientSocket.setUseSSL(useSSL);
+            if (useSSL && SecurityHelper.getCiphers() == null)
+            {
+                SecurityHelper.loadAuthenticationInformation(
+                        TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+            }
             clientSocket.setConnectTimeout(heartbeatMillis);
             // Timeout at 10 times the heartbeat interval. This is longer than
             // the connect timeout by design so we don't time out if the server
