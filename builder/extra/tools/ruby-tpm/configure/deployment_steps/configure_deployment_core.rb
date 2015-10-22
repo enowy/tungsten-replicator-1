@@ -8,7 +8,7 @@ module ConfigureDeploymentCore
     @config = config
     @additional_properties = Properties.new()
     @additional_properties.use_prompt_handler = false
-    @services = []
+    @services = {}
     @methods = nil
   end
   
@@ -242,8 +242,20 @@ module ConfigureDeploymentCore
   end
   
   # Add an OS service that needs to be started and/or deployed.
-  def add_service(start_script)
-    @services.insert(-1, start_script)
+  def add_service(start_script, weight = 0)
+    @services[start_script] = weight
+  end
+  
+  def get_services
+    ret = []
+    # Sort the services by weight and return the sorted list
+    @services.sort_by {|_key, value| value}.each {
+      |entry|
+      # Each entry is a two element array of service and weight
+      ret << entry[0]
+    }
+    
+    return ret
   end
   
   def add_log_file(log_file)

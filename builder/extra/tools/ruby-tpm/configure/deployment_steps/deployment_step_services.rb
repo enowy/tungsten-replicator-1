@@ -188,7 +188,7 @@ module ConfigureDeploymentStepServices
     out.puts "# Start all services using local service scripts"
     out.puts "THOME=`dirname $0`/../.."
     out.puts "cd $THOME"
-    @services.sort.reverse.each { |svc| out.puts svc + " start" }
+    get_services().reverse.each { |svc| out.puts svc + " start" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
     Configurator.instance.limit_file_permissions(out.path())
@@ -204,7 +204,7 @@ module ConfigureDeploymentStepServices
     out.puts "# Stop all services using local service scripts"
     out.puts "THOME=`dirname $0`/../.."
     out.puts "cd $THOME"
-    @services.sort.each { |svc| out.puts svc + " stop" }
+    get_services().each { |svc| out.puts svc + " stop" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
     Configurator.instance.limit_file_permissions(out.path())
@@ -222,7 +222,7 @@ module ConfigureDeploymentStepServices
       out.puts "THOME=`dirname $0`/../.."
       out.puts "cd $THOME"
       priority=80
-      @services.each { |svc|
+      get_services().each { |svc|
         svcname = File.basename svc
         out.puts get_svc_command("ln -fs $PWD/" + svc + " /etc/init.d/t" + svcname)
         if Configurator.instance.distro?() == OS_DISTRO_REDHAT
@@ -249,7 +249,7 @@ module ConfigureDeploymentStepServices
       out.puts "# Remove services from /etc directories"
       out.puts "THOME=`dirname $0`/../.."
       out.puts "cd $THOME"
-      @services.each { |svc|
+      get_services().each { |svc|
         svcname = File.basename svc
         if Configurator.instance.distro?() == OS_DISTRO_REDHAT
           out.puts get_svc_command("/sbin/chkconfig --del t" + svcname)

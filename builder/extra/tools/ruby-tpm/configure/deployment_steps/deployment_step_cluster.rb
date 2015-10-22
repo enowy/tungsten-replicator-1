@@ -521,14 +521,17 @@ EOF
     end
     
     if is_replicator?()
-      add_service("tungsten-replicator/bin/replicator")
+      add_service("tungsten-replicator/bin/replicator", 40)
     end
     if is_manager?()
-      add_service("tungsten-manager/bin/manager")
+      add_service("tungsten-manager/bin/manager", 20)
     end
     if is_connector?()
-      add_service("tungsten-connector/bin/connector")
+      add_service("tungsten-connector/bin/connector", 50)
     end
+    trigger_event(:register_services)
+    
+    
     write_deployall()
     write_undeployall()
     write_startall()
