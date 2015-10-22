@@ -242,13 +242,7 @@ module ClusterCommandModule
         else
           parse_cluster_options(arguments)
           
-          # Check for a topology value in this option set
-          # and only evaluate it if that topology is enabled
-          # for this product package. CONT-1041
-          t = Topology.build(COMMAND, @dataservice_options)
-          if t.enabled?()
-            load_cluster_options([to_identifier(section)])
-          end
+          load_cluster_options([to_identifier(section)])
         end
       }
       

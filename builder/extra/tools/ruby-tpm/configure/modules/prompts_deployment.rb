@@ -722,7 +722,12 @@ class HostDefaultDataserviceName < ConfigurePrompt
       if @config.getNestedProperty([REPL_SERVICES, rs_alias, DEPLOYMENT_HOST]) == get_member()
         ds_alias = @config.getNestedProperty([REPL_SERVICES, rs_alias, DEPLOYMENT_DATASERVICE])
         if ds_alias != ""
-          if Topology.build(ds_alias, @config).use_management?()
+          topology = Topology.build(ds_alias, @config)
+          unless topology.enabled?()
+            next
+          end
+          
+          if topology.use_management?()
             @default = ds_alias
             return
           else
@@ -732,38 +737,40 @@ class HostDefaultDataserviceName < ConfigurePrompt
       end
     }
     
-    @config.getNestedPropertyOr([MANAGERS], {}).each_key{
-      |m_alias|
-      if m_alias == DEFAULTS
-        next
-      end
-      
-      if @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_HOST]) == get_member()
-        ds_alias = @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_DATASERVICE])
-        if ds_alias != ""
-          @default = ds_alias
-          return
+    if Configurator.instance.is_enterprise?()
+      @config.getNestedPropertyOr([MANAGERS], {}).each_key{
+        |m_alias|
+        if m_alias == DEFAULTS
+          next
         end
-      end
-    }
+      
+        if @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_HOST]) == get_member()
+          ds_alias = @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_DATASERVICE])
+          if ds_alias != ""
+            @default = ds_alias
+            return
+          end
+        end
+      }
     
-    @config.getNestedPropertyOr([CONNECTORS], {}).each_key{
-      |h_alias|
-      if h_alias == DEFAULTS
-        next
-      end
+      @config.getNestedPropertyOr([CONNECTORS], {}).each_key{
+        |h_alias|
+        if h_alias == DEFAULTS
+          next
+        end
       
-      if @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_HOST]) == get_member()
-        ds_aliases = @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_DATASERVICE])
-        if ! ds_aliases.kind_of?(Array)
-           ds_aliases=Array(ds_aliases);
+        if @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_HOST]) == get_member()
+          ds_aliases = @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_DATASERVICE])
+          if ! ds_aliases.kind_of?(Array)
+             ds_aliases=Array(ds_aliases);
+          end
+          if ds_aliases.size() > 0
+            @default = ds_aliases.at(0)
+            return
+          end
         end
-        if ds_aliases.size() > 0
-          @default = ds_aliases.at(0)
-          return
-        end
-      end
-    }
+      }
+    end
     
     if non_cluster_ds_alias != nil
       @default = non_cluster_ds_alias

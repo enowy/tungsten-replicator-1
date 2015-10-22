@@ -633,7 +633,7 @@ module OfflineServicesScript
     })
     
     add_option(:offline, {
-      :on => "--offline String",
+      :on => "--offline [String]",
       :help => "Put required replication services offline before processing",
       :default => false,
       :parse => method(:parse_boolean_option_blank_is_true)
@@ -647,7 +647,7 @@ module OfflineServicesScript
     })
     
     add_option(:online, {
-      :on => "--online String",
+      :on => "--online [String]",
       :help => "Put required replication services online after successful processing",
       :default => false,
       :parse => method(:parse_boolean_option_blank_is_true)

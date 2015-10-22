@@ -5,6 +5,10 @@ class TungstenScriptDatasource
     @is_direct = is_direct
   end
   
+  def title
+    raise "Undefined function: #{self.class.name()}.title"
+  end
+  
   def can_manage_service?
     false
   end
@@ -26,7 +30,7 @@ class TungstenScriptDatasource
       return
     end
     
-    TU.notice("Stop the #{self.class.name()} service")
+    TU.notice("Stop the #{self.title()} service")
     _stop_server()
   end
   
@@ -47,7 +51,7 @@ class TungstenScriptDatasource
       return
     end
     
-    TU.notice("Start the #{self.class.name()} service")
+    TU.notice("Start the #{self.title()} service")
     _start_server()
   end
   
