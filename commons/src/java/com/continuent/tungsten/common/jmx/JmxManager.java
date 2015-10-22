@@ -70,20 +70,20 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
  */
 public class JmxManager implements NotificationListener
 {
-    private static final Logger logger = Logger.getLogger(JmxManager.class);
+    private static final Logger                logger              = Logger.getLogger(JmxManager.class);
 
     // RMI registry and connector server we are managing.
-    protected Registry           rmiRegistry;
-    protected JMXConnectorServer jmxConnectorServer;
+    protected Registry                         rmiRegistry;
+    protected JMXConnectorServer               jmxConnectorServer;
 
     // JMX server parameters.
-    private final String host;
-    private final int    registryPort;
-    private static int   beanPort;
+    private final String                       host;
+    private final int                          registryPort;
+    private static int                         beanPort;
 
-    private final String serviceName;
+    private final String                       serviceName;
 
-    public final static String CREATE_MBEAN_HELPER = "createHelper";
+    public final static String                 CREATE_MBEAN_HELPER = "createHelper";
 
     // Authentication and Encryption parameters
     private static AuthenticationInfo authenticationInfo = null;
@@ -124,17 +124,16 @@ public class JmxManager implements NotificationListener
                             JmxManager.authenticationInfo,
                             ClientApplicationType.RMI_JMX);
                     String goodPassword = passwordManager
-                            .getEncryptedPasswordForUser(
-                                    JmxManager.authenticationInfo
-                                            .getUsername());
+                            .getEncryptedPasswordForUser(JmxManager.authenticationInfo
+                                    .getUsername());
                     JmxManager.authenticationInfo.setPassword(goodPassword);
                 }
             }
             catch (ConfigurationException e)
             {
-                logger.error(MessageFormat.format(
-                        "Could not get security information. Will use default values: {0}",
-                        e));
+                logger.error(MessageFormat
+                        .format("Could not get security information. Will use default values: {0}",
+                                e));
             }
         }
 
@@ -202,9 +201,10 @@ public class JmxManager implements NotificationListener
         }
         catch (Exception r)
         {
-            throw new ServerRuntimeException(String.format(
-                    "Unable to locate the default registry on registryPort 1099, reason='%s'",
-                    r.getMessage()));
+            throw new ServerRuntimeException(
+                    String.format(
+                            "Unable to locate the default registry on registryPort 1099, reason='%s'",
+                            r.getMessage()));
         }
 
         return registry;
@@ -222,8 +222,8 @@ public class JmxManager implements NotificationListener
             {
                 if (logger.isDebugEnabled())
                 {
-                    logger.debug(
-                            "Starting RMI registry on registryPort: " + port);
+                    logger.debug("Starting RMI registry on registryPort: "
+                            + port);
                 }
                 rmiRegistry = LocateRegistry.createRegistry(port);
             }
@@ -250,8 +250,8 @@ public class JmxManager implements NotificationListener
             }
             catch (NoSuchObjectException e)
             {
-                logger.warn("Unexpected error while shutting down RMI registry",
-                        e);
+                logger.warn(
+                        "Unexpected error while shutting down RMI registry", e);
             }
             rmiRegistry = null;
         }
@@ -317,18 +317,20 @@ public class JmxManager implements NotificationListener
                         cipherArray = null;
 
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
-                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
-                            cipherArray, protocolArray, false);
-                    env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
-                            csf);
-                    env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
-                            ssf);
+                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory();
+                    // SslRMIServerSocketFactory ssf = new
+                    // SslRMIServerSocketFactory(
+                    // cipherArray, protocolArray, false);
+                    //env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
+                    //        csf);
+                    //env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
+                    //        ssf);
                 }
                 catch (IllegalArgumentException ie)
                 {
                     logger.warn("Some of the protocols or ciphers are not supported. "
                             + ie.getMessage());
-                    throw new IllegalArgumentException(ie.getCause());
+                    throw new RuntimeException(ie.getLocalizedMessage(), ie);
                 }
             }
 
@@ -337,21 +339,18 @@ public class JmxManager implements NotificationListener
                     .newJMXConnectorServer(address, env, mbs);
             connector.start();
 
-            logger.info(MessageFormat.format(
-                    "JMXConnector: security.properties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
-                    (authenticationInfo != null)
-                            ? authenticationInfo
-                                    .getParentPropertiesFileLocation()
-                            : "No security.properties file found !...",
-                    (authenticationInfo != null)
-                            ? authenticationInfo.isAuthenticationNeeded()
-                            : false,
-                    (authenticationInfo != null)
-                            ? authenticationInfo.isUseEncryptedPasswords()
-                            : false,
-                    (authenticationInfo != null)
-                            ? authenticationInfo.isEncryptionNeeded()
-                            : false));
+            logger.info(MessageFormat
+                    .format("JMXConnector: security.properties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
+                            (authenticationInfo != null)
+                                    ? authenticationInfo
+                                            .getParentPropertiesFileLocation()
+                                    : "No security.properties file found !...",
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isAuthenticationNeeded() : false,
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isUseEncryptedPasswords() : false,
+                            (authenticationInfo != null) ? authenticationInfo
+                                    .isEncryptionNeeded() : false));
             logger.info(String.format("JMXConnector started at address %s",
                     serviceAddress));
 
@@ -467,8 +466,7 @@ public class JmxManager implements NotificationListener
      * @param mbeanName A custom name for this MBean
      * @throws ServerRuntimeException
      */
-    public static void unregisterMBean(Class<?> mbeanInterface,
-            String mbeanName)
+    public static void unregisterMBean(Class<?> mbeanInterface, String mbeanName)
     {
         MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
         try
@@ -490,8 +488,7 @@ public class JmxManager implements NotificationListener
         {
             throw new ServerRuntimeException(
                     "Unable to unregister mbean: interface=" + mbeanInterface
-                            + " name=" + mbeanName,
-                    e);
+                            + " name=" + mbeanName, e);
 
         }
     }
@@ -612,9 +609,9 @@ public class JmxManager implements NotificationListener
             // .format("Cannot establish a connection with component '%s' at
             // address %s:%d\n",
             // serviceName, host, registryPort);
-            String errorMessage = MessageFormat.format(
-                    "Cannot establish a connection with component {0} at address {1}:{2}\n{3}",
-                    serviceName, host, registryPort, e);
+            String errorMessage = MessageFormat
+                    .format("Cannot establish a connection with component {0} at address {1}:{2}\n{3}",
+                            serviceName, host, registryPort, e);
             String errorReason = null;
             AssertionError assertionError = null;
 
@@ -628,8 +625,9 @@ public class JmxManager implements NotificationListener
             // Encryption required by server
             else if (e.getCause() instanceof SSLHandshakeException)
             {
-                errorReason = String.format("Reason="
-                        + "javax.net.ssl.SSLHandshakeException: Server requires SSL.\n");
+                errorReason = String
+                        .format("Reason="
+                                + "javax.net.ssl.SSLHandshakeException: Server requires SSL.\n");
                 assertionError = new AssertionError(
                         "Encryption required by server");
             }
@@ -641,9 +639,9 @@ public class JmxManager implements NotificationListener
             // Other IOException
             else if (e instanceof IOException)
             {
-                errorMessage = String.format(
-                        "A component of type '%s' at address %s:%d is not available.\n %s\n",
-                        serviceName, host, registryPort, e);
+                errorMessage = String
+                        .format("A component of type '%s' at address %s:%d is not available.\n %s\n",
+                                serviceName, host, registryPort, e);
                 errorReason = "Check to be sure that the service is running.\n";
             }
 
@@ -652,9 +650,10 @@ public class JmxManager implements NotificationListener
                 logger.debug(String.format(errorMessage + errorReason), e);
             }
 
-            throw new ServerRuntimeException(
-                    String.format(errorMessage + errorReason),
-                    (assertionError != null) ? assertionError : e);
+            throw new ServerRuntimeException(String.format(errorMessage
+                    + errorReason), (assertionError != null)
+                    ? assertionError
+                    : e);
         }
     }
 
@@ -714,9 +713,10 @@ public class JmxManager implements NotificationListener
         }
         catch (ClassNotFoundException c)
         {
-            throw new ServerRuntimeException(String.format(
-                    "Cannot get an RMI proxy for class %s because the interface class %s was not found",
-                    mbeanClass.getName(), mbeanInterfaceClassName));
+            throw new ServerRuntimeException(
+                    String.format(
+                            "Cannot get an RMI proxy for class %s because the interface class %s was not found",
+                            mbeanClass.getName(), mbeanInterfaceClassName));
         }
 
         try
@@ -729,9 +729,10 @@ public class JmxManager implements NotificationListener
         }
         catch (Exception e)
         {
-            throw new ServerRuntimeException(String.format(
-                    "Cannot get an RMI proxy for class %s because of this exception: %s",
-                    mbeanClass.getName(), e), e);
+            throw new ServerRuntimeException(
+                    String.format(
+                            "Cannot get an RMI proxy for class %s because of this exception: %s",
+                            mbeanClass.getName(), e), e);
         }
     }
 
