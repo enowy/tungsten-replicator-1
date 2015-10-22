@@ -94,6 +94,6 @@ public class SecurityConf
 
     /** System variable names */
     static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                       = "javax.rmi.ssl.client.enabledProtocols";
-    static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                         = "javax.rmi.ssl.client.enabledCiphers";
+    static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                         = "javax.rmi.ssl.client.enabledCipherSuites";
 
 }
