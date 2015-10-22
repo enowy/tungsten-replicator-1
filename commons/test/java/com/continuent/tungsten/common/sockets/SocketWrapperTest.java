@@ -41,7 +41,7 @@ import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 /**
  * Implements a test of client and server socket wrappers using SSL and non-SSL

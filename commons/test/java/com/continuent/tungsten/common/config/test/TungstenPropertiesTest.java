@@ -45,7 +45,7 @@ import org.apache.log4j.Logger;
 import com.continuent.tungsten.common.config.Interval;
 import com.continuent.tungsten.common.config.TungstenProperties;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 import junit.framework.TestCase;
 
 /**
@@ -488,7 +488,7 @@ public class TungstenPropertiesTest extends TestCase
         Assert.assertEquals("Int value", -2, so.getMyInt());
         Assert.assertEquals("Long value", 25, so.getMyLong());
         Assert.assertTrue("Float value", (1.0 == so.getMyFloat()));
-        Assert.assertEquals("Double value", -1.0, so.getMyDouble());
+        Assert.assertTrue("Double value", (-1.0 == so.getMyDouble()));
         Assert.assertEquals("Boolean value", true, so.isMyBoolean());
         Assert.assertEquals("Char value", 'a', so.getMyChar());
         Assert.assertEquals("Date value", now, so.getMyDate());
