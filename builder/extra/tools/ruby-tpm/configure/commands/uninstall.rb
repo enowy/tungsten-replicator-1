@@ -133,13 +133,16 @@ module UninstallClusterDeploymentStep
           @config.getProperty([REPL_SERVICES, rs_alias, REPL_LOG_DIR])
         ].each{
           |dir|
-          
+          # Don't delete the base directory if it's not under the home
+          # directory. This prevents deleting a symlink or special path
           if dir =~ /#{@config.getProperty(HOME_DIRECTORY)}/
             FileUtils.rmtree(dir)
           else
             FileUtils.rmtree(Dir.glob(dir + "/*"))
           end
         }
+        
+        trigger_event(:uninstall_replication_service, rs_alias)
       }
       
       if replicator_started == true

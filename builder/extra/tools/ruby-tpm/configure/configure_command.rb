@@ -1291,7 +1291,9 @@ module ConfigureCommand
     }.new(config)
 
     # Execute each of the deployment steps
-    obj.prepare(get_deployment_object_modules(config))
+    base = get_deployment_object_modules(config)
+    additional = AdditionalDeploymentStep.get(self, config)
+    obj.prepare(base + additional)
     return obj
   end
   
@@ -1442,7 +1444,7 @@ module DatabaseTypeDeploymentStep
   end
 end
 
-module ContinuentDeploymentStep
+module AdditionalDeploymentStep
   def self.included(subclass)
     @submodules ||= []
     @submodules << subclass
@@ -1450,5 +1452,21 @@ module ContinuentDeploymentStep
 
   def self.submodules
     @submodules || []
+  end
+  
+  def self.get(command, config)
+    r = []
+    
+    self.submodules().each{
+      |module_def|
+      begin
+        if module_def.include_in_command?(command, config)
+          r << module_def
+        end
+      rescue NoMethodError
+      end
+    }
+    
+    return r
   end
 end
