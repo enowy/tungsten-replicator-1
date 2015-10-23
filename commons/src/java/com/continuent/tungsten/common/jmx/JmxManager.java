@@ -47,6 +47,7 @@ import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
 import javax.management.remote.rmi.RMIConnectorServer;
 import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLServerSocketFactory;
 import javax.rmi.ssl.SslRMIClientSocketFactory;
 import javax.rmi.ssl.SslRMIServerSocketFactory;
 
@@ -317,14 +318,16 @@ public class JmxManager implements NotificationListener
                         cipherArray = null;
 
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
-                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory();
-                    // SslRMIServerSocketFactory ssf = new
-                    // SslRMIServerSocketFactory(
-                    // cipherArray, protocolArray, false);
-                    //env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
-                    //        csf);
-                    //env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
-                    //        ssf);
+                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
+                            SecurityHelper.getMatchingStrings(
+                                    ((SSLServerSocketFactory) SSLServerSocketFactory
+                                            .getDefault())
+                                            .getSupportedCipherSuites(), cipherArray), 
+                            protocolArray, false);
+                    env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
+                            csf);
+                    env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
+                            ssf);
                 }
                 catch (IllegalArgumentException ie)
                 {
