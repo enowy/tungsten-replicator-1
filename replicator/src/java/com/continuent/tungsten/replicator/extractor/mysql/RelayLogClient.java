@@ -67,7 +67,7 @@ public class RelayLogClient
     // Options.
     private String                    url                         = "jdbc:mysql:thin://localhost:3306/";
     private String                    login                       = "tungsten";
-    private String                    password                    = "secret";
+    private String                    password                    = null;
     private String                    binlog                      = null;
     private String                    binlogPrefix                = "mysql-bin";
     private long                      offset                      = 4;
