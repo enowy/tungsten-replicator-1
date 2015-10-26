@@ -51,66 +51,67 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
 public class PasswordManagerCtrl
 {
 
-    private static Logger logger = Logger.getLogger(PasswordManagerCtrl.class);
+    private static Logger                                logger                         = Logger
+            .getLogger(PasswordManagerCtrl.class);
 
-    private Options                                      helpOptions           = new Options();
-    private Options                                      options               = new Options();
+    private Options                                      helpOptions                    = new Options();
+    private Options                                      options                        = new Options();
     private static PasswordManagerCtrl                   pwd;
-    private static PasswordManager.ClientApplicationType clientApplicationType = null;
-    public PasswordManager                               passwordManager       = null;
+    private static PasswordManager.ClientApplicationType clientApplicationType          = null;
+    public PasswordManager                               passwordManager                = null;
 
     // --- Options overriding elements in security.properties ---
-    private Boolean useEncryptedPassword           = null;
-    private String  truststoreLocation             = null;
-    private String  truststorePassword             = null;
-    private String  truststorePasswordFileLocation = null;
-    private String  keystoreLocation               = null;
-    private String  keystorePassword               = null;
-    private String  keystorePasswordFileLocation   = null;
-    private String  passwordFileLocation           = null;
-    private String  userPasswordFileLocation       = null;
+    private Boolean                                      useEncryptedPassword           = null;
+    private String                                       truststoreLocation             = null;
+    private String                                       truststorePassword             = null;
+    private String                                       truststorePasswordFileLocation = null;
+    private String                                       keystoreLocation               = null;
+    private String                                       keystorePassword               = null;
+    private String                                       keystorePasswordFileLocation   = null;
+    private String                                       passwordFileLocation           = null;
+    private String                                       userPasswordFileLocation       = null;
 
     // -- Define constants for command line arguments ---
-    private static final String HELP                         = "help";
-    private static final String _HELP                        = "h";
-    private static final String _AUTHENTICATE                = "a";
-    private static final String AUTHENTICATE                 = "authenticate";
-    private static final String CREATE                       = "create";
-    private static final String _CREATE                      = "c";
-    private static final String DELETE                       = "delete";
-    private static final String _DELETE                      = "d";
-    private static final String FILE                         = "file";
-    private static final String _FILE                        = "f";
-    private static final String TARGET_APPLICATION           = "target";
-    private static final String _TARGET_APPLICATION          = "t";
-    private static final String _ENCRYPTED_PASSWORD          = "e";
-    private static final String ENCRYPTED_PASSWORD           = "encrypted.password";
-    private static final String _TRUSTSTORE_LOCATION         = "ts";
-    private static final String TRUSTSTORE_LOCATION          = "truststore.location";
-    private static final String _TRUSTSTORE_PASSWORD         = "tsp";
-    private static final String TRUSTSTORE_PASSWORD          = "truststore.password";
-    private static final String _TRUSTSTORE_PASSWORD_FILE    = "tspf";
-    private static final String TRUSTSTORE_PASSWORD_FILE     = "truststore.password.file";
-    private static final String KEYSTORE_LOCATION            = "keystore.location";
-    private static final String _KEYSTORE_LOCATION           = "ks";
-    private static final String KEYSTORE_PASSWORD            = "keystore.password";
-    private static final String _KEYSTORE_PASSWORD           = "ksp";
-    private static final String KEYSTORE_PASSWORD_FILE       = "keystore.password.file";
-    private static final String _KEYSTORE_PASSWORD_FILE      = "kspf";
-    private static final String _PASSWORD_FILE_LOCATION      = "p";
-    private static final String PASSWORD_FILE_LOCATION       = "password.file.location";
-    private static final String _USER_PASSWORD_FILE_LOCATION = "upf";
-    private static final String USER_PASSWORD_FILE_LOCATION  = "user.password.file.location";
+    private static final String                          HELP                           = "help";
+    private static final String                          _HELP                          = "h";
+    private static final String                          _AUTHENTICATE                  = "a";
+    private static final String                          AUTHENTICATE                   = "authenticate";
+    private static final String                          CREATE                         = "create";
+    private static final String                          _CREATE                        = "c";
+    private static final String                          DELETE                         = "delete";
+    private static final String                          _DELETE                        = "d";
+    private static final String                          FILE                           = "file";
+    private static final String                          _FILE                          = "f";
+    private static final String                          TARGET_APPLICATION             = "target";
+    private static final String                          _TARGET_APPLICATION            = "t";
+    private static final String                          _ENCRYPTED_PASSWORD            = "e";
+    private static final String                          ENCRYPTED_PASSWORD             = "encrypted.password";
+    private static final String                          _TRUSTSTORE_LOCATION           = "ts";
+    private static final String                          TRUSTSTORE_LOCATION            = "truststore.location";
+    private static final String                          _TRUSTSTORE_PASSWORD           = "tsp";
+    private static final String                          TRUSTSTORE_PASSWORD            = "truststore.password";
+    private static final String                          _TRUSTSTORE_PASSWORD_FILE      = "tspf";
+    private static final String                          TRUSTSTORE_PASSWORD_FILE       = "truststore.password.file";
+    private static final String                          KEYSTORE_LOCATION              = "keystore.location";
+    private static final String                          _KEYSTORE_LOCATION             = "ks";
+    private static final String                          KEYSTORE_PASSWORD              = "keystore.password";
+    private static final String                          _KEYSTORE_PASSWORD             = "ksp";
+    private static final String                          KEYSTORE_PASSWORD_FILE         = "keystore.password.file";
+    private static final String                          _KEYSTORE_PASSWORD_FILE        = "kspf";
+    private static final String                          _PASSWORD_FILE_LOCATION        = "p";
+    private static final String                          PASSWORD_FILE_LOCATION         = "password.file.location";
+    private static final String                          _USER_PASSWORD_FILE_LOCATION   = "upf";
+    private static final String                          USER_PASSWORD_FILE_LOCATION    = "user.password.file.location";
 
-    private static Option create;
-    private static Option authenticate;
+    private static Option                                create;
+    private static Option                                authenticate;
 
     // --- Exit codes ---
-    private enum EXIT_CODE
+    public enum EXIT_CODE
     {
         EXIT_OK(0), EXIT_ERROR(1);
 
-        private final int value;
+        final int value;
 
         private EXIT_CODE(int value)
         {
@@ -548,8 +549,18 @@ public class PasswordManagerCtrl
         }
         catch (Exception e)
         {
-            logger.error(e.getMessage());
-            Exit(EXIT_CODE.EXIT_ERROR);
+            // Workaround for Junit test
+            if (e.toString().contains("CheckExitCalled"))
+            {
+                throw e;
+            }
+            else
+            // Normal behaviour
+            {
+                logger.error(e.getMessage());
+                Exit(EXIT_CODE.EXIT_ERROR);
+            }
+
         }
 
         Exit(EXIT_CODE.EXIT_OK);
