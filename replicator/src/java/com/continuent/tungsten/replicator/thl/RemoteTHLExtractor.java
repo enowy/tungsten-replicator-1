@@ -58,31 +58,31 @@ import com.continuent.tungsten.replicator.plugin.ShutdownHook;
  */
 public class RemoteTHLExtractor implements Extractor, ShutdownHook
 {
-    private static Logger    logger               = Logger.getLogger(RemoteTHLExtractor.class);
+    private static Logger logger = Logger.getLogger(RemoteTHLExtractor.class);
 
     // Properties.
-    private List<String>     uriList;
-    private int              resetPeriod          = 1;
-    private boolean          checkSerialization   = true;
-    private int              heartbeatMillis      = 3000;
-    private String           preferredRole        = null;
-    private int              preferredRoleTimeout = 32;
-    private int              retryInterval        = 1;
+    private List<String> uriList;
+    private int          resetPeriod          = 1;
+    private boolean      checkSerialization   = true;
+    private int          heartbeatMillis      = 3000;
+    private String       preferredRole        = null;
+    private int          preferredRoleTimeout = 32;
+    private int          retryInterval        = 1;
 
     // Connection control variables.
-    private PluginContext    pluginContext;
-    private ReplDBMSHeader   lastEvent;
-    private String           lastEventId;
-    private Connector        conn;
+    private PluginContext  pluginContext;
+    private ReplDBMSHeader lastEvent;
+    private String         lastEventId;
+    private Connector      conn;
 
-    private ReplEvent        pendingEvent;
+    private ReplEvent pendingEvent;
 
     // Set to show that we have been shut down.
-    private volatile boolean shutdown             = false;
+    private volatile boolean shutdown = false;
 
     // Connection counts for timeouts and retries.
-    private long             timeoutCount         = 0;
-    private long             attemptCount         = 0;
+    private long timeoutCount = 0;
+    private long attemptCount = 0;
 
     /**
      * Create Connector instance.
@@ -191,12 +191,12 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
 
     /**
      * {@inheritDoc}
-     * @throws ConfigurationException 
      * 
+     * @throws ConfigurationException
      * @see com.continuent.tungsten.replicator.extractor.Extractor#extract()
      */
-    public ReplDBMSEvent extract() throws ReplicatorException,
-            InterruptedException
+    public ReplDBMSEvent extract()
+            throws ReplicatorException, InterruptedException
     {
         try
         {
@@ -208,6 +208,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
 
             // Fetch the event.
             ReplEvent replEvent = null;
+            boolean fragmentedTx = false;
+
             while (replEvent == null && !shutdown)
             {
                 // If we have a pending event from an earlier read, return that.
@@ -224,6 +226,7 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                     if (lastEvent != null)
                         if (lastEvent.getLastFrag())
                         {
+                            fragmentedTx = false;
                             if (lastEvent instanceof ReplDBMSFilteredEvent)
                             {
                                 ReplDBMSFilteredEvent ev = (ReplDBMSFilteredEvent) lastEvent;
@@ -233,10 +236,39 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                                 seqno = lastEvent.getSeqno() + 1;
                         }
                         else
+                        {
                             seqno = lastEvent.getSeqno();
+                            fragmentedTx = true;
+                        }
+                    else
+                        fragmentedTx = false;
+
                     replEvent = conn.requestEvent(seqno);
                     if (replEvent == null)
                         continue;
+                    else
+                    {
+                        if (fragmentedTx)
+                        {
+                            // In the middle of a fragmented transaction, skip
+                            // fragments that were already received ; this could
+                            // happen if the connection with the master dropped
+                            // in the middle of the transaction. After
+                            // reconnection, the transaction will be received
+                            // again from the beginning
+                            if (replEvent.getSeqno() == lastEvent.getSeqno()
+                                    && replEvent instanceof ReplDBMSEvent
+                                    && ((ReplDBMSEvent) replEvent)
+                                            .getFragno() <= lastEvent
+                                                    .getFragno())
+                            {
+                                // Skip this fragment, as it was already
+                                // received
+                                replEvent = null;
+                                continue;
+                            }
+                        }
+                    }
 
                     // If the lastEventId was set, we have some housekeeping
                     // ahead of us.
@@ -257,8 +289,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                         // Next, clear the last event ID.
                         if (logger.isDebugEnabled())
                         {
-                            logger.debug("Clearing last event ID: "
-                                    + lastEventId);
+                            logger.debug(
+                                    "Clearing last event ID: " + lastEventId);
                         }
                         lastEventId = null;
                     }
@@ -273,7 +305,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                                     "Ignoring exception after shutdown request",
                                     e);
                         }
-                        logger.info("Connector read failed after shutdown; not attempting to reconnect");
+                        logger.info(
+                                "Connector read failed after shutdown; not attempting to reconnect");
                         break;
                     }
                     else
@@ -300,7 +333,7 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
         }
         catch (ConfigurationException e)
         {
-            throw new ExtractorException(e.getMessage(), e);            
+            throw new ExtractorException(e.getMessage(), e);
         }
         catch (THLException e)
         {
@@ -311,8 +344,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     }
 
     /** Does not make sense for this extractor type. */
-    public String getCurrentResourceEventId() throws ReplicatorException,
-            InterruptedException
+    public String getCurrentResourceEventId()
+            throws ReplicatorException, InterruptedException
     {
         return null;
     }
@@ -337,8 +370,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     public void setLastEventId(String eventId) throws ReplicatorException
     {
         if (logger.isDebugEnabled())
-            logger.debug("Set last event ID on remote THL extractor: "
-                    + eventId);
+            logger.debug(
+                    "Set last event ID on remote THL extractor: " + eventId);
         lastEventId = eventId;
     }
 
@@ -356,18 +389,19 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
         if (this.uriList == null || this.uriList.size() == 0)
         {
             uriList = new ArrayList<String>();
-            uriList.add(context.getReplicatorProperties().get(
-                    ReplicatorConf.MASTER_CONNECT_URI));
+            uriList.add(context.getReplicatorProperties()
+                    .get(ReplicatorConf.MASTER_CONNECT_URI));
         }
 
         // See if we have an online option that overrides serialization
         // checking.
-        if (pluginContext.getOnlineOptions().getBoolean(
-                OpenReplicatorParams.FORCE))
+        if (pluginContext.getOnlineOptions()
+                .getBoolean(OpenReplicatorParams.FORCE))
         {
             if (checkSerialization)
             {
-                logger.info("Force option enabled; log serialization checking is disabled");
+                logger.info(
+                        "Force option enabled; log serialization checking is disabled");
                 checkSerialization = false;
             }
         }
@@ -413,20 +447,22 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
      * 
      * @see com.continuent.tungsten.replicator.plugin.ShutdownHook#shutdown(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void shutdown(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void shutdown(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         // Stop the connector.
         if (logger.isDebugEnabled())
         {
-            logger.debug("Shutdown hook invoked; attempting to close connector");
+            logger.debug(
+                    "Shutdown hook invoked; attempting to close connector");
         }
         shutdown = true;
         release(context);
     }
 
     // Reconnect a failed connection.
-    private void reconnect() throws InterruptedException, ReplicatorException, ConfigurationException
+    private void reconnect() throws InterruptedException, ReplicatorException,
+            ConfigurationException
     {
         synchronized (this)
         {
@@ -463,7 +499,7 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
      * 
      * @throws ReplicatorException
      * @throws InterruptedException
-     * @throws ConfigurationException 
+     * @throws ConfigurationException
      */
     private void openConnector() throws ReplicatorException,
             InterruptedException, ConfigurationException
@@ -496,10 +532,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                 {
                     currentUri = uriManager.next();
                     conn = (Connector) PluginLoader
-                            .load(pluginContext
-                                    .getReplicatorProperties()
-                                    .getString(
-                                            ReplicatorConf.THL_PROTOCOL,
+                            .load(pluginContext.getReplicatorProperties()
+                                    .getString(ReplicatorConf.THL_PROTOCOL,
                                             ReplicatorConf.THL_PROTOCOL_DEFAULT,
                                             false));
                     conn.setURI(currentUri);
@@ -539,20 +573,23 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                 else if (preferredRole.equals(masterRole))
                 {
                     // Accept if there is a preferred role and we have a match.
-                    logger.info("Connection is accepted by role match against master: preferredRole="
-                            + preferredRole + " masterRole=" + masterRole);
+                    logger.info(
+                            "Connection is accepted by role match against master: preferredRole="
+                                    + preferredRole + " masterRole="
+                                    + masterRole);
                     break;
                 }
-                else if (uriManager.getIterations() > 0
-                        && System.currentTimeMillis() > rollTimeoutMillis)
+                else
+                    if (uriManager.getIterations() > 0
+                            && System.currentTimeMillis() > rollTimeoutMillis)
                 {
                     // Accept if we have been through the list at least once
                     // and the timeout has expired.
-                    logger.info("Connection is accepted after roll search timed out: preferredRole="
-                            + preferredRole
-                            + " masterRole="
-                            + masterRole
-                            + " iterations=" + uriManager.getIterations());
+                    logger.info(
+                            "Connection is accepted after roll search timed out: preferredRole="
+                                    + preferredRole + " masterRole="
+                                    + masterRole + " iterations="
+                                    + uriManager.getIterations());
                     break;
                 }
                 else
@@ -584,10 +621,10 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                 {
                     if (logger.isDebugEnabled())
                     {
-                        logger.debug("Unable to find acceptable connection; new round: iterations="
-                                + iterations
-                                + " retryInterval="
-                                + (retryIntervalMillis / 1000));
+                        logger.debug(
+                                "Unable to find acceptable connection; new round: iterations="
+                                        + iterations + " retryInterval="
+                                        + (retryIntervalMillis / 1000));
                     }
                     iterations = uriManager.getIterations();
 
@@ -640,9 +677,10 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
         }
         if (timeoutCount > 0 && (timeoutCount % 10) == 0)
         {
-            logger.info("Timeouts are occurring; check master log to ensure connectivity or increase heartbeatMillis "
-                    + "in service properties file: current value="
-                    + heartbeatMillis);
+            logger.info(
+                    "Timeouts are occurring; check master log to ensure connectivity or increase heartbeatMillis "
+                            + "in service properties file: current value="
+                            + heartbeatMillis);
         }
     }
 
