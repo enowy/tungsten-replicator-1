@@ -6,7 +6,7 @@ replicator.extractor.dbms.plogDirectory=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/mine
 
 # The fragment size for transactions. A value of 0 means that transactions
 # will not be fragmented. 
-replicator.extractor.dbms.transactionFragSize=0
+replicator.extractor.dbms.transactionFragSize=@{REPL_ORACLE_REDO_MINER_TRANSACTION_FRAGMENT_SIZE}
 
 # The extractor queue size, which is the maximum number of rows that 
 # plog extraction can enqueue before pausing to wait for processing. 

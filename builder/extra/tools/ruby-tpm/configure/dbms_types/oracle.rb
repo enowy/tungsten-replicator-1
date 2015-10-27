@@ -11,6 +11,7 @@ REPL_ORACLE_LICENSED_SLAVE = "repl_oracle_licensed_slave"
 REPL_ORACLE_SCAN = "repl_datasource_oracle_scan"
 REPL_ORACLE_EXTRACTOR_METHOD = "repl_oracle_extractor_method"
 REPL_ORACLE_REDO_MINER_DIRECTORY = "repl_oracle_redo_miner_directory"
+REPL_ORACLE_REDO_MINER_TRANSACTION_FRAGMENT_SIZE = "repl_oracle_redo_miner_transaction_fragment_size"
 
 EXTRACTOR_REPL_ORACLE_SERVICE = "repl_direct_datasource_oracle_service"
 EXTRACTOR_REPL_ORACLE_SID = "repl_direct_datasource_oracle_sid"
@@ -368,6 +369,18 @@ class OracleExtractorRedoMinerDirectory < OracleConfigurePrompt
     home = @config.getProperty(HOME_DIRECTORY)
     ds = @config.getProperty(get_member_key(DEPLOYMENT_DATASERVICE))
     @default = "#{home}/plog/#{ds}"
+  end
+end
+
+class OracleExtractorRedoMinerTransactionFragmentSize < OracleConfigurePrompt
+  include DatasourcePrompt
+  
+  def initialize
+    super(REPL_ORACLE_REDO_MINER_TRANSACTION_FRAGMENT_SIZE, "Oracle Redo Miner Transaction Fragment Size", PV_INTEGER, "1000")
+  end
+  
+  def enabled?
+    super() && (@config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) == "redo")
   end
 end
 
