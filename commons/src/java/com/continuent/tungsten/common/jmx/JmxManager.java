@@ -319,11 +319,7 @@ public class JmxManager implements NotificationListener
 
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
                     SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
-                            SecurityHelper.getMatchingStrings(
-                                    ((SSLServerSocketFactory) SSLServerSocketFactory
-                                            .getDefault())
-                                            .getSupportedCipherSuites(), cipherArray), 
-                            protocolArray, false);
+                            cipherArray, protocolArray, false);
                     env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
                             csf);
                     env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
