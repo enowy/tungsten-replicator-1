@@ -20,11 +20,15 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.text.MessageFormat;
 import java.util.Collections;
+import java.util.Random;
 
 import javax.management.remote.JMXAuthenticator;
 import javax.management.remote.JMXPrincipal;
 import javax.security.auth.Subject;
+
+import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
@@ -37,8 +41,8 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
  */
 public class RealmJMXAuthenticator implements JMXAuthenticator
 {
-    // private static final Logger logger = Logger.getLogger(JmxManager.class);
-    // private TungstenProperties passwordProps = null;
+    private static final Logger logger                 = Logger
+            .getLogger(RealmJMXAuthenticator.class);
 
     private AuthenticationInfo  authenticationInfo     = null;
 
@@ -106,6 +110,24 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
         }
         else
         {
+            try
+            {
+                // Generate a random number between 1 and 10
+                Random rand = new Random();
+                int randomNum = rand.nextInt((10 - 1) + 1) + 1;
+
+                // Sleep a random number of seconds = between 1 and 10
+                logger.info(MessageFormat.format(
+                        "Invalid credentials. Sleeping (s): {0,number,#}",
+                        randomNum));
+                randomNum = randomNum * 1000;
+                Thread.sleep(randomNum);
+
+            }
+            catch (InterruptedException e)
+            {
+                logger.error(MessageFormat.format("Could not sleep !: {0}", e));
+            }
             throw new SecurityException(INVALID_CREDENTIALS);
         }
     }
