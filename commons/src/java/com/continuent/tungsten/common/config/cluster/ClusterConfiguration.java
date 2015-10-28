@@ -982,7 +982,7 @@ public class ClusterConfiguration
         return clusterHomeName;
     }
 
-    public void setClusterHome(String chome)
+    public static void setClusterHome(String chome)
     {
         clusterHomeName = chome;
     }
