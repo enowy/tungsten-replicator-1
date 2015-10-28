@@ -3,6 +3,8 @@ DBMS_ORACLE = "oracle"
 # Oracle-specific parameters.
 REPL_ORACLE_SERVICE = "repl_datasource_oracle_service"
 REPL_ORACLE_SID = "repl_datasource_oracle_sid"
+REPL_ORACLE_SYSTEM_USER = "repl_datasource_oracle_service_user"
+REPL_ORACLE_SYSTEM_GROUP = "repl_datasource_oracle_service_group"
 REPL_ORACLE_DSPORT = "repl_oracle_dslisten_port"
 REPL_ORACLE_HOME = "repl_oracle_home"
 REPL_ORACLE_LICENSE = "repl_oracle_license"
@@ -252,13 +254,10 @@ end
 
 class OracleHome < OracleConfigurePrompt
   include DatasourcePrompt
+  include OptionalPromptModule
   
   def initialize
     super(REPL_ORACLE_HOME, "Oracle Home", PV_FILENAME)
-  end
-  
-  def required?
-    false
   end
   
   def load_default_value
@@ -289,16 +288,38 @@ class OracleSCAN < OracleConfigurePrompt
   end
 end
 
+class OracleSystemUser < OracleConfigurePrompt
+  include DatasourcePrompt
+
+  def initialize
+    super(REPL_ORACLE_SYSTEM_USER, "Oracle service system user", 
+      PV_ANY, "oracle")
+  end
+end
+
+class OracleSystemGroup < OracleConfigurePrompt
+  include DatasourcePrompt
+
+  def initialize
+    super(REPL_ORACLE_SYSTEM_GROUP, "Oracle service system group", PV_ANY)
+  end
+  
+  def load_default_value
+    begin
+      oracle_user = get_member_property(REPL_ORACLE_SYSTEM_USER)
+      @default = cmd_result("id #{oracle_user} -g -n")
+    rescue CommandError
+    end
+  end
+end
+
 class OracleExtractorMethod < OracleConfigurePrompt
   include DatasourcePrompt
+  include OptionalPromptModule
 
   def initialize
     super(REPL_ORACLE_EXTRACTOR_METHOD, "Oracle extractor
       method", PV_ANY)
-  end
-
-  def required?
-    false
   end
 end
 
@@ -448,7 +469,7 @@ class DirectOracleServiceSIDCheck < ConfigureValidationCheck
   end
 end
 
-class OracleRedoReaderCheck < ConfigureValidationCheck
+class OracleRedoReaderMinerDirectoryCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include OracleCheck
   

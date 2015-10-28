@@ -140,6 +140,14 @@ module GroupValidationCheckMember
     [@parent_group.name, get_member(), name]
   end
   
+  def get_member_value(key)
+    @config.getProperty(get_member_key(key))
+  end
+  
+  def get_member_property(key)
+    get_member_value(key)
+  end
+  
   def enabled?
     if skip_class_validation?()
       debug("Skipping validation check '#{self.class.name}'")

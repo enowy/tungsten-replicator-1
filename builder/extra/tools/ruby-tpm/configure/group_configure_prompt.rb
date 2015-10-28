@@ -448,6 +448,10 @@ module GroupConfigurePromptMember
     @config.getProperty(get_member_key(key))
   end
   
+  def get_member_property(key)
+    get_member_value(key)
+  end
+  
   def get_default_value
     if get_member() != DEFAULTS
       value = get_group_default_value()
