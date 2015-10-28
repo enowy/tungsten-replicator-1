@@ -895,6 +895,81 @@ class CurrentCommandCoordinatorCheck < ConfigureValidationCheck
   end
 end
 
+class KeystoresToCommitCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  include CommitValidationCheck
+  
+  def set_vars
+    @title = "Collect information on the certificates to be used"
+  end
+  
+  def validate
+    tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+    tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
+    jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+    jgroups_keystore = @config.getTemplateValue(JAVA_JGROUPS_KEYSTORE_PATH)
+    ks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    if File.exists?(tls_keystore)
+      keystore = JavaKeytool.new(tls_keystore)
+      listing = keystore.list(ks_pass)
+      if listing.has_key?(tls_alias)
+        output_property("final_tls_certificate_sha256", listing[tls_alias][JavaKeytool::SHA256])
+      end
+    end
+    
+    if File.exists?(jgroups_keystore)
+      keystore = JavaKeytool.new(jgroups_keystore, JavaKeytool::TYPE_JCEKS)
+      listing = keystore.list(ks_pass)
+      if listing.has_key?(jgroups_alias)
+        output_property("final_jgroups_certificate_md5", listing[jgroups_alias][JavaKeytool::MD5])
+      end
+    end
+  end
+end
+
+class GlobalRestartComponentsCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  include PostValidationCommitCheck
+  
+  def set_vars
+    @title = "Check across all configs to see if components need to be restarted"
+  end
+  
+  def validate
+    props = Configurator.instance.command.get_validation_handler().output_properties.props
+    
+    Configurator.instance.command.get_deployment_configurations.each{
+      |cfg|
+      cfg_key = cfg.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
+      if props.has_key?(cfg_key)
+        initial_tls = props[cfg_key]["initial_tls_certificate_sha256"]
+        final_tls = props[cfg_key]["final_tls_certificate_sha256"]
+        initial_jgroups = props[cfg_key]["initial_jgroups_certificate_md5"]
+        final_jgroups = props[cfg_key]["final_jgroups_certificate_md5"]
+        
+        if initial_tls != final_tls
+          if props[cfg_key][RESTART_REPLICATORS] == false
+            props[cfg_key][RESTART_REPLICATORS] = true
+          end
+          if props[cfg_key][RESTART_MANAGERS] == false
+            props[cfg_key][RESTART_MANAGERS] = true
+          end
+          if props[cfg_key][RESTART_CONNECTORS] == false
+            props[cfg_key][RESTART_CONNECTORS] = true
+          end
+        end
+        
+        if initial_jgroups != final_jgroups
+          if props[cfg_key][RESTART_MANAGERS] == false
+            props[cfg_key][RESTART_MANAGERS] = true
+          end
+        end
+      end
+    }
+  end
+end
+
 class ActiveDirectoryIsRunningCheck < ConfigureValidationCheck
   include ClusterHostCheck
   include CommitValidationCheck
@@ -1296,6 +1371,41 @@ class HostsFileCheck < ConfigureValidationCheck
       }
     rescue CommandError
       error("Unable to check /etc/hosts for entries matching #{@config.getProperty(HOST)}")
+    end
+  end
+end
+
+class KeystoresCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Check existing Java Keystores"
+  end
+  
+  def validate
+    ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
+    ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
+    jceks = @config.getTemplateValue(JAVA_JGROUPS_KEYSTORE_PATH)
+    password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+
+    # Keystore
+    if File.exists?(ks)
+      keystore = JavaKeytool.new(ks)
+      listing = keystore.list(password)
+      tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+      if listing.has_key?(tls_alias)
+        output_property("initial_tls_certificate_sha256", listing[tls_alias][JavaKeytool::SHA256])
+      end
+    end
+    
+    # Jgroups
+    if File.exists?(jceks)
+      keystore = JavaKeytool.new(jceks, JavaKeytool::TYPE_JCEKS)
+      listing = keystore.list(password)
+      jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+      if listing.has_key?(jgroups_alias)
+        output_property("initial_jgroups_certificate_md5", listing[jgroups_alias][JavaKeytool::MD5])
+      end
     end
   end
 end

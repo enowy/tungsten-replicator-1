@@ -232,7 +232,7 @@ class ConfigureValidationHandler
     configs.each{
       |config|
       
-      @output_properties.setProperty(config.getProperty(DEPLOYMENT_HOST), {})
+      @output_properties.setProperty(config.getProperty(DEPLOYMENT_CONFIGURATION_KEY), {})
     }
     
     if @commit_checks.size() == 0

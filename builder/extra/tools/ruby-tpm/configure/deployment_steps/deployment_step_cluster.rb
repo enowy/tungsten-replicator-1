@@ -136,44 +136,11 @@ module ConfigureDeploymentStepDeployment
     tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
     tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
     if File.exist?(tls_keystore)
-      if File.exist?(ks)
-        cmd = ["keytool -delete -alias #{tls_alias}",
-        	"-keystore #{ks}",
-        	"-storepass #{ks_pass}"]
-        cmd_result(cmd.join(" "))
-      end
-
-      cmd = ["keytool -importkeystore -noprompt",
-      	"-srckeystore #{tls_keystore}",
-      	"-srcstorepass #{ks_pass}",
-      	"-srckeypass #{ks_pass}",
-      	"-destkeystore #{ks}",
-      	"-deststorepass #{ks_pass}",
-      	"-destkeypass #{ks_pass}",
-      	"-srcalias #{tls_alias} -destalias #{tls_alias}"]
-      cmd_result(cmd.join(" "))
+      keystore = JavaKeytool.new(ks)
+      keystore.import(tls_keystore, tls_alias, ks_pass)
       
-      local_cert = Tempfile.new("tcfg")
-      local_cert.close()
-      File.unlink(local_cert.path())
-      
-      cmd = ["keytool -export -alias #{tls_alias}",
-        "-file #{local_cert.path()}",
-        "-keystore #{ks} -storepass #{ks_pass}",
-        "-keypass #{ks_pass}"]
-      cmd_result(cmd.join(" "))
-      
-      if File.exist?(ts)
-        cmd = ["keytool -delete -alias #{tls_alias}",
-        	"-keystore #{ts}",
-        	"-storepass #{ts_pass}"]
-        cmd_result(cmd.join(" "))
-      end
-      
-      cmd = ["keytool -import -trustcacerts -alias #{tls_alias}",
-        "-file #{local_cert.path()} -keystore #{ts}",
-        "-storepass #{ts_pass} -noprompt"]
-      cmd_result(cmd.join(" "))
+      truststore = JavaKeytool.new(ts)
+      truststore.trust(tls_keystore, tls_alias, ks_pass)
     end
     
     if File.exist?(ks)

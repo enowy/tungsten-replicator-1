@@ -44,7 +44,7 @@ module ClusterSecurityFiles
     
     tls_ks = HostJavaTLSKeystorePath.build_keystore(
       staging_temp_directory(),
-      config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, ks_pass, lifetime
+      config.getProperty(JAVA_TLS_ENTRY_ALIAS), ks_pass, lifetime
     )
     local_tls_ks = Tempfile.new("tlssec")
     local_tls_ks.close()
@@ -67,7 +67,7 @@ module ClusterSecurityFiles
     
     jgroups_ks = HostJavaJgroupsKeystorePath.build_keystore(
       staging_temp_directory(),
-      config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS), ks_pass, ks_pass
+      config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS), ks_pass
     )
     local_jgroups_ks = Tempfile.new("jgroupssec")
     local_jgroups_ks.close()

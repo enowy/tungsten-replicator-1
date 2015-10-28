@@ -1531,7 +1531,9 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   end
   
   def load_default_value
-    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+    if get_member_property(HOST_ENABLE_MANAGER) == "false"
+      @default = "false"
+    elsif get_member_property(DISABLE_SECURITY_CONTROLS) == "true"
       @default = "false"
     else
       @default = "true"
@@ -1577,7 +1579,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, storepass)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1599,11 +1601,8 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
       File.unlink(ks.path())
       path = "#{dest}/#{File.basename(ks.path())}"
       
-      cmd = ["keytool -genseckey -alias #{keyalias}",
-        "-keypass #{keypass}",
-        "-storepass #{storepass} -keyalg Blowfish -keysize 56",
-        "-keystore #{path} -storetype JCEKS"]
-      cmd_result(cmd.join(" "))
+      keystore = JavaKeytool.new(path, JavaKeytool::TYPE_JCEKS)
+      keystore.genseckey(keyalias, storepass)
       
       @keystores[keyalias] = path
       
@@ -1880,7 +1879,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, keypass, storepass, lifetime)
+  def self.build_keystore(dest, keyalias, storepass, lifetime)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1902,12 +1901,8 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       File.unlink(ks.path())
       path = "#{dest}/#{File.basename(ks.path())}"
       
-      cmd = ["keytool -genkey -alias #{keyalias}",
-        "-keyalg RSA -keystore #{path}",
-        "-validity #{lifetime}",
-        "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
-        "-storepass #{storepass} -keypass #{keypass}"]
-      cmd_result(cmd.join(" "))
+      keystore = JavaKeytool.new(path)
+      keystore.genkey(keyalias, storepass, lifetime)
       
       @keystores[keyalias] = path
       

@@ -19,20 +19,9 @@ class UpdateCommand
    
     if @restart_replicators == false
       override_promotion_setting(RESTART_REPLICATORS, false)
-    else
-      if @replace_tls_certificate == true
-        override_promotion_setting(RESTART_REPLICATORS, true)
-      end
     end
     if @restart_managers == false
       override_promotion_setting(RESTART_MANAGERS, false)
-    else
-      if @replace_tls_certificate == true
-        override_promotion_setting(RESTART_MANAGERS, true)
-      end
-      if @replace_jgroups_certificate == true
-        override_promotion_setting(RESTART_MANAGERS, true)
-      end
     end
     if @restart_connectors == false
       override_promotion_setting(RESTART_CONNECTORS, false)

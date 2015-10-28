@@ -47,6 +47,7 @@ system_require 'configure/database_platform'
 system_require 'configure/cctrl'
 system_require 'configure/topology'
 system_require 'configure/watch_files'
+system_require 'configure/keytool'
 
 begin
   require 'readline'
