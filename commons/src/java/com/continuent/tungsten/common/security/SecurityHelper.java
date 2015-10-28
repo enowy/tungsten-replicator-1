@@ -808,41 +808,33 @@ public class SecurityHelper
             String[] enabledCiphers, String[] enabledProtocols)
             throws ConfigurationException
     {
-        // Check that ciphers and protocols lists aren't empty
-        if (enabledCiphers == null || enabledCiphers.length == 0)
+        if (enabledCiphers != null && enabledCiphers.length > 0)
         {
-            throw new ConfigurationException(
-                    "No ciphers are enabled in security properties.");
-        }
-        if (enabledProtocols == null || enabledProtocols.length == 0)
-        {
-            throw new ConfigurationException(
-                    "No protocols are enabled in security properties.");
-        }
+            if (SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers).length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) cipher suites.");
+            }
 
-        // Set cipher suites and protocols
-        if (SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedCipherSuites(), enabledCiphers).length == 0)
-        {
-            throw new ConfigurationException("SSLSocket doesn't support any "
-                    + "of the enabled (configured) cipher suites.");
+            // Enable ciphers which are both supported by socket service and
+            // configured by user
+            sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers));            
         }
-        // Enable ciphers which are both supported by socket service and
-        // configured by user
-        sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedCipherSuites(), enabledCiphers));
-
-        if (SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedProtocols(), enabledProtocols).length == 0)
+               
+        if (enabledProtocols != null && enabledProtocols.length > 0)
         {
-            throw new ConfigurationException("SSLSocket doesn't support any "
-                    + "of the enabled (configured) protocols.");
+            if (SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedProtocols(), enabledProtocols).length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) protocols.");
+            }
+            // Enable protocols which are both supported by socket and
+            // configured by user.
+            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedProtocols(), enabledProtocols));
         }
-
-        // Enable protocols which are both supported by socket and
-        // configured by user.
-        sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedProtocols(), enabledProtocols));
     }
-
 }
