@@ -31,12 +31,23 @@ class UpdateCommand
   end
   
   def prepare_config_for_command(config)
+    config_type = config.getProperty(DEPLOYMENT_EXTERNAL_CONFIGURATION_TYPE)
+    config_source = config.getProperty(DEPLOYMENT_EXTERNAL_CONFIGURATION_SOURCE)
+    
     if @replace_tls_certificate == true
-      generate_tls_certificate(config)
+      if config_type.to_s() != ""
+        error(get_replace_certificate_with_external_source_error("--replace-tls-certificate", config_source))
+      else
+        generate_tls_certificate(config)
+      end
     end
     
     if @replace_jgroups_certificate == true
-      generate_jgroups_certificate(config)
+      if config_type.to_s() != ""
+        error(get_replace_certificate_with_external_source_error("--replace-jgroups-certificate", config_source))
+      else
+        generate_jgroups_certificate(config)
+      end
     end
   end
 
@@ -72,14 +83,35 @@ class UpdateCommand
       }
     else
       opts.on("--replace-release") { @replace_release = true }
-      opts.on("--replace-jgroups-certificate") { @replace_jgroups_certificate = true }
-      opts.on("--replace-tls-certificate") { @replace_tls_certificate = true }
     end
     
+    opts.on("--replace-jgroups-certificate") { @replace_jgroups_certificate = true }
+    opts.on("--replace-tls-certificate") { @replace_tls_certificate = true }
+    
     opts = Configurator.instance.run_option_parser(opts, arguments)
+    
+    if @replace_jgroups_certificate == true
+      if Configurator.instance.is_locked?()
+        error(get_replace_certificate_from_installed_error("--replace-jgroups-certificate"))
+      end
+    end
+    
+    if @replace_tls_certificate == true
+      if Configurator.instance.is_locked?()
+        error(get_replace_certificate_from_installed_error("--replace-tls-certificate"))
+      end
+    end
 
     # Return options. 
     opts
+  end
+  
+  def get_replace_certificate_from_installed_error(arg)
+    return "The #{arg} option is not supported from an installed directory. This option may only be used from the staging directory to replace certificates across all hosts. Communication would be disrupted if the certificate is only replaced on a single host."
+  end
+  
+  def get_replace_certificate_with_external_source_error(arg, source)
+    return "The #{arg} option is not supported when using an external configuration source. All configuration changes must be made in #{source} before running `tpm update`."
   end
   
   def get_default_remote_package_path
