@@ -110,9 +110,9 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   
   def getExternalLibraries()
     java_out = cmd_result("java -version 2>&1")
-    if java_out =~ /version 1\.8\./
+    if java_out =~ /version \"1\.8\./
       allowed_jars = ["ojdbc8.jar", "ojdbc7.jar", "ojdbc6.jar"]
-    elsif java_out =~ /version 1\.7\./
+    elsif java_out =~ /version \"1\.7\./
       allowed_jars = ["ojdbc7.jar", "ojdbc6.jar"]
     else
       allowed_jars = ["ojdbc6.jar"]
