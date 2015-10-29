@@ -2,6 +2,7 @@ module ConfigureDeploymentStepDeployment
   def get_methods
     [
       ConfigureDeploymentMethod.new("create_release", 0, -40),
+      ConfigureDeploymentMethod.new("deploy_external_libraries"),
       ConfigureCommitmentMethod.new("commit_release")
     ]
   end
@@ -584,5 +585,54 @@ EOF
   def write_policymgr_properties
     transform_host_template("cluster-home/conf/policymgr.properties",
       "tungsten-connector/samples/conf/policymgr.properties.tpl")
+  end
+  
+  def deploy_external_libraries
+    external_libraries = {}
+    @config.getPropertyOr(REPL_SERVICES, {}).keys().each{
+      |rs_alias|
+      if rs_alias == DEFAULTS
+        next
+      end
+      
+      rs_prefix = [REPL_SERVICES, rs_alias]
+      ds_alias = @config.getProperty(rs_prefix + [DEPLOYMENT_DATASERVICE])
+      topology = Topology.build(ds_alias, @config)
+      
+      if topology.enable_dedicated_extractor_datasource?() == true
+        ds = ConfigureDatabasePlatform.build(rs_prefix, @config, true)
+        include_external_libraries_in_hash(ds, external_libraries)
+      end
+      
+      ds = ConfigureDatabasePlatform.build(rs_prefix, @config)
+      include_external_libraries_in_hash(ds, external_libraries)
+    }
+    
+    external_libraries.each{
+      |source, targets|
+      targets.each{
+        |target|
+        target = File.expand_path(target, get_deployment_basedir())
+        debug("Copy #{source} to #{target}")
+        FileUtils.cp(source, target)
+      }
+    }
+  end
+  
+  def include_external_libraries_in_hash(ds, external_libraries)
+    ds_libraries = ds.getExternalLibraries()
+    if ds_libraries.is_a?(Hash)
+      ds_libraries.each{
+        |source, target|
+        if external_libraries.has_key?(source)
+          external_libraries[source] << target
+          external_libraries[source].uniq!()
+        else
+          external_libraries[source] = [target]
+        end
+      }
+    else
+      error("The #{ds.class.name}.getExternalLibraries method did not return a hash")
+    end
   end
 end

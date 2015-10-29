@@ -108,16 +108,30 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
     "oracle"
   end
   
-  def getExternalLibraryDirectory()
-    oracle_home = @config.getProperty(get_key(REPL_ORACLE_HOME))
-    if oracle_home.to_s() != ""
-      jdbc_directory = "#{oracle_home}/jdbc/lib"
-      if File.exist?(jdbc_directory)
-        return jdbc_directory
-      end
+  def getExternalLibraries()
+    java_out = cmd_result("java -version 2>&1")
+    if java_out =~ /version 1\.8\./
+      allowed_jars = ["ojdbc8.jar", "ojdbc7.jar", "ojdbc6.jar"]
+    elsif java_out =~ /version 1\.7\./
+      allowed_jars = ["ojdbc7.jar", "ojdbc6.jar"]
+    else
+      allowed_jars = ["ojdbc6.jar"]
     end
     
-    return nil
+    oracle_home = @config.getProperty(get_key(REPL_ORACLE_HOME))
+    if oracle_home.to_s() != ""
+      allowed_jars.each{
+        |jar|
+        filename = "#{oracle_home}/jdbc/lib/#{jar}"
+        if File.exist?(filename)
+          return {
+            filename => "tungsten-replicator/lib"
+          }
+        end
+      }
+    end
+    
+    raise MessageError.new("Unable to find an Oracle JDBC driver")
   end
 
   def get_extractor_template

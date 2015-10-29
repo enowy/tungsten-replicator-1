@@ -1919,7 +1919,7 @@ module ConfigureDeploymentStepMySQL
   
   def get_methods
     [
-      ConfigureDeploymentMethod.new("deploy_mysql_connectorj_package"),
+      ConfigureDeploymentMethod.new("deploy_mysql_connectorj_package")
     ]
   end
   module_function :get_methods
