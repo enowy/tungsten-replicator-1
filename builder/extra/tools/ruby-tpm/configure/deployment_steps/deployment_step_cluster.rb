@@ -138,9 +138,11 @@ module ConfigureDeploymentStepDeployment
     if File.exist?(tls_keystore)
       keystore = JavaKeytool.new(ks)
       keystore.import(tls_keystore, tls_alias, ks_pass)
+      WatchFiles.watch_file(ks, @config)
       
       truststore = JavaKeytool.new(ts)
       truststore.trust(tls_keystore, tls_alias, ks_pass)
+      WatchFiles.watch_file(ts, @config)
     end
     
     if File.exist?(ks)
@@ -151,6 +153,7 @@ module ConfigureDeploymentStepDeployment
   create javax.management.monitor.*,javax.management.timer.* \\
   unregister")
       }
+      WatchFiles.watch_file(jmxremote, @config)
     
       password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
     
@@ -177,6 +180,7 @@ module ConfigureDeploymentStepDeployment
     
       cmd_result("#{tpasswd} #{tpasswd_options.join(' ')}")
       cmd_result("#{tpasswd} #{tpasswd_options.join(' ')} -target rmi_jmx")
+      WatchFiles.watch_file(password_store, @config)
     end
   end
   
