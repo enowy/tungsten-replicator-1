@@ -29,9 +29,11 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
@@ -52,7 +54,7 @@ import com.continuent.tungsten.common.utils.CLUtils;
 public class SecurityHelper
 {
     private static final Logger logger = Logger.getLogger(SecurityHelper.class);
-    
+
     /*
      * Defines the type of application requesting Security information. This
      * allows module specific configuration of security.
@@ -327,18 +329,18 @@ public class SecurityHelper
                     : null;
             String truststorePassword = securityProperties
                     .getString(security_truststore_password);
-            String clientKeystoreLocation = securityProperties.getString(
-                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
-            clientKeystoreLocation = (clientKeystoreLocation != null
-                    && StringUtils.isNotBlank(clientKeystoreLocation))
-                            ? clientKeystoreLocation
-                            : null;
-            String clientKeystorePassword = securityProperties.getString(
-                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_PASSWORD);
-            clientKeystorePassword = (clientKeystorePassword != null
-                    && StringUtils.isNotBlank(clientKeystorePassword))
-                            ? clientKeystorePassword
-                            : null;
+            String clientKeystoreLocation = securityProperties
+                    .getString(SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
+            clientKeystoreLocation = (clientKeystoreLocation != null && StringUtils
+                    .isNotBlank(clientKeystoreLocation))
+                    ? clientKeystoreLocation
+                    : null;
+            String clientKeystorePassword = securityProperties
+                    .getString(SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_PASSWORD);
+            clientKeystorePassword = (clientKeystorePassword != null && StringUtils
+                    .isNotBlank(clientKeystorePassword))
+                    ? clientKeystorePassword
+                    : null;
 
             String userName = securityProperties.getString(
                     SecurityConf.SECURITY_JMX_USERNAME, null, false);
@@ -437,10 +439,29 @@ public class SecurityHelper
         
         if (!authInfo.getEnabledCipherSuites().isEmpty())
         {
-            String enabledCipherSuites = StringUtils.join(
-                    authInfo.getEnabledCipherSuites(), ",");
+            String[] supportedCipherSuites = ((SSLSocketFactory) SSLSocketFactory
+                    .getDefault()).getSupportedCipherSuites();
+            String[] enabledCipherSuites = authInfo.getEnabledCipherSuites()
+                    .toArray(new String[0]);
+            String[] possibleCipherSuites = SecurityHelper.getMatchingStrings(
+                    supportedCipherSuites, enabledCipherSuites);
+            if (possibleCipherSuites.length == 0)
+            {
+                // We don't have any cipher suites in common. This is not good!
+                String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
+                StringBuffer sb = new StringBuffer(message).append("\n");
+                sb.append(String.format("JVM supported cipher suites: %s\n",
+                        StringUtils.join(supportedCipherSuites)));
+                sb.append(String
+                        .format("Approved cipher suites from security.properties: %s\n",
+                                StringUtils.join(enabledCipherSuites)));
+                logger.error(sb.toString());
+                throw new RuntimeException(message);
+            }
+            String enabledCipherSuitesList = StringUtils.join(
+                    possibleCipherSuites, ",");
             setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
-                    enabledCipherSuites, verbose);
+                    enabledCipherSuitesList, verbose);
         }
     }
 
@@ -596,50 +617,73 @@ public class SecurityHelper
             }
         }
     }
-    
+
     /**
-     * Read client's SSL protocols 
+     * Read client's SSL protocols
      * 
      * @return first value on the list or null if property doesn't have value.
      */
     public static String getProtocol()
     {
         if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
-            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",")[0];
+            return System.getProperty(
+                    SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",")[0];
         else
             return null;
     }
 
-    public static String [] getProtocols()
+    public static String[] getProtocols()
     {
         if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
-            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",");
+            return System.getProperty(
+                    SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS).split(",");
         else
             return null;
     }
 
-    
     /**
-     * Read client's SSL ciphers 
+     * Read client's SSL ciphers
      * 
      * @return first value on the list or null if property doesn't have value.
      */
     public static String getCipher()
     {
         if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
-            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",")[0];
+            return System.getProperty(
+                    SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",")[0];
         else
             return null;
-    }    
-    
-    public static String [] getCiphers()
+    }
+
+    /** Get client encryption ciphers. */
+    public static String[] getCiphers()
     {
         if (System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
-            return System.getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",");
+            return System.getProperty(
+                    SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS).split(",");
         else
             return null;
-    }    
-    
+    }
+
+    /** Return the ciphers available on this JVM. */
+    public static String[] getJvmSupportedCiphers()
+    {
+        String[] supportedCiphers = ((SSLSocketFactory) SSLSocketFactory
+                .getDefault()).getSupportedCipherSuites();
+        return supportedCiphers;
+    }
+
+    /**
+     * Process a list of candidate ciphers for use on the JVM and return those
+     * candidates that are supported and hence usable.
+     */
+    public static String[] getJvmEnabledCiphers(String[] candidateCiphers)
+    {
+        String[] jvmEnabledCiphers = getMatchingStrings(
+                getJvmSupportedCiphers(), candidateCiphers);
+        return jvmEnabledCiphers;
+    }
+
     /**
      * Get the system keystore location
      * 
@@ -776,31 +820,21 @@ public class SecurityHelper
      */
     public static String[] getMatchingStrings(String[] str1, String[] str2)
     {
-        String[] longerStr;
-        String[] shorterStr;
+        // Put first string in table and then iterate across it using the
+        // second.
+        HashMap<String, String> map = new HashMap<String, String>();
+        for (String s : str1)
+        {
+            map.put(s, "FOUND");
+        }
 
-        if (str1.length > str2.length)
+        ArrayList<String> resultList = new ArrayList<String>();
+        for (String s : str2)
         {
-            longerStr = str1;
-            shorterStr = str2;
+            if (map.get(s) != null)
+                resultList.add(s);
         }
-        else
-        {
-            longerStr = str2;
-            shorterStr = str1;
-        }
-        ArrayList<String> resultList = new ArrayList<String>(shorterStr.length);
 
-        for (int li = 0; li < longerStr.length; li++)
-        {
-            for (int si = 0; si < shorterStr.length; si++)
-            {
-                if (longerStr[li].equalsIgnoreCase(shorterStr[si]))
-                {
-                    resultList.add(shorterStr[si]);
-                }
-            }
-        }
         return resultList.toArray(new String[0]);
     }
 

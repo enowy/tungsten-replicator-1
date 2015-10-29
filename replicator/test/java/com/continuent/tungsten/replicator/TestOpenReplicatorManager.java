@@ -18,7 +18,6 @@
  * Contributor(s): Seppo Jaakola
  */
 
-
 package com.continuent.tungsten.replicator;
 
 import java.util.Vector;
@@ -48,20 +47,20 @@ import com.continuent.tungsten.replicator.management.OpenReplicatorManagerMBean;
  */
 public class TestOpenReplicatorManager extends TestCase
 {
-    OpenReplicatorManager         rmgr     = null;
-    JMXConnector                  conn     = null;
-    OpenReplicatorManagerMBean    rmb      = null;
-    static Logger                 logger   = null;
-    static final String           dbUri    = "";              // "jdbc:mysql://localhost/tungsten?user=root&password=rootpass"
+    OpenReplicatorManager      rmgr                       = null;
+    JMXConnector               conn                       = null;
+    OpenReplicatorManagerMBean rmb                        = null;
+    static Logger              logger                     = null;
+    static final String        dbUri                      = "";                                                             // "jdbc:mysql://localhost/tungsten?user=root&password=rootpass"
     // ;
-    static final String    dbDriver                   = "com.mysql.jdbc.Driver";
-    static JmxManager      jmxManager                 = null;
+    static final String        dbDriver                   = "com.mysql.jdbc.Driver";
+    static JmxManager          jmxManager                 = null;
 
-    static final String    REPLICATOR_MANAGER_SERVICE = "replicator";
+    static final String        REPLICATOR_MANAGER_SERVICE = "replicator";
 
-    static final String    applierPlugin              = "com.continuent.tungsten.replicator.applier.DummyApplierPlugin";
-    static final String    extractorPlugin            = "com.continuent.tungsten.replicator.extractor.DummyExtractor";
-    static final String    thlStoragePlugin           = "com.continuent.tungsten.replicator.thl.DummyTHLStorage";
+    static final String        applierPlugin              = "com.continuent.tungsten.replicator.applier.DummyApplierPlugin";
+    static final String        extractorPlugin            = "com.continuent.tungsten.replicator.extractor.DummyExtractor";
+    static final String        thlStoragePlugin           = "com.continuent.tungsten.replicator.thl.DummyTHLStorage";
 
     public TestOpenReplicatorManager(String name)
     {
@@ -119,8 +118,9 @@ public class TestOpenReplicatorManager extends TestCase
     void startReplicatorManager() throws Exception
     {
         rmgr = new OpenReplicatorManager("default");
-        conn = JmxManager.getRMIConnector("localhost", 10000,
+        JmxManager jmxManager = new JmxManager("localhost", 10000,
                 REPLICATOR_MANAGER_SERVICE);
+        conn = jmxManager.getLocalRMIConnector();
         rmb = (OpenReplicatorManagerMBean) JmxManager.getMBeanProxy(conn,
                 OpenReplicatorManager.class, false);
         JmxManager.addNotificationListener(conn, OpenReplicatorManager.class,
@@ -131,8 +131,8 @@ public class TestOpenReplicatorManager extends TestCase
 
     void stopReplicatorManager() throws Exception
     {
-        JmxManager.removeNotificationListener(conn, OpenReplicatorManager.class,
-                stateListener);
+        JmxManager.removeNotificationListener(conn,
+                OpenReplicatorManager.class, stateListener);
         rmgr.stop();
     }
 
@@ -216,7 +216,8 @@ public class TestOpenReplicatorManager extends TestCase
             conf.setString(ReplicatorConf.EXTRACTOR, extractorPlugin);
             conf.setString(ReplicatorConf.THL_STORAGE, thlStoragePlugin);
             conf.setString(ReplicatorConf.THL_URI, "thl://localhost/");
-            conf.setString(ReplicatorConf.MASTER_CONNECT_URI, "thl://localhost/");
+            conf.setString(ReplicatorConf.MASTER_CONNECT_URI,
+                    "thl://localhost/");
             conf.setString(ReplicatorConf.METADATA_SCHEMA, "test");
 
             // OFFLINE -> SYNCHRONIZING -> OFFLINE
@@ -403,7 +404,7 @@ public class TestOpenReplicatorManager extends TestCase
 
     class Node
     {
-        OpenReplicatorManager         rmgr     = null;
+        OpenReplicatorManager     rmgr         = null;
         StateNotificationListener snl          = null;
         TungstenProperties        conf         = new TungstenProperties();
         String                    thlURI       = null;

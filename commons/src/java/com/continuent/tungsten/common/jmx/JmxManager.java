@@ -51,15 +51,15 @@ import javax.net.ssl.SSLServerSocketFactory;
 import javax.rmi.ssl.SslRMIClientSocketFactory;
 import javax.rmi.ssl.SslRMIServerSocketFactory;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
-import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.PasswordManager;
+import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
 import com.continuent.tungsten.common.security.RealmJMXAuthenticator;
 import com.continuent.tungsten.common.security.SecurityHelper;
-import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
 
 /**
  * Encapsulates JMX server start/stop and provides static utility methods to
@@ -71,63 +71,71 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
  */
 public class JmxManager implements NotificationListener
 {
-    private static final Logger                logger              = Logger.getLogger(JmxManager.class);
+    private static final Logger         logger              = Logger.getLogger(JmxManager.class);
 
     // RMI registry and connector server we are managing.
-    protected Registry                         rmiRegistry;
-    protected JMXConnectorServer               jmxConnectorServer;
+    protected Registry                  rmiRegistry;
+    protected JMXConnectorServer        jmxConnectorServer;
 
     // JMX server parameters.
-    private final String                       host;
-    private final int                          registryPort;
-    private static int                         beanPort;
+    private final String                host;
+    private final int                   registryPort;
+    private final int                   beanPort;
 
-    private final String                       serviceName;
+    private final String                serviceName;
 
-    public final static String                 CREATE_MBEAN_HELPER = "createHelper";
+    public final static String          CREATE_MBEAN_HELPER = "createHelper";
 
     // Authentication and Encryption parameters
-    private static AuthenticationInfo authenticationInfo = null;
+    private volatile AuthenticationInfo authenticationInfo  = null;
+
+    public JmxManager(String host, int beanPort, int registryPort,
+            String serviceName)
+    {
+        this(host, beanPort, registryPort, serviceName, null);
+    }
 
     /**
      * Creates an instance to manage a JMX service
      * 
      * @param host The host name or IP to use
-     * @param beanPort
+     * @param beanPort The port used for JMX beans
      * @param registryPort The JMX server RMI registryPort
      * @param serviceName The JMX service name
+     * @param authInfo Authentication information from security.properties or
+     *            null if no security settings are available
      */
     public JmxManager(String host, int beanPort, int registryPort,
-            String serviceName)
+            String serviceName, AuthenticationInfo authInfo)
     {
         this.host = host;
+        this.beanPort = beanPort;
         this.registryPort = registryPort;
         this.serviceName = serviceName;
-        JmxManager.beanPort = beanPort;
+        this.authenticationInfo = authInfo;
 
         // Load security information from security.properties
         // Load password from file
         // CONT-1069
-        if (JmxManager.authenticationInfo == null)
+        if (authenticationInfo == null)
         {
             try
             {
-                JmxManager.authenticationInfo = SecurityHelper
+                authenticationInfo = SecurityHelper
                         .loadAuthenticationInformation();
 
                 // Sets the username and password in the authenticationInfo.
                 // This will be used as credentials when connecting
                 // Password is provided "as is" (potentially encrypted) and will
                 // be decrypted by the server if needed
-                if (JmxManager.authenticationInfo.isAuthenticationNeeded())
+                if (authenticationInfo.isAuthenticationNeeded())
                 {
                     PasswordManager passwordManager = new PasswordManager(
-                            JmxManager.authenticationInfo,
-                            ClientApplicationType.RMI_JMX);
+                            authenticationInfo, ClientApplicationType.RMI_JMX);
                     String goodPassword = passwordManager
-                            .getEncryptedPasswordForUser(JmxManager.authenticationInfo
+                            .getEncryptedPasswordForUser(authenticationInfo
                                     .getUsername());
-                    JmxManager.authenticationInfo.setPassword(goodPassword);
+                    authenticationInfo.setPassword(goodPassword);
                 }
             }
             catch (ConfigurationException e)
@@ -167,10 +175,7 @@ public class JmxManager implements NotificationListener
     public JmxManager(String host, int registryPort, String serviceName,
             AuthenticationInfo authInfo)
     {
-        this(host, registryPort, serviceName);
-
-        // Authentication and encryption parameters
-        authenticationInfo = authInfo;
+        this(host, registryPort + 1, registryPort, serviceName, authInfo);
     }
 
     /**
@@ -309,14 +314,44 @@ public class JmxManager implements NotificationListener
                 {
                     String[] protocolArray = authenticationInfo
                             .getEnabledProtocols().toArray(new String[0]);
-                    String[] cipherArray = authenticationInfo
+                    String[] allowedCipherSuites = authenticationInfo
                             .getEnabledCipherSuites().toArray(new String[0]);
+                    String[] cipherArray;
 
                     if (protocolArray.length == 0)
                         protocolArray = null;
-                    if (cipherArray.length == 0)
+                    if (allowedCipherSuites.length == 0)
                         cipherArray = null;
+                    else
+                    {
+                        // Ensure we choose an allowed cipher suite.
+                        cipherArray = authenticationInfo
+                                .getJvmEnabledCipherSuites().toArray(
+                                        new String[0]);
+                        if (cipherArray.length == 0)
+                        {
+                            // We don't have any cipher suites in common. This
+                            // is not good!
+                            String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
+                            StringBuffer sb = new StringBuffer(message)
+                                    .append("\n");
+                            sb.append(String.format(
+                                    "JVM supported cipher suites: %s\n",
+                                    StringUtils.join(SecurityHelper
+                                            .getJvmSupportedCiphers())));
+                            sb.append(String
+                                    .format("Approved cipher suites from security.properties: %s\n",
+                                            StringUtils
+                                                    .join(allowedCipherSuites)));
+                            logger.error(sb.toString());
+                            throw new RuntimeException(message);
+                        }
+                    }
 
+                    logger.info("Setting allowed JMX server protocols: "
+                            + StringUtils.join(protocolArray, ","));
+                    logger.info("Setting allowed JMX server ciphers: "
+                            + StringUtils.join(cipherArray, ","));
                     SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
                     SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
                             cipherArray, protocolArray, false);
@@ -528,71 +563,46 @@ public class JmxManager implements NotificationListener
     }
 
     /**
-     * Client helper method to return an RMI connection. The arguments match
-     * those used when instantiating the JmxManager class itself.
+     * Client helper method to return an RMI connection on the server whose
+     * properties are the same as this manager instance.
      * 
-     * @param host the hostname to bind to in the jmx url
-     * @param registryPort the registryPort number to bind to in the jmx url
-     * @param serviceName the JMX service name
      * @return a connection to the server
      */
-    public static JMXConnector getRMIConnector(String host, int registryPort,
-            String serviceName)
-    {
-        return getRMIConnector(host, registryPort, serviceName, null);
-    }
-
-    /**
-     * Client helper method to return an RMI connection. The arguments match
-     * those used when instantiating the JmxManager class itself.
-     * 
-     * @param host the hostname to bind to in the jmx url
-     * @param registryPort the registryPort number to bind to in the jmx url
-     * @param serviceName the JMX service name
-     * @param jmxProperties TungstenProperties holding the AuthenticationInfo
-     *            instance.
-     * @return a connection to the server
-     */
-    public static JMXConnector getRMIConnector(String host, int registryPort,
-            String serviceName, TungstenProperties jmxProperties)
+    public JMXConnector getLocalRMIConnector()
     {
         String serviceAddress = null;
         try
         {
-            // --- Retrieve jmx Properties for Authentication ---
-            AuthenticationInfo authInfo = null;
-            if (jmxProperties != null)
-                authInfo = (AuthenticationInfo) jmxProperties.getObject(
-                        AuthenticationInfo.SECURITY_INFO_PROPERTY, null, false);
-            if (authInfo == null) // Last chance: try the static member
-                authInfo = authenticationInfo;
-
             // --- Define security attributes ---
             HashMap<String, Object> env = new HashMap<String, Object>();
 
             // --- Authentication based on password and access files---
-            if (authInfo != null && authInfo.isAuthenticationNeeded())
+            if (authenticationInfo != null
+                    && authenticationInfo.isAuthenticationNeeded())
             {
                 // Build credentials
                 String[] credentials;
-                if (authInfo.isUseTungstenAuthenticationRealm())
-                    credentials = new String[]{authInfo.getUsername(),
-                            authInfo.getDecryptedPassword(),
+                if (authenticationInfo.isUseTungstenAuthenticationRealm())
+                    credentials = new String[]{
+                            authenticationInfo.getUsername(),
+                            authenticationInfo.getDecryptedPassword(),
                             AuthenticationInfo.TUNGSTEN_AUTHENTICATION_REALM};
                 else
-                    credentials = new String[]{authInfo.getUsername(),
-                            authInfo.getDecryptedPassword()};
+                    credentials = new String[]{
+                            authenticationInfo.getUsername(),
+                            authenticationInfo.getDecryptedPassword()};
 
                 env.put("jmx.remote.credentials", credentials);
             }
             // --- SSL ---
-            if (authInfo != null && authInfo.isEncryptionNeeded())
+            if (authenticationInfo != null
+                    && authenticationInfo.isEncryptionNeeded())
             {
                 // Truststore
                 System.setProperty("javax.net.ssl.trustStore",
-                        authInfo.getTruststoreLocation());
+                        authenticationInfo.getTruststoreLocation());
                 System.setProperty("javax.net.ssl.trustStorePassword",
-                        authInfo.getTruststorePassword());
+                        authenticationInfo.getTruststorePassword());
             }
 
             serviceAddress = generateServiceAddress(host, beanPort,
@@ -654,6 +664,16 @@ public class JmxManager implements NotificationListener
                     ? assertionError
                     : e);
         }
+    }
+
+    /**
+     * Client helper method to connector to a JMX manager.
+     */
+    public static JMXConnector getRMIConnector(String host, int port,
+            String beanServiceName)
+    {
+        JmxManager jmxMgr = new JmxManager(host, port, beanServiceName);
+        return jmxMgr.getLocalRMIConnector();
     }
 
     /**

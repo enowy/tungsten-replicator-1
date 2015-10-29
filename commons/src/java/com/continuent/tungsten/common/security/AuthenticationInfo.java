@@ -28,6 +28,8 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 
@@ -62,7 +64,7 @@ import com.continuent.tungsten.common.utils.CLUtils;
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public final class AuthenticationInfo
 {
-    private static final Logger     logger                                   = Logger.getLogger(AuthenticationInfo.class);
+    private static final Logger          logger                                   = Logger.getLogger(AuthenticationInfo.class);
     /** Location of the file from which this was built **/
     private String                  parentPropertiesFileLocation             = null;
     /** Properties from the files from which this was built **/
@@ -212,10 +214,9 @@ public final class AuthenticationInfo
         }
 
         // --- Check that the keystore is not empty ---
-        if ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
-                && this.isEncryptionNeeded())
-                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
-                        && this.connectorUseSSL)
+        if ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API && this
+                .isEncryptionNeeded())
+                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR && this.connectorUseSSL)
                 || this.isEncryptionNeeded())
         {
             // Check keystore: should be accessible, and not empty
@@ -266,7 +267,6 @@ public final class AuthenticationInfo
                 String replicator_alias_master_to_slave = mapAliases
                         .get(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
 
-
                 // If an aliase is not defined, do not look for it...obviously
                 connector_alias_client_to_connector_isFound = (connector_alias_client_to_connector == null)
                         ? true
@@ -308,6 +308,10 @@ public final class AuthenticationInfo
 
                         connector_alias_connector_to_db_isFound = connector_alias_connector_to_db_isFound == true
                                 || (connector_alias_connector_to_db != null && connector_alias_connector_to_db
+                                        .equals(alias));
+
+                        replicator_alias_master_to_slave_isFound = replicator_alias_master_to_slave_isFound == true
+                                || (replicator_alias_master_to_slave != null && replicator_alias_master_to_slave
                                         .equals(alias));
                     }
                     // --- Exception when an alias is defined but not found ---
@@ -430,8 +434,8 @@ public final class AuthenticationInfo
                         SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION,
                         this.clientKeystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg,
-                        new AssertionError("File must exist"));
+                throw new ServerRuntimeException(msg, new AssertionError(
+                        "File must exist"));
             }
             File f = new File(this.clientKeystoreLocation);
             // --- Find absolute path if needed
@@ -447,8 +451,8 @@ public final class AuthenticationInfo
                         "Cannot find or read {0} file: {1}", KEYSTORE_LOCATION,
                         this.clientKeystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg,
-                        new AssertionError("File must exist"));
+                throw new ServerRuntimeException(msg, new AssertionError(
+                        "File must exist"));
             }
         }
         else if (this.isAuthenticationNeeded()
@@ -821,6 +825,72 @@ public final class AuthenticationInfo
                 .get(aliasForConnectionType);
 
         return alias;
+    }
+
+    /**
+     * Returns the enabledProtocols value.
+     * 
+     * @return Returns the enabledProtocols.
+     */
+    public List<String> getEnabledProtocols()
+    {
+        return enabledProtocols;
+    }
+
+    /**
+     * Sets the enabledProtocols value.
+     * 
+     * @param enabledProtocols The enabledProtocols to set.
+     */
+    public void setEnabledProtocols(List<String> enabledProtocols)
+    {
+        this.enabledProtocols = enabledProtocols;
+    }
+
+    /**
+     * Returns the enabledCipherSuites value.
+     * 
+     * @return Returns the enabledCipherSuites.
+     */
+    public List<String> getEnabledCipherSuites()
+    {
+        return enabledCipherSuites;
+    }
+
+    /**
+     * Sets the enabledCipherSuites value.
+     * 
+     * @param enabledCipherSuites The enabledCipherSuites to set.
+     */
+    public void setEnabledCipherSuites(List<String> enabledCipherSuites)
+    {
+        this.enabledCipherSuites = enabledCipherSuites;
+    }
+
+    /**
+     * Returns the list of ciphers that are enabled on this JVM according to the
+     * following rule.
+     * <ol>
+     * <li>If the enabled cipher suites list is empty, we return the default JVM
+     * ciphers.</li>
+     * <li>Otherwise we take the intersection of the enabled ciphers and the
+     * ciphers available on the JVM.</li>
+     * </ol>
+     */
+    public List<String> getJvmEnabledCipherSuites()
+    {
+        String[] jvmSupportedCiphers = SecurityHelper.getJvmSupportedCiphers();
+        if (enabledCipherSuites == null || enabledCipherSuites.size() == 0)
+        {
+            return Arrays.asList(jvmSupportedCiphers);
+        }
+        else
+        {
+            String[] enabledAndSupported = SecurityHelper
+                    .getJvmEnabledCiphers(enabledCipherSuites
+                            .toArray(new String[0]));
+            return Arrays.asList(enabledAndSupported);
+        }
     }
 
     /**

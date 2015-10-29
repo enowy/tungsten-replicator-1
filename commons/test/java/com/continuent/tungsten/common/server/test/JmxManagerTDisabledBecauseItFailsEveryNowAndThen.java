@@ -29,7 +29,7 @@ import com.continuent.tungsten.common.jmx.JmxManager;
 /**
  * A simple unit test of the JMX manager class. This also demonstrates how to
  * set up JMX, register MBeans, etc.
- *
+ * 
  * @author <a href="mailto:robert.hodges@continuent.com">Robert Hodges</a>
  * @version 1.0
  */
@@ -42,7 +42,7 @@ public class JmxManagerTDisabledBecauseItFailsEveryNowAndThen extends TestCase
     /**
      * Demonstrate how to start and stop a JMX manager. We do it several times
      * to provide that JMX clean-up works.
-     *
+     * 
      * @throws Exception
      */
     public void testStartStop() throws Exception
@@ -81,15 +81,15 @@ public class JmxManagerTDisabledBecauseItFailsEveryNowAndThen extends TestCase
         JmxManager.registerMBean(mbean, Trial.class);
 
         System.out.println(String.format(
-                "Connecting to service, host=%s, port=%d, serviceName=%s", host,
-                port, serviceName));
+                "Connecting to service, host=%s, port=%d, serviceName=%s",
+                host, port, serviceName));
         // Connect to the JMX server and get a stub for this MBean.
-        JMXConnector connector = JmxManager.getRMIConnector(host, port,
-                serviceName);
+        JmxManager jmxManager = new JmxManager(host, port, serviceName);
+        JMXConnector connector = jmxManager.getLocalRMIConnector();
         assertNotNull("Checking that connector is not null", connector);
 
-        System.out.println(String.format(
-                "Getting the mbean for class=%s", Trial.class.getName()));
+        System.out.println(String.format("Getting the mbean for class=%s",
+                Trial.class.getName()));
         TrialMBean mbeanProxy = (TrialMBean) JmxManager.getMBeanProxy(
                 connector, Trial.class, true);
         assertNotNull("Checking that proxy is not null", mbeanProxy);

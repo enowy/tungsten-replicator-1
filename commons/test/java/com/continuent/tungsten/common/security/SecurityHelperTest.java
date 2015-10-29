@@ -19,7 +19,11 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.util.Arrays;
+
 import junit.framework.TestCase;
+
+import org.junit.Assert;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
@@ -74,8 +78,8 @@ public class SecurityHelperTest extends TestCase
         ConfigurationException configurationException = null;
         try
         {
-            authInfo = SecurityHelper.loadAuthenticationInformation(
-                    "sample.security.properties_DOES_NOT_EXIST");
+            authInfo = SecurityHelper
+                    .loadAuthenticationInformation("sample.security.properties_DOES_NOT_EXIST");
         }
         catch (ConfigurationException ce)
         {
@@ -172,7 +176,8 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse("Could not load authentication and securiy information",
+            assertFalse(
+                    "Could not load authentication and securiy information",
                     true);
         }
         assertNotNull(authInfo);
@@ -219,7 +224,8 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse("Could not load authentication and securiy information",
+            assertFalse(
+                    "Could not load authentication and securiy information",
                     true);
         }
         assertNotNull(authInfo);
@@ -248,7 +254,8 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse("Could not load authentication and securiy information",
+            assertFalse(
+                    "Could not load authentication and securiy information",
                     true);
         }
         assertFalse(authInfo.isConnectorUseSSL());
@@ -297,7 +304,8 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse("Could not load authentication and securiy information",
+            assertFalse(
+                    "Could not load authentication and securiy information",
                     true);
         }
         assertTrue(authInfo.isConnectorUseSSL());
@@ -511,8 +519,8 @@ public class SecurityHelperTest extends TestCase
      * 
      * @throws ConfigurationException
      */
-    public void testValidateSecurityProperties()
-            throws ConfigurationException, ServerRuntimeException
+    public void testValidateSecurityProperties() throws ConfigurationException,
+            ServerRuntimeException
     {
         // Reset info
         resetSecuritySystemProperties();
@@ -543,8 +551,8 @@ public class SecurityHelperTest extends TestCase
             badAuthInfo.setAuthenticationNeeded(true);
             assertFalse(badAuthInfo.isEncryptionNeeded()); // Encryption is off
 
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse(badAuthInfo.isEncryptionNeeded()); // Not Updated to
                                                            // true
@@ -560,27 +568,27 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setPasswordFileLocation(
-                badAuthInfo.getPasswordFileLocation() + "_XXX");
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setPasswordFileLocation(badAuthInfo
+                .getPasswordFileLocation() + "_XXX");
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Authentication not needed. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setAuthenticationNeeded(true);
 
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setPasswordFileLocation(
-                    badAuthInfo.getPasswordFileLocation() + "_XXX");
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setPasswordFileLocation(badAuthInfo
+                    .getPasswordFileLocation() + "_XXX");
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -593,26 +601,26 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setKeystoreLocation(
-                badAuthInfo.getKeystoreLocation() + "_XXX");
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setKeystoreLocation(badAuthInfo.getKeystoreLocation()
+                + "_XXX");
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setKeystoreLocation(
-                    badAuthInfo.getKeystoreLocation() + "_XXX");
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setKeystoreLocation(badAuthInfo.getKeystoreLocation()
+                    + "_XXX");
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -625,26 +633,26 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setTruststoreLocation(
-                badAuthInfo.getTruststoreLocation() + "_XXX");
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setTruststoreLocation(badAuthInfo.getTruststoreLocation()
+                + "_XXX");
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off, no exception should be thrown !", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setTruststoreLocation(
-                    badAuthInfo.getTruststoreLocation() + "_XXX");
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setTruststoreLocation(badAuthInfo
+                    .getTruststoreLocation() + "_XXX");
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -657,27 +665,27 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setClientKeystoreLocation(
-                badAuthInfo.getClientKeystoreLocation() + "_XXX");
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setClientKeystoreLocation(badAuthInfo
+                .getClientKeystoreLocation() + "_XXX");
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setAuthenticationNeeded(true);
         badAuthInfo.setAuthenticationByCertificateNeeded(true);
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setClientKeystoreLocation(
-                    badAuthInfo.getClientKeystoreLocation() + "_XXX");
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setClientKeystoreLocation(badAuthInfo
+                    .getClientKeystoreLocation() + "_XXX");
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -693,8 +701,8 @@ public class SecurityHelperTest extends TestCase
 
         // Feature off + bad value
         badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
-        badAuthInfo.checkAndCleanAuthenticationInfo(
-                TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo
+                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + bad value (empty aliases)
@@ -704,8 +712,8 @@ public class SecurityHelperTest extends TestCase
 
         try
         {
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -722,8 +730,8 @@ public class SecurityHelperTest extends TestCase
 
         try
         {
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -736,13 +744,13 @@ public class SecurityHelperTest extends TestCase
         // Feature on + bad value (empty aliases)
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo.setTruststorePassword(
-                badAuthInfo.getTruststorePassword() + "_XXX");
+        badAuthInfo.setTruststorePassword(badAuthInfo.getTruststorePassword()
+                + "_XXX");
 
         try
         {
-            badAuthInfo.checkAndCleanAuthenticationInfo(
-                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo
+                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -753,5 +761,41 @@ public class SecurityHelperTest extends TestCase
 
         // Reset info
         resetSecuritySystemProperties();
+    }
+
+    /**
+     * Confirm that the SecurityHelper.getMatchingStrings() method correctly
+     * computes intersection between two arrays of strings.
+     * 
+     * @throws ConfigurationException
+     */
+    public void testMatchingStrings() throws ConfigurationException,
+            ServerRuntimeException
+    {
+        String[] s0 = {};
+        String[] s1 = {"abcd"};
+        String[] s2 = {"defg", "abcd"};
+        String[] s3 = {"hijk", "abcd", "defg"};
+        String[] s4 = {"0123", "defg", "hijl", "abcd"};
+        String[] s5 = {"0123", "0234"};
+
+        // Prove that intersecting with empty array results in empty array.
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s0, s1));
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s3, s0));
+
+        // Prove that intersecting with a single member results in just that
+        // member.
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s1, s1));
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s2, s1));
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s3, s1));
+
+        // Prove that intersection with multiple members results in only common
+        // members. Sort result to ensure match.
+        String[] intersection = SecurityHelper.getMatchingStrings(s3, s4);
+        Arrays.sort(intersection);
+        Assert.assertArrayEquals(new String[]{"abcd", "defg"}, intersection);
+
+        // Prove that disjoint array values result in an empty set.
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s3, s5));
     }
 }

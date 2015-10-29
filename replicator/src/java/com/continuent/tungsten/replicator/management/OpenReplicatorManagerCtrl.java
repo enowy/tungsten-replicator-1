@@ -455,13 +455,10 @@ public class OpenReplicatorManagerCtrl
                 if (authenticationInfo != null)
                     authenticationInfo.checkAndCleanAuthenticationInfo();
 
-                TungstenProperties securityProperties = (authenticationInfo != null)
-                        ? authenticationInfo.getAsTungstenProperties()
-                        : null;
-
-                conn = JmxManager.getRMIConnector(rmiHost, rmiPort,
+                JmxManager jmxManager = new JmxManager(rmiHost, rmiPort,
                         ReplicatorConf.RMI_DEFAULT_SERVICE_NAME,
-                        securityProperties);
+                        authenticationInfo);
+                conn = jmxManager.getLocalRMIConnector();
             }
             catch (Exception e)
             {
