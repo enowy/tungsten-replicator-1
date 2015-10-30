@@ -142,7 +142,7 @@ module ConfigureDeploymentStepDeployment
       WatchFiles.watch_file(ks, @config)
       
       truststore = JavaKeytool.new(ts)
-      truststore.trust(tls_keystore, tls_alias, ks_pass)
+      truststore.trust(tls_keystore, tls_alias, ks_pass, ts_pass)
       WatchFiles.watch_file(ts, @config)
     end
     

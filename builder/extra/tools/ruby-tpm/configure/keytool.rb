@@ -125,7 +125,7 @@ class JavaKeytool
     end
   end
   
-  def trust(source, keyalias, password)
+  def trust(source, keyalias, source_password, password)
     if File.exist?(@keystore)
       listing = self.list(password)
       if listing.has_key?(keyalias)
@@ -142,17 +142,21 @@ class JavaKeytool
     parts = ["keytool -export -alias #{keyalias}",
       "-file #{local_cert.path()}",
       "-keystore #{source}"]
-    self.cmd(parts.join(" "), password)
+    self.cmd(parts.join(" "), source_password)
     
     parts = ["keytool -import -noprompt -trustcacerts -alias #{keyalias}",
       "-file #{local_cert.path()} -keystore #{@keystore}"]
     self.cmd(parts.join(" "), [password, password])
     
+    unless File.exists?(@keystore)
+      raise "Unable to trust keystore certificate"
+    end
+    
     listing = self.list(password)
     if listing.has_key?(keyalias)
       return true
     else
-      raise "Unable to trust keystore certificate"
+      raise "Unable to import the trusted keystore certificate"
     end
   end
   

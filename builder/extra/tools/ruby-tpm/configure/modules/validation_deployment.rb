@@ -1384,7 +1384,6 @@ class KeystoresCheck < ConfigureValidationCheck
   
   def validate
     ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
-    ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
     jceks = @config.getTemplateValue(JAVA_JGROUPS_KEYSTORE_PATH)
     password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
 
