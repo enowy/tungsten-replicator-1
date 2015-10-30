@@ -631,7 +631,7 @@ EOF
           external_libraries[source] = [target]
         end
       }
-    else
+    elsif ds_libraries != nil
       error("The #{ds.class.name}.getExternalLibraries method did not return a hash")
     end
   end
