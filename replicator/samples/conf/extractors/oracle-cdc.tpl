@@ -1,5 +1,5 @@
 replicator.extractor.dbms=com.continuent.tungsten.replicator.extractor.oracle.cdc.OracleCDCReaderExtractor
-replicator.extractor.dbms.dataSource=oracle_extractor
+replicator.extractor.dbms.dataSource=oracle_cdc
 replicator.extractor.dbms.transaction_frag_size=10
 
 # Max. delay in querying CDC window. Used to lessen redo log being generated.
