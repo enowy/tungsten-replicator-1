@@ -25,6 +25,13 @@ security.keystore.password=@{JAVA_KEYSTORE_PASSWORD}
 security.truststore.location=@{JAVA_TRUSTSTORE_PATH}
 security.truststore.password=@{JAVA_TRUSTSTORE_PASSWORD}
 
+# Minimize brute force attempts
+# On a failed login attempt, a random sleep (ms) between min and max 
+# in increment of increment.step will be done
+security.randomWaitOnFailedLogin.min = 500
+security.randomWaitOnFailedLogin.max = 1000
+security.randomWaitOnFailedLogin.increment.step = 100
+
 # Transport Protocols and Cipher Suites
 # Used for RMI, SSL and HTTPS
 # See: https://docs.oracle.com/javase/7/docs/technotes/guides/security/SunProviders.html#SUNProvider

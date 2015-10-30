@@ -50,6 +50,9 @@ public class SecurityConf
     static public final String SECURITY_TRUSTSTORE_PASSWORD                                               = "security.truststore.password";
     static public final String SECURITY_ENABLED_TRANSPORT_PROTOCOL                                        = "security.enabled.protocols";
     static public final String SECURITY_ENABLED_CIPHER_SUITES                                             = "security.enabled.cipher.suites";
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN                                   = "security.randomWaitOnFailedLogin.min";                         // (ms)
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX                                   = "security.randomWaitOnFailedLogin.max";                         // (ms)
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP                        = "security.randomWaitOnFailedLogin.increment.step";
     static public final String CONNECTOR_USE_SSL                                                          = "connector.security.use.ssl";
     static public final String CONNECTOR_SECURITY_KEYSTORE_LOCATION                                       = "connector.security.keystore.location";
     static public final String CONNECTOR_SECURITY_KEYSTORE_PASSWORD                                       = "connector.security.keystore.password";
@@ -82,6 +85,9 @@ public class SecurityConf
     static public final String HTTP_REST_API_AUTHENTICATION_USE_CERTIFICATE_DEFAULT                       = "false";
     static public final String HTTP_REST_API_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT = "false";
     static public final String HTTP_REST_API_SSL_USESSL_DEFAULT                                           = "false";
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN_DEFAULT                           = "500";                                                          // (ms)
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX_DEFAULT                           = "1000";                                                         // (ms)
+    static public final String SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP_DEFAULT                = "1";
 
     static public final String KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR_DEFAULT                       = null;
     static public final String KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB_DEFAULT                           = null;
@@ -93,7 +99,7 @@ public class SecurityConf
     static public final String SECURITY_APPLICATION_REST_API                                              = "rest_api";
 
     /** System variable names */
-    static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                       = "javax.rmi.ssl.client.enabledProtocols";
-    static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                         = "javax.rmi.ssl.client.enabledCipherSuites";
+    static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                            = "javax.rmi.ssl.client.enabledProtocols";
+    static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                              = "javax.rmi.ssl.client.enabledCipherSuites";
 
 }

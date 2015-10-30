@@ -19,6 +19,7 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.text.MessageFormat;
 import java.util.Arrays;
 
 import junit.framework.TestCase;
@@ -78,8 +79,8 @@ public class SecurityHelperTest extends TestCase
         ConfigurationException configurationException = null;
         try
         {
-            authInfo = SecurityHelper
-                    .loadAuthenticationInformation("sample.security.properties_DOES_NOT_EXIST");
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "sample.security.properties_DOES_NOT_EXIST");
         }
         catch (ConfigurationException ce)
         {
@@ -176,8 +177,7 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse(
-                    "Could not load authentication and securiy information",
+            assertFalse("Could not load authentication and securiy information",
                     true);
         }
         assertNotNull(authInfo);
@@ -224,8 +224,7 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse(
-                    "Could not load authentication and securiy information",
+            assertFalse("Could not load authentication and securiy information",
                     true);
         }
         assertNotNull(authInfo);
@@ -254,8 +253,7 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse(
-                    "Could not load authentication and securiy information",
+            assertFalse("Could not load authentication and securiy information",
                     true);
         }
         assertFalse(authInfo.isConnectorUseSSL());
@@ -304,8 +302,7 @@ public class SecurityHelperTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse(
-                    "Could not load authentication and securiy information",
+            assertFalse("Could not load authentication and securiy information",
                     true);
         }
         assertTrue(authInfo.isConnectorUseSSL());
@@ -519,8 +516,8 @@ public class SecurityHelperTest extends TestCase
      * 
      * @throws ConfigurationException
      */
-    public void testValidateSecurityProperties() throws ConfigurationException,
-            ServerRuntimeException
+    public void testValidateSecurityProperties()
+            throws ConfigurationException, ServerRuntimeException
     {
         // Reset info
         resetSecuritySystemProperties();
@@ -551,8 +548,8 @@ public class SecurityHelperTest extends TestCase
             badAuthInfo.setAuthenticationNeeded(true);
             assertFalse(badAuthInfo.isEncryptionNeeded()); // Encryption is off
 
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse(badAuthInfo.isEncryptionNeeded()); // Not Updated to
                                                            // true
@@ -568,27 +565,27 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setPasswordFileLocation(badAuthInfo
-                .getPasswordFileLocation() + "_XXX");
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setPasswordFileLocation(
+                badAuthInfo.getPasswordFileLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Authentication not needed. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setAuthenticationNeeded(true);
 
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setPasswordFileLocation(badAuthInfo
-                    .getPasswordFileLocation() + "_XXX");
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setPasswordFileLocation(
+                    badAuthInfo.getPasswordFileLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -601,26 +598,26 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setKeystoreLocation(badAuthInfo.getKeystoreLocation()
-                + "_XXX");
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setKeystoreLocation(
+                badAuthInfo.getKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setKeystoreLocation(badAuthInfo.getKeystoreLocation()
-                    + "_XXX");
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setKeystoreLocation(
+                    badAuthInfo.getKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -633,26 +630,26 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setTruststoreLocation(badAuthInfo.getTruststoreLocation()
-                + "_XXX");
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setTruststoreLocation(
+                badAuthInfo.getTruststoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off, no exception should be thrown !", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setTruststoreLocation(badAuthInfo
-                    .getTruststoreLocation() + "_XXX");
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setTruststoreLocation(
+                    badAuthInfo.getTruststoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -665,27 +662,27 @@ public class SecurityHelperTest extends TestCase
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
 
         // Feature off + bad value
-        badAuthInfo.setClientKeystoreLocation(badAuthInfo
-                .getClientKeystoreLocation() + "_XXX");
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.setClientKeystoreLocation(
+                badAuthInfo.getClientKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + good value
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setAuthenticationNeeded(true);
         badAuthInfo.setAuthenticationByCertificateNeeded(true);
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("File exists, no exception should be thrown !", true);
 
         // Feature on + bad value
         try
         {
-            badAuthInfo.setClientKeystoreLocation(badAuthInfo
-                    .getClientKeystoreLocation() + "_XXX");
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.setClientKeystoreLocation(
+                    badAuthInfo.getClientKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -701,8 +698,8 @@ public class SecurityHelperTest extends TestCase
 
         // Feature off + bad value
         badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
-        badAuthInfo
-                .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
         assertTrue("Feature off. No exception was thrown.", true);
 
         // Feature on + bad value (empty aliases)
@@ -712,8 +709,8 @@ public class SecurityHelperTest extends TestCase
 
         try
         {
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -730,8 +727,8 @@ public class SecurityHelperTest extends TestCase
 
         try
         {
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -744,13 +741,13 @@ public class SecurityHelperTest extends TestCase
         // Feature on + bad value (empty aliases)
         badAuthInfo = (AuthenticationInfo) authInfo.clone();
         badAuthInfo.setEncryptionNeeded(true);
-        badAuthInfo.setTruststorePassword(badAuthInfo.getTruststorePassword()
-                + "_XXX");
+        badAuthInfo.setTruststorePassword(
+                badAuthInfo.getTruststorePassword() + "_XXX");
 
         try
         {
-            badAuthInfo
-                    .checkAndCleanAuthenticationInfo(TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
 
             assertFalse("Exception should have been thrown !", true);
         }
@@ -769,8 +766,8 @@ public class SecurityHelperTest extends TestCase
      * 
      * @throws ConfigurationException
      */
-    public void testMatchingStrings() throws ConfigurationException,
-            ServerRuntimeException
+    public void testMatchingStrings()
+            throws ConfigurationException, ServerRuntimeException
     {
         String[] s0 = {};
         String[] s1 = {"abcd"};
@@ -798,4 +795,51 @@ public class SecurityHelperTest extends TestCase
         // Prove that disjoint array values result in an empty set.
         Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s3, s5));
     }
+
+    /**
+     * Confirm that RealmJMXAuthenticator.getRandomInt(min, max) always returns
+     * a coherent value
+     */
+    public void testRealmJMXAuthenticatorRandomNumberGenerator()
+    {
+        // 0 value -> 0
+        int randomNumber = RealmJMXAuthenticator.getRandomInt(0, 0, 0);
+        assertTrue(randomNumber == 0);
+
+        // negative values -> 0
+        randomNumber = RealmJMXAuthenticator.getRandomInt(-1, -10, 1);
+        assertTrue(randomNumber == 0);
+
+        // One negative value -> 0 and other value
+        randomNumber = RealmJMXAuthenticator.getRandomInt(-10, 2, 1);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 0 && randomNumber <= 2);
+
+        // inverted min and max -> revert values
+        randomNumber = RealmJMXAuthenticator.getRandomInt(5, 2, 1);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber <= 5 && randomNumber >= 2);
+
+        // steps of 100
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 100);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                (randomNumber - 500) % 100 == 0);
+
+        // steps of 15
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 15);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                (randomNumber - 500) % 15 == 0);
+
+        // step of 0 -> step of 1
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 0);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 500 && randomNumber <= 3000);
+
+        // step > max-min
+        randomNumber = RealmJMXAuthenticator.getRandomInt(0, 10, 11);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 0 && randomNumber <= 10);
+
+    }
+
 }
