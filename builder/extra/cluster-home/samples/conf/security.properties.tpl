@@ -9,7 +9,6 @@ security.dir=@{SECURITY_DIRECTORY}
 security.rmi.authentication=@{ENABLE_RMI_AUTHENTICATION}
 security.rmi.authentication.username=@{RMI_USER}
 
-security.rmi.tungsten.authenticationRealm=true
 security.rmi.tungsten.authenticationRealm.encrypted.password=true
 
 security.rmi.encryption=@{ENABLE_RMI_SSL}

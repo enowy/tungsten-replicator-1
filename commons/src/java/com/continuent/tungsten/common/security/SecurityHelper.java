@@ -251,16 +251,9 @@ public class SecurityHelper
                     SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP_DEFAULT,
                     false);
 
-            boolean useTungstenAuthenticationRealm = securityProperties
-                    .getBoolean(
-                            SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM,
-                            SecurityConf.SECURITY_USE_TUNGSTEN_AUTHENTICATION_REALM_DEFAULT,
-                            false);
-            boolean useEncryptedPassword = securityProperties
-                    .getBoolean(
-                            SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD,
-                            SecurityConf.SECURITY_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT,
-                            false);
+            // Always use custom Tungsten Authentication Realm
+            // CONT-1348
+            boolean useTungstenAuthenticationRealm = true;
 
             // Define application specific settings
             // Use default values by default
