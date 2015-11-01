@@ -134,6 +134,21 @@ public class PlogExtractor implements RawExtractor
     public void prepare(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        // Make sure we can find the console script used to communicate with the
+        // mine process.
+        if (this.replicateConsoleScript == null)
+        {
+            throw new ReplicatorException(
+                    "Replicate console script is not set (property replicateConsoleScript)");
+        }
+        File consoleScript = new File(replicateConsoleScript);
+        if (!consoleScript.canExecute())
+        {
+            throw new ReplicatorException(
+                    "Replicate console script is missing or not executable: script="
+                            + consoleScript.getAbsolutePath());
+        }
+
         // Set up the byte cache for large objects.
         byteCache = new RawByteCache(cacheDir, cacheMaxTotalBytes,
                 cacheMaxObjectBytes, cacheMaxOpenFiles);
@@ -385,7 +400,6 @@ public class PlogExtractor implements RawExtractor
                 throw new ReplicatorException(
                         "Oracle SCN query returned no rows: " + query);
             String scn = rs.getString(1);
-            logger.info("Found an SCN: " + scn);
             return scn;
         }
         catch (SQLException e)

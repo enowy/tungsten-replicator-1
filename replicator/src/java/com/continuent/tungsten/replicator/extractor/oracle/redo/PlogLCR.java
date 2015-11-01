@@ -44,7 +44,7 @@ import com.continuent.tungsten.replicator.dbms.RowChangeData.ActionType;
 import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
 
 /**
- * Represents one logical change record (=one entry in the plog). 
+ * Represents one logical change record (=one entry in the plog).
  */
 class PlogLCR implements Serializable
 {
@@ -822,5 +822,21 @@ class PlogLCR implements Serializable
             hexChars[j * 2 + 1] = hexArray[v & 0x0F];
         }
         return new String(hexChars);
+    }
+
+    /**
+     * Print summary of LCR contents.
+     */
+    public String toString()
+    {
+        StringBuffer sb = new StringBuffer();
+        sb.append(this.getClass().getSimpleName()).append(":");
+        sb.append(" XID=").append(XID);
+        sb.append(" type=").append(type);
+        sb.append(" subtype=").append(subtype);
+        sb.append(" SCN=").append(SCN);
+        sb.append(" owner=").append(tableOwner);
+        sb.append(" table=").append(tableName);
+        return sb.toString();
     }
 }

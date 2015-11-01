@@ -38,7 +38,9 @@ import java.util.concurrent.BlockingQueue;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
+import com.continuent.tungsten.common.exec.ProcessExecutor;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -46,7 +48,7 @@ import com.continuent.tungsten.replicator.plugin.PluginContext;
 /**
  * Defines a replication event extractor, which reads events from plog file,
  * which abstracts Oracle REDO records. This is a thread that actually does the
- * extraction and passes it in queue to PlogExtractor. 
+ * extraction and passes it in queue to PlogExtractor.
  */
 public class PlogReaderThread extends Thread
 {
@@ -301,6 +303,39 @@ public class PlogReaderThread extends Thread
         plogStream = new DataInputStream(new BufferedInputStream(
                 new FileInputStream(new File(filename))));
         logger.info("File " + filename + " opened.");
+        logger.info("Open transactions=" + openTransactions.size());
+        logger.info("Last processed event ID=" + this.lastProcessedEventId);
+        logger.info("Transaction cache statistics: " + cache.toString());
+        if (logger.isDebugEnabled())
+        {
+            for (String xid : openTransactions.keySet())
+            {
+                PlogTransaction t = openTransactions.get(xid);
+                StringBuffer sb = new StringBuffer();
+                sb.append("TRANSACTION: ").append(t.toString());
+                LargeObjectScanner<PlogLCR> scanner = null;
+                try
+                {
+                    scanner = t.getLCRList().scanner();
+                    while (scanner.hasNext())
+                    {
+                        PlogLCR lcr = scanner.next();
+                        sb.append("\nLCR: ").append(lcr.toString());
+                    }
+                }
+                catch (IOException e)
+                {
+                    sb.append("\nError: unable to scan PlogLCRs: "
+                            + e.getMessage());
+                }
+                finally
+                {
+                    if (scanner != null)
+                        scanner.close();
+                }
+                logger.debug(sb.toString());
+            }
+        }
     }
 
     /**
@@ -375,8 +410,8 @@ public class PlogReaderThread extends Thread
                 }
                 else if (tag.id == PlogLCRTag.TAG_LCR_ID)
                 {
-                    rawLCR.LCRid = tag.valueLong()
-                            + 1000000000L/* 1e9 */ * plogId;
+                    rawLCR.LCRid = tag.valueLong() + 1000000000L/* 1e9 */
+                            * plogId;
                 }
                 else if (tag.id == PlogLCRTag.TAG_PLOGSEQ)
                 {
@@ -406,10 +441,11 @@ public class PlogReaderThread extends Thread
                 }
                 else if (tag.id == PlogLCRTag.TAG_OBJ_ID)
                 {
-                    objectId = tag.valueInt();                    
+                    objectId = tag.valueInt();
                     rawLCR.tableId = objectId;
                 }
-                else /* will be processed later */
+                else
+                /* will be processed later */
                 {
                     rawLCR.rawTags.add(tag);
                 }
@@ -511,6 +547,7 @@ public class PlogReaderThread extends Thread
                                     .add(plogDictCacheColumnType.get(objColId));
                             lastColumnHadMetadata = true;
                         }
+                        break;
                     default :
                         /*
                          * other tags are of no interest for us here, we handle
@@ -633,9 +670,11 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * Get last obsolete plog, so we can signal mine it FIXME It should do it
-     * from last applied, not last processed event id. We are waiting to get API
-     * for that.
+     * Get last obsolete plog, so we can signal mine. To prevent accidents we
+     * subtract one so that we do not log the current file as obsolete.
+     * <p/>
+     * FIXME It should do it from last applied, not last processed event id. We
+     * are waiting to get API for that.
      * 
      * @throws IOException
      */
@@ -668,7 +707,7 @@ public class PlogReaderThread extends Thread
                                 + " - must be 5 values delimited by # signs.");
             }
         }
-        return obsSequence;
+        return obsSequence - 1;
     }
 
     /**
@@ -678,46 +717,62 @@ public class PlogReaderThread extends Thread
      * 
      * @throws IOException
      */
-    private boolean registerThisExtractorAtMine()
+    private void registerThisExtractorAtMine() throws ReplicatorException
     {
-        try
-        {
-            Process process = Runtime.getRuntime()
-                    .exec(new String[]{replicateConsoleScript,
-                            "PROCESS DISCONNECTED_APPLY REGISTER "
-                                    + this.replicateApplyName});
-            process.waitFor();
-            return true;
-        }
-        catch (Exception e)
-        {
-            logger.error(e.getMessage());
-            return false;
-        }
+        String command = replicateConsoleScript
+                + " PROCESS DISCONNECTED_APPLY REGISTER "
+                + this.replicateApplyName;
+        logger.info("Registering with mine process: " + command);
+        exec(command);
     }
 
     /**
      * Signal mine our last obsolete plog.
      * 
      * @param newObsolete last obsolete plog sequence to set
-     * @throws IOException
      */
-    private boolean reportLastObsoletePlog(int newObsolete)
+    private void reportLastObsoletePlog(int newObsolete)
+            throws ReplicatorException
     {
-        try
+        String command = replicateConsoleScript
+                + " PROCESS DISCONNECTED_APPLY SET_OBSOLETE "
+                + this.replicateApplyName + " " + newObsolete;
+        logger.info("Signaling last obsolete plog file: " + command);
+        exec(command);
+    }
+
+    /**
+     * Execute an OS command and return the result of stdout.
+     * 
+     * @param command Command to run
+     * @return Returns output of the command in a string
+     * @throws ReplicatorException Thrown if command execution fails
+     */
+    private String exec(String command) throws ReplicatorException
+    {
+        String[] osArray = {"sh", "-c", command};
+        ProcessExecutor pe = new ProcessExecutor();
+        pe.setCommands(osArray);
+        if (logger.isDebugEnabled())
         {
-            Process process = Runtime.getRuntime()
-                    .exec(new String[]{replicateConsoleScript,
-                            "PROCESS DISCONNECTED_APPLY SET_OBSOLETE "
-                                    + this.replicateApplyName + " "
-                                    + newObsolete});
-            return true;
+            logger.debug("Executing OS command: " + command);
         }
-        catch (Exception e)
+        pe.run();
+        if (logger.isDebugEnabled())
         {
-            logger.error(e.getMessage());
-            return false;
+            logger.debug("OS command stdout: " + pe.getStdout());
+            logger.debug("OS command stderr: " + pe.getStderr());
+            logger.debug("OS command exit value: " + pe.getExitValue());
         }
+        if (!pe.isSuccessful())
+        {
+            String msg = "OS command failed: command=" + command + " rc="
+                    + pe.getExitValue() + " stdout=" + pe.getStdout()
+                    + " stderr=" + pe.getStderr();
+            logger.error(msg);
+            throw new ReplicatorException(msg);
+        }
+        return pe.getStdout();
     }
 
     /**
@@ -733,13 +788,14 @@ public class PlogReaderThread extends Thread
      * @param replicateConsoleScript property set by user (start-console.sh)
      * @param replicateApplyName property set by user (name of apply)
      * @param cache Vector cache to hold pending transactions
+     * @throws ReplicatorException We can fail trying to contact the mine
      * @throws IOException We can fail on disk open or charset conversion
      */
     public PlogReaderThread(PluginContext context,
             BlockingQueue<DBMSEvent> queue, String plogDirectory,
             int sleepSizeInMilliseconds, int transactionFragSize,
             String replicateConsoleScript, String replicateApplyName,
-            RawByteCache cache)
+            RawByteCache cache) throws ReplicatorException
     {
 
         logger.info("PlogReaderThread: " + plogDirectory + "/"
@@ -823,14 +879,13 @@ public class PlogReaderThread extends Thread
 
             while (!cancelled)
             {
+                // Report the last plog so that the MINE can clean up.
                 int lastObsolePlog = getLastObsoletePlog();
                 if (lastReportedObsolePlogSeq != lastObsolePlog
                         && lastObsolePlog > 0)
                 {
-                    if (reportLastObsoletePlog(lastObsolePlog))
-                    {
-                        lastReportedObsolePlogSeq = lastObsolePlog;
-                    }
+                    reportLastObsoletePlog(lastObsolePlog);
+                    lastReportedObsolePlogSeq = lastObsolePlog;
                 }
                 openFile(plogFilename);
                 readHeader();
@@ -878,7 +933,8 @@ public class PlogReaderThread extends Thread
                                */
                                 throw new FileNotFoundException(
                                         currentIncludePlog.plogFilename
-                                                + " ended prematurely, file is corrupted.");
+
+                                + " ended prematurely, file is corrupted.");
                             }
                             if ((retryCount % 5) == 0)
                             {
@@ -1018,9 +1074,13 @@ public class PlogReaderThread extends Thread
                             else if (t.commitSCN < restartEventCommitSCN)
                             {
                                 // Pre-restart transaction, throw away.
-                                logger.info(r1.XID + " committed at "
-                                        + t.commitSCN + ", before restart SCN "
-                                        + restartEventCommitSCN);
+                                if (logger.isDebugEnabled())
+                                {
+                                    logger.info(r1.XID + " committed at "
+                                            + t.commitSCN
+                                            + ", before restart SCN "
+                                            + restartEventCommitSCN);
+                                }
                                 openTransactions.remove(r1.XID);
                                 t.release();
                             }

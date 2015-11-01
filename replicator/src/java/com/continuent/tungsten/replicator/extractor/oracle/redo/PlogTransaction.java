@@ -67,7 +67,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
     private int skipSeq = 0;
 
-    public boolean transactionIsDML = true; // false=DDL, true=DML
+    public boolean transactionIsDML = true; // false=DDL,
+                                            // true=DML
 
     public long startPlogId = 0;
 
@@ -165,6 +166,15 @@ class PlogTransaction implements Comparable<PlogTransaction>
     }
 
     /**
+     * Return current LCR list. Beware of any operation that would alter the
+     * list as it may corrupt the transaction.
+     */
+    public LargeObjectArray<PlogLCR> getLCRList()
+    {
+        return this.LCRList;
+    }
+
+    /**
      * is this transaction committed?
      * 
      * @return boolean flag
@@ -246,19 +256,19 @@ class PlogTransaction implements Comparable<PlogTransaction>
                             DBMSEvent event = new DBMSEvent(lastLCR.eventId,
                                     data, false, commitTime);
 
+                            // Set metadata for the transaction. Source is
+                            // Oracle, we normalize time data to GMT, and
+                            // strings are in UTF8.
                             event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                                     Database.ORACLE);
-                            // Strings are converted to UTF8 rather than using
-                            // bytes
-                            // for this extractor.
+                            event.setMetaDataOption(
+                                    ReplOptionParams.TIME_ZONE_AWARE, "true");
                             event.setMetaDataOption(ReplOptionParams.STRINGS,
                                     "utf8");
                             q.put(event);
 
-                            data = new ArrayList<DBMSData>(); /*
-                                                               * clear array for
-                                                               * next fragment
-                                                               */
+                            // Clear array for next fragment.
+                            data = new ArrayList<DBMSData>();
                             fragSize = 0;
                         }
 
@@ -311,13 +321,11 @@ class PlogTransaction implements Comparable<PlogTransaction>
                     scanner.close();
             }
             if (lastLCR != null)
-            { /* last LCR set = transaction is not empty */
+            {
+                // Last LCR set = transaction is not empty
+                // Mark last LCR as "LAST", so we know transaction is complete
                 lastLCR.eventId = "" + commitSCN + "#" + XID + "#" + "LAST"
-                        + "#" + minSCN + "#"
-                        + lastObsoletePlogSeq; /*
-                                                * mark last LCR as "LAST", so we
-                                                * know transaction is complete
-                                                */
+                        + "#" + minSCN + "#" + lastObsoletePlogSeq;
                 if (logger.isDebugEnabled())
                 {
                     logger.debug("EventId#2 set to " + lastLCR.eventId);
@@ -325,10 +333,13 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
                 DBMSEvent event = new DBMSEvent(lastLCR.eventId, data, true,
                         commitTime);
+
+                // Set metadata for the transaction. Source is Oracle, we
+                // normalize time data to GMT, and strings are in UTF8.
                 event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                         Database.ORACLE);
-                // Strings are converted to UTF8 rather than using bytes for
-                // this extractor.
+                event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
+                        "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
 
                 q.put(event);
@@ -394,6 +405,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
                         commitTime);
                 event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                         Database.ORACLE);
+                event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
+                        "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
                 q.put(event);
             }
@@ -561,4 +574,19 @@ class PlogTransaction implements Comparable<PlogTransaction>
         return rowData;
     }
 
+    /**
+     * Print summary of transaction contents.
+     */
+    public String toString()
+    {
+        StringBuffer sb = new StringBuffer();
+        sb.append(this.getClass().getSimpleName()).append(":");
+        sb.append(" XID=").append(XID);
+        sb.append(" committed=").append(committed);
+        sb.append(" empty=").append(empty);
+        sb.append(" startSCN=").append(startSCN);
+        sb.append(" commitSCN=").append(commitSCN);
+        sb.append(" startPlogId=").append(startPlogId);
+        return sb.toString();
+    }
 }

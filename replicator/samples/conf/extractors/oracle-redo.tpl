@@ -5,8 +5,13 @@ replicator.extractor.dbms=com.continuent.tungsten.replicator.extractor.oracle.re
 replicator.extractor.dbms.plogDirectory=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/mine
 
 # The fragment size for transactions. A value of 0 means that transactions
-# will not be fragmented. 
+# will not be fragmented.  A positive integer indicates the number of row 
+# changes to include in a single transaction. 
 replicator.extractor.dbms.transactionFragSize=@{REPL_ORACLE_REDO_MINER_TRANSACTION_FRAGMENT_SIZE}
+
+# Location of the vmrr start-console.sh script, which delivers commands to the 
+# redo reader. 
+replicator.extractor.dbms.replicateConsoleScript=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/start-console.sh
 
 # The extractor queue size, which is the maximum number of rows that 
 # plog extraction can enqueue before pausing to wait for processing. 
