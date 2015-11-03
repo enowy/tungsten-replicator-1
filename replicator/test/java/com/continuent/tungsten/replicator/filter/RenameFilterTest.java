@@ -191,6 +191,9 @@ public class RenameFilterTest extends TestCase
         // True negatives - no renames should happen.
         assertSchemaTableChanged("schemaz", "tablee", "schemaz", "tablee");
         assertSchemaTableChanged("schemac", "tablee", "schemac", "tablee");
+        
+        // Rename filter is case sensitive, hence no rename for this one.
+        assertSchemaTableChanged("schemaz", "TABLEQ", "schemaz", "TABLEQ");
     }
 
     /**
