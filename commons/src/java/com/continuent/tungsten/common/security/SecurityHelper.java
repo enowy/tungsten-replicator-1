@@ -369,6 +369,7 @@ public class SecurityHelper
                             false);
 
             // --- Populate return object ---
+            authInfo.setTungstenApplicationName(tungstenApplicationName);
             authInfo.setConnectorUseSSL(connectorUseSSL);
             authInfo.setParentPropertiesFileLocation(parentFileLocation);
             authInfo.setAuthenticationNeeded(useAuthentication);

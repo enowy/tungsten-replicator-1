@@ -28,7 +28,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.text.MessageFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -69,7 +68,8 @@ public final class AuthenticationInfo
     /** Location of the file from which this was built **/
     private String                  parentPropertiesFileLocation             = null;
     /** Properties from the files from which this was built **/
-    private TungstenProperties      parentProperties                         = null;
+    private TungstenProperties           parentProperties                         = null;
+    private TUNGSTEN_APPLICATION_NAME    tungstenApplicationName                  = null;
 
     private boolean                      authenticationNeeded                     = false;
     private Integer                      minWaitOnFailedLogin                     = null;                         // (ms)
@@ -864,6 +864,27 @@ public final class AuthenticationInfo
     }
 
     /**
+     * Returns the tungstenApplicationName value.
+     * 
+     * @return Returns the tungstenApplicationName.
+     */
+    public TUNGSTEN_APPLICATION_NAME getTungstenApplicationName()
+    {
+        return tungstenApplicationName;
+    }
+
+    /**
+     * Sets the tungstenApplicationName value.
+     * 
+     * @param tungstenApplicationName The tungstenApplicationName to set.
+     */
+    public void setTungstenApplicationName(
+            TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
+    {
+        this.tungstenApplicationName = tungstenApplicationName;
+    }
+
+    /**
      * Returns the mapKeystoreAliasesForTungstenApplication value.
      * 
      * @return Returns the mapKeystoreAliasesForTungstenApplication.
@@ -1088,6 +1109,37 @@ public final class AuthenticationInfo
         json = writer.writeValueAsString(this);
 
         return json;
+    }
+
+    /**
+     * {@inheritDoc}
+     * 
+     * @see java.lang.Object#toString()
+     */
+    public String toString()
+    {
+        StringBuilder strAuthInfo = new StringBuilder();
+        strAuthInfo.append(MessageFormat.format(
+                "------------------------------------------------------------------- ### security.properties ### {0}\n",
+                this.getTungstenApplicationName()));
+        switch (tungstenApplicationName)
+        {
+            case ANY :
+                strAuthInfo.append(MessageFormat.format("\t\t\t\t{0}={1}\n",
+                        SecurityConf.SECURITY_JMX_USE_ENCRYPTION,
+                        this.isEncryptionNeeded()));
+                strAuthInfo.append(MessageFormat.format("\t\t\t\t{0}={1}\n",
+                        SecurityConf.SECURITY_JMX_USE_AUTHENTICATION,
+                        this.isAuthenticationNeeded()));
+                strAuthInfo.append(MessageFormat.format("\t\t\t\t{0}={1}\n",
+                        SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD,
+                        this.useEncryptedPasswords));
+                break;
+        }
+
+        strAuthInfo.append(
+                "\t\t\t\t-------------------------------------------------------------------");
+        return strAuthInfo.toString();
     }
 
     /**
