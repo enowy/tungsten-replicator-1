@@ -441,7 +441,8 @@ public class SecurityHelper
                 authInfo.getTruststorePassword(), verbose);
 
         // Protocols and Cipher Suites
-        if (!authInfo.getEnabledProtocols().isEmpty())
+        if (!authInfo.getEnabledProtocols().isEmpty()
+                && authInfo.isEncryptionNeeded())
         {
             String enabledProtocols = StringUtils
                     .join(authInfo.getEnabledProtocols(), ",");
@@ -450,8 +451,9 @@ public class SecurityHelper
             setSystemProperty("https.protocols",
                     enabledProtocols, verbose);
         }
-        
-        if (!authInfo.getEnabledCipherSuites().isEmpty())
+
+        if (!authInfo.getEnabledCipherSuites().isEmpty()
+                && authInfo.isEncryptionNeeded())
         {
             String[] supportedCipherSuites = ((SSLSocketFactory) SSLSocketFactory
                     .getDefault()).getSupportedCipherSuites();
