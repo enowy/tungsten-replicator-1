@@ -392,6 +392,10 @@ class Configurator
                                           @command = HelpCommand.new(@config)
                                           @command.subcommand(HelpCommand::HELP_TEMPLATE_FILE)
       }
+      opts.on("--version")           {
+        @command = QueryCommand.new(@config)
+        @command.subcommand(QueryCommand::QUERY_VERSION)
+      }
       # Force logging to be enabled for this command
       opts.on("--log String")           { |val|
         @options.log_name = val
