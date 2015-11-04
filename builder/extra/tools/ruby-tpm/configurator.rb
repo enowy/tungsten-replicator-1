@@ -139,6 +139,7 @@ PROVISION_NEW_SLAVES = "provision_new_slaves"
 
 TPM_COMMAND_NAME = "tpm"
 AUTODETECT = 'autodetect'
+AUTOGENERATE = 'autogenerate'
 
 PRODUCT_VMWARE_CLUSTERING = "VMware Continuent for Clustering"
 ABBR_VMWARE_CLUSTERING = "vCC"

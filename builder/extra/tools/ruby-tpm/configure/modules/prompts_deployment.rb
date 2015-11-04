@@ -1566,9 +1566,17 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
     false
   end
   
+  def accept?(raw_value)
+    if raw_value == AUTOGENERATE
+      raw_value
+    else
+      super(raw_value)
+    end
+  end
+  
   def validate_value(value)
     super(value)
-    if is_valid?() && value != ""
+    if is_valid?() && value != "" && value != AUTOGENERATE
       unless File.exists?(value)
         error("The file #{value} does not exist")
       end
@@ -1579,7 +1587,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, storepass)
+  def self.build_keystore(dest, keyalias, storepass, first_time_warning = nil)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1594,6 +1602,10 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
       keytool = which("keytool")
       if keytool == nil
         raise "Unable to generate a file for --java-jgroups-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--jgroups-ssl=false'."
+      end
+      
+      if first_time_warning != nil
+        Configurator.instance.warning(first_time_warning)
       end
       
       ks = Tempfile.new("jgroupssec")
@@ -1877,9 +1889,28 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
     @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_tls_keystore.jks"
   end
   
+  def accept?(raw_value)
+    if raw_value == AUTOGENERATE
+      raw_value
+    else
+      super(raw_value)
+    end
+  end
+  
+  def validate_value(value)
+    super(value)
+    if is_valid?() && value != "" && value != AUTOGENERATE
+      unless File.exists?(value)
+        error("The file #{value} does not exist")
+      end
+    end
+    
+    is_valid?()
+  end
+  
   DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, storepass, lifetime)
+  def self.build_keystore(dest, keyalias, storepass, lifetime, first_time_warning = nil)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1894,6 +1925,10 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       keytool = which("keytool")
       if keytool == nil
         raise "Unable to generate a file for --java-tls-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--rmi-ssl=false --thl-ssl=false'."
+      end
+      
+      if first_time_warning != nil
+        Configurator.instance.warning(first_time_warning)
       end
       
       ks = Tempfile.new("tlssec")

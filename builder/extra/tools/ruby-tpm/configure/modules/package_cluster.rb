@@ -1522,10 +1522,16 @@ module ClusterCommandModule
             next
           end
           
-          if config_obj.getProperty([p[:group], g_alias, p[:local]]) != nil
-            config_obj.setProperty([p[:group], g_alias, p[:global]], config_obj.getProperty([p[:group], g_alias, p[:local]]))
-            config_obj.setProperty([p[:group], g_alias, p[:local]], "#{config_obj.getProperty(TEMP_DIRECTORY)}/#{config_obj.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(config_obj.getProperty([p[:group], g_alias, p[:local]]))}")
+          if config_obj.getProperty([p[:group], g_alias, p[:local]]) == nil
+            next
           end
+          
+          if config_obj.getProperty([p[:group], g_alias, p[:local]]) == AUTOGENERATE
+            next
+          end
+          
+          config_obj.setProperty([p[:group], g_alias, p[:global]], config_obj.getProperty([p[:group], g_alias, p[:local]]))
+          config_obj.setProperty([p[:group], g_alias, p[:local]], "#{config_obj.getProperty(TEMP_DIRECTORY)}/#{config_obj.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(config_obj.getProperty([p[:group], g_alias, p[:local]]))}")
         }
       }
     end
