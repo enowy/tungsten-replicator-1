@@ -114,6 +114,7 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
             AuthenticationInfo authenticationInfo = SecurityHelper
                     .loadAuthenticationInformation(TUNGSTEN_APPLICATION_NAME.REPLICATOR);
             this.securityInfo = authenticationInfo;
+            logger.info(SecurityHelper.printSecuritySummary(authenticationInfo));            
         }
         catch (ConfigurationException ce)
         {

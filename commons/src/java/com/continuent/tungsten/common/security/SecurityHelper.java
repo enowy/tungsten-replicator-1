@@ -903,4 +903,38 @@ public class SecurityHelper
                     sslSocket.getSupportedProtocols(), enabledProtocols));
         }
     }
+
+    public static String printSecuritySummary(AuthenticationInfo authInfo)
+    {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Security summary :\n");
+
+        if (authInfo.isEncryptionNeeded())
+        {
+            sb.append("JMX connections are encrypted\n");
+            sb.append("Enabled cipher suites : ");
+            for (String s : SecurityHelper.getCiphers())
+                sb.append("\n\t" + s + " ");
+            sb.append("\n");
+            sb.append("Enabled protocols : ");
+            for (String s : SecurityHelper.getProtocols())
+                sb.append("\n\t" + s + " ");
+            sb.append("\n");
+        }
+        else
+        {
+            sb.append("JMX connections are not encrypted\n");
+        }
+
+        if (authInfo.isAuthenticationNeeded())
+        {
+            sb.append("Password authentication is used\n");
+        }
+        else
+        {
+            sb.append("No password authentication\n");                        
+        }
+        return sb.toString();
+    }
 }

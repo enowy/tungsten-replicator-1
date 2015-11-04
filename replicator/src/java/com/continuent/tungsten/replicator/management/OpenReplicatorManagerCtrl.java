@@ -59,6 +59,7 @@ import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.PasswordManager;
 import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
 import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.utils.CLUtils;
 import com.continuent.tungsten.common.utils.ManifestParser;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.PropertiesManager;
@@ -286,6 +287,15 @@ public class OpenReplicatorManagerCtrl
             {
                 this.authenticationInfo = SecurityHelper
                         .loadAuthenticationInformation(securityPropertiesFileLocation);
+                /**
+                 * If verbose mode is set print whether password is used, 
+                 * encryption is enabled, and if that is the case, the cipher,
+                 * and protocol
+                 */
+                if (verbose)
+                {
+                    CLUtils.print(SecurityHelper.printSecuritySummary(authenticationInfo));
+                }
                 // Sets the username and password in the authenticationInfo.
                 // This will be used as credentials when connecting
                 // Password is provided "as is" (potentilaly encrypted) and will
