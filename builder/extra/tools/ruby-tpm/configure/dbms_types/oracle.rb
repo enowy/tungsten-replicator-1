@@ -565,6 +565,9 @@ class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
     Configurator.instance.command.get_deployment_configurations().each{
       |cfg|
       key = cfg.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
+      unless output.props.has_key?(key)
+        next
+      end
 
       if output.props[key].has_key?("HostOracleLibrariesFoundCheck")
         ojdbc = nil
