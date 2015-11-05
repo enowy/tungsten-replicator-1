@@ -19,6 +19,17 @@ module ClusterHostCheck
   end
 end
 
+module ClusterHostPostValidationCheck
+  def self.included(subclass)
+    @subclasses ||= []
+    @subclasses << subclass
+  end
+
+  def self.subclasses
+    @subclasses || []
+  end
+end
+
 module ConnectorOnlyCheck
   def enabled?
     super() && @config.getProperty(HOST_ENABLE_CONNECTOR) == "true"
@@ -1438,6 +1449,7 @@ end
 
 class GlobalHostAddressesCheck < ConfigureValidationCheck
   include PostValidationCheck
+  include ClusterHostPostValidationCheck
   
   def set_vars
     @title = "Matching IP addresses check"
@@ -1473,6 +1485,7 @@ end
 
 class GlobalMatchingPingMethodCheck < ConfigureValidationCheck
   include PostValidationCheck
+  include ClusterHostPostValidationCheck
   
   def set_vars
     @title = "Matching manager ping method check"

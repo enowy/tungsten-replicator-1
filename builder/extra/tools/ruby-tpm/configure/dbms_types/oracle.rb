@@ -109,6 +109,17 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   end
   
   def getExternalLibraries()
+    found_ojdbc = nil
+    base = Configurator.instance.get_base_path()
+    Dir.glob("#{base}/tungsten-replicator/lib/ojdbc*.jar").each{
+      |lib|
+      found_ojdbc = lib
+    }
+    # There is already an OJDBC driver so we don't need to do anything
+    if found_ojdbc != nil
+      return {}
+    end
+    
     java_out = cmd_result("java -version 2>&1")
     if java_out =~ /version \"1\.8\./
       allowed_jars = ["ojdbc8.jar", "ojdbc7.jar", "ojdbc6.jar"]
@@ -131,7 +142,7 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
       }
     end
     
-    raise MessageError.new("Unable to find an Oracle JDBC driver")
+    {}
   end
 
   def get_extractor_template
@@ -512,5 +523,62 @@ class OracleRedoReaderMinerDirectoryCheck < ConfigureValidationCheck
   
   def enabled?
     super() && (@config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) == "redo")
+  end
+end
+
+class HostOracleLibrariesFoundCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+  
+  def set_vars
+    @title = "Check for the Oracle JDBC driver on each host"
+  end
+  
+  def validate
+    ds = get_applier_datasource()
+    libraries = ds.getExternalLibraries()
+    output_property("HostOracleLibrariesFoundCheck", libraries)
+  end
+end
+
+class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
+  include PostValidationCheck
+  include ClusterHostPostValidationCheck
+  
+  def set_vars
+    @title = "Global check for Oracle JDBC drivers on each host"
+  end
+  
+  def validate
+    ojdbc = nil
+    base = Configurator.instance.get_base_path()
+    Dir.glob("#{base}/tungsten-replicator/lib/ojdbc*.jar").each{
+      |lib|
+      ojdbc = lib
+    }
+    if ojdbc != nil
+      return
+    end
+    
+    vh = Configurator.instance.command.get_validation_handler()
+    output = vh.output_properties
+    Configurator.instance.command.get_deployment_configurations().each{
+      |cfg|
+      key = cfg.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
+
+      if output.props[key].has_key?("HostOracleLibrariesFoundCheck")
+        ojdbc = nil
+        output.props[key]["HostOracleLibrariesFoundCheck"].keys().each{
+          |lib|
+          if lib =~ /ojdbc.*\.jar/
+            ojdbc = lib
+          end
+        }
+        
+        if ojdbc == nil
+          error("Unable to find an OJDBC Jar file for the deployment to #{key}")
+        end
+      end
+    }
   end
 end

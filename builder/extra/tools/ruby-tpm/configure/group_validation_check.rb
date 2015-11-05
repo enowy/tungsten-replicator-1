@@ -35,7 +35,7 @@ class GroupValidationCheck
         
         check.set_member(member)
         check.run()
-        @errors = @errors + check.errors
+        add_remote_result(check.get_remote_result())
 
         unless check.is_valid?()
           if check.fatal_on_error?()

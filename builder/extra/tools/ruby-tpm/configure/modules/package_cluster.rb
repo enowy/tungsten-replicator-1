@@ -39,8 +39,10 @@ module ClusterCommandModule
       checks << klass.new()
     }
     
-    checks << GlobalHostAddressesCheck.new()
-    checks << GlobalMatchingPingMethodCheck.new()
+    ClusterHostPostValidationCheck.subclasses.each{
+      |klass|
+      checks << klass.new()
+    }
     
     return checks
   end
