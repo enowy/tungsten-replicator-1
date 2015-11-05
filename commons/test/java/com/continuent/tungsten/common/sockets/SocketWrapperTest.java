@@ -36,10 +36,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 import org.junit.Assert;
 
@@ -289,12 +289,6 @@ public class SocketWrapperTest
         if (useSSL)
         {
             Assert.assertTrue(securityInfo != null);
-            String[] enabledProtocols = (String[]) securityInfo
-                    .getEnabledProtocols().toArray(new String[0]);
-            String[] enabledCiphers = (String[]) securityInfo
-                    .getEnabledCipherSuites().toArray(new String[0]);
-            clientWrapper.setEnabledCiphers(enabledCiphers);
-            clientWrapper.setEnabledProtocols(enabledProtocols);
         }
         clientWrapper.setAddress(new InetSocketAddress("127.0.0.1", port));
         clientWrapper.connect();
@@ -331,23 +325,16 @@ public class SocketWrapperTest
         // requests.
         EchoClient[] clients = new EchoClient[numberOfClients];
 
-        String[] enabledProtocols = null;
-        String[] enabledCiphers = null;
-
         if (useSSL)
         {
             Assert.assertTrue(securityInfo != null);
-            enabledProtocols = (String[]) securityInfo.getEnabledProtocols()
-                    .toArray(new String[0]);
-            enabledCiphers = (String[]) securityInfo.getEnabledCipherSuites()
-                    .toArray(new String[0]);
         }
 
         for (int i = 0; i < clients.length; i++)
         {
             EchoClient client = new EchoClient("127.0.0.1", port, useSSL, 100);
-            client.setEnabledCiphers(enabledCiphers);
-            client.setEnabledProtocols(enabledProtocols);
+            client.setEnabledCiphers(SecurityHelper.getCiphers());
+            client.setEnabledProtocols(SecurityHelper.getProtocols());
             client.start();
             clients[i] = client;
         }

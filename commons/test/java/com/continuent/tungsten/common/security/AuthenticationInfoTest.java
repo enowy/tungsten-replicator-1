@@ -34,7 +34,7 @@ import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATI
 public class AuthenticationInfoTest extends TestCase
 {
     /**
-     * Client side: checks that if a trustorelocation is set, the
+     * Client side: checks that if a trustore location is set, the
      * checkAuthenticationInfo verifies that the trustore existe If it doesn't,
      * it throws an exception with a non null cause.
      * 

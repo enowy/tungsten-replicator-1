@@ -132,8 +132,6 @@ public class EchoClient implements Runnable
         socket = new ClientSocketWrapper();
         socket.setAddress(new InetSocketAddress(host, port));
         socket.setUseSSL(useSSL);
-        socket.setEnabledCiphers(enabledCiphers);
-        socket.setEnabledProtocols(enabledProtocols);
         socket.connect();
 
         // Spawn ourselves in a separate server.

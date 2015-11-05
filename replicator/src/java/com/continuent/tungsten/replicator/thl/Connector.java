@@ -126,8 +126,6 @@ public class Connector implements ReplicatorPlugin
                     SecurityHelper.loadAuthenticationInformation(
                             TUNGSTEN_APPLICATION_NAME.REPLICATOR);
                 }
-                clientSocket.setEnabledCiphers(SecurityHelper.getCiphers());
-                clientSocket.setEnabledProtocols(SecurityHelper.getProtocols());
             }
             clientSocket.setConnectTimeout(heartbeatMillis);
             // Timeout at 10 times the heartbeat interval. This is longer than

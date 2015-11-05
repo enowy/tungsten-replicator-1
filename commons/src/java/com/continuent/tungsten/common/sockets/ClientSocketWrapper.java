@@ -35,7 +35,6 @@ import javax.net.ssl.SSLSocketFactory;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
-import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
@@ -76,26 +75,6 @@ public class ClientSocketWrapper extends SocketWrapper
     public void setEnabledProtocols(String[] enabledProtocols)
     {
         this.enabledProtocols = enabledProtocols;
-    }
-
-    /**
-     * Returns the enabledCiphers value.
-     * 
-     * @return Returns the enabledCiphers.
-     */
-    public String[] getEnabledCiphers()
-    {
-        return enabledCiphers;
-    }
-
-    /**
-     * Sets the enabledCiphers value.
-     * 
-     * @param enabledCiphers The enabledCiphers to set.
-     */
-    public void setEnabledCiphers(String[] enabledCiphers)
-    {
-        this.enabledCiphers = enabledCiphers;
     }
 
     // Socket factory for new SSL connections.
@@ -184,7 +163,7 @@ public class ClientSocketWrapper extends SocketWrapper
             // Check that at least one configured cipher and protocol match with
             // those supported by the socket
             SecurityHelper.setCiphersAndProtocolsToSSLSocket(sslSocket,
-                    enabledCiphers, enabledProtocols);
+                    SecurityHelper.getCiphers(), SecurityHelper.getProtocols());
             socket = sslSocket;
         }
         else

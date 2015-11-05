@@ -25,6 +25,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.Socket;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,6 +49,7 @@ import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
+import com.continuent.tungsten.common.sockets.SSLSocketFactoryGenerator;
 import com.continuent.tungsten.common.utils.CLUtils;
 
 /**
@@ -422,11 +429,19 @@ public class SecurityHelper
      * Set system properties required for SSL and password management. Since
      * these settings are critical to correct operation we optionally log them.
      * 
-     * @param authInfo Populated authenticatino information
+     * Configured cipher suites and protocols may only match partially with the
+     * ciphers and protocols supported by the SSL implementation being used.
+     * In system properties we only store ciphers and protocols which are both
+     * configured and supported.
+     * 
+     * @param authInfo Populated authentication information
      * @param verbose If true, log information
+     * @throws ConfigurationException 
+     * @throws GeneralSecurityException 
+     * @throws IOException 
      */
     private static void setSecurityProperties(AuthenticationInfo authInfo,
-            boolean verbose)
+            boolean verbose) throws ConfigurationException
     {
         if (verbose)
         {
@@ -441,44 +456,40 @@ public class SecurityHelper
         setSystemProperty("javax.net.ssl.trustStorePassword",
                 authInfo.getTruststorePassword(), verbose);
 
-        // Protocols and Cipher Suites
-        if (!authInfo.getEnabledProtocols().isEmpty()
-                && authInfo.isEncryptionNeeded())
+        if (authInfo.isEncryptionNeeded())
         {
-            String enabledProtocols = StringUtils
-                    .join(authInfo.getEnabledProtocols(), ",");
-            setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
-                    enabledProtocols, verbose);
-            setSystemProperty("https.protocols",
-                    enabledProtocols, verbose);
-        }
-
-        if (!authInfo.getEnabledCipherSuites().isEmpty()
-                && authInfo.isEncryptionNeeded())
-        {
-            String[] supportedCipherSuites = ((SSLSocketFactory) SSLSocketFactory
-                    .getDefault()).getSupportedCipherSuites();
-            String[] enabledCipherSuites = authInfo.getEnabledCipherSuites()
-                    .toArray(new String[0]);
-            String[] possibleCipherSuites = SecurityHelper.getMatchingStrings(
-                    supportedCipherSuites, enabledCipherSuites);
-            if (possibleCipherSuites.length == 0)
+            SSLSocketFactory sf;   
+            try
             {
-                // We don't have any cipher suites in common. This is not good!
-                String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
-                StringBuffer sb = new StringBuffer(message).append("\n");
-                sb.append(String.format("JVM supported cipher suites: %s\n",
-                        StringUtils.join(supportedCipherSuites)));
-                sb.append(String.format(
-                        "Approved cipher suites from security.properties: %s\n",
-                        StringUtils.join(enabledCipherSuites)));
-                logger.error(sb.toString());
-                throw new RuntimeException(message);
+                sf = (SSLSocketFactory)SSLSocketFactory.getDefault();
             }
-            String enabledCipherSuitesList = StringUtils
-                    .join(possibleCipherSuites, ",");
-            setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
-                    enabledCipherSuitesList, verbose);
+            catch (Exception e)
+            {
+                throw new ConfigurationException("Failed to create a socket "
+                        + "factory for examining cipher suites supported by "
+                        + "underlying SSL implementation. " + e.getMessage());
+            }
+            /**
+             *  Find out which protocols and cipher suites are both specified in
+             *  cluster configuration and supported by the current, underlying 
+             *  SSL implementation. Set common protocols and cipher suites to
+             *  corresponding System properties which will be the only access
+             *  point to encryption information hereafter. 
+             */
+            setProtocolsToSystemProperties(authInfo, sf, verbose);
+            setCipherSuitesToSystemProperties(authInfo, sf, verbose);
+
+            // There must be at least one protocol and cipher suite if encryption is used
+            if (SecurityHelper.getProtocols() == null)
+            {
+                throw new ConfigurationException("Unable to find suitable "
+                        + "protocols for encrypted messaging.");
+            }
+            if (SecurityHelper.getCiphers() == null)
+            {
+                throw new ConfigurationException("Unable to find suitable "
+                        + "cipher suites for encrypted messaging.");
+            }
         }
     }
 
@@ -902,20 +913,20 @@ public class SecurityHelper
     {
         // Check that ciphers and protocols lists aren't empty
         if (enabledCiphers == null || enabledCiphers.length == 0)
-    {
-        if (enabledCiphers != null && enabledCiphers.length > 0)
         {
-            if (SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedCipherSuites(), enabledCiphers).length == 0)
-            {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) cipher suites.");
-            }
+            throw new ConfigurationException(
+                    "No ciphers are enabled in security properties.");
+        }
+        if (enabledProtocols == null || enabledProtocols.length == 0)
+        {
+            throw new ConfigurationException(
+                    "No protocols are enabled in security properties.");
+        }
 
         // Set cipher suites and protocols
         if (SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedCipherSuites(),
-                enabledCiphers).length == 0)
+            sslSocket.getSupportedCipherSuites(),
+            enabledCiphers).length == 0)
         {
             throw new ConfigurationException("SSLSocket doesn't support any "
                     + "of the enabled (configured) cipher suites.");
@@ -923,8 +934,8 @@ public class SecurityHelper
         // Enable ciphers which are both supported by socket service and
         // configured by user
         sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedCipherSuites(), enabledCiphers));
-
+                sslSocket.getSupportedCipherSuites(), enabledCiphers));            
+           
         if (SecurityHelper.getMatchingStrings(sslSocket.getSupportedProtocols(),
                 enabledProtocols).length == 0)
         {
@@ -964,14 +975,97 @@ public class SecurityHelper
             sb.append("JMX connections are not encrypted\n");
         }
 
-        if (authInfo.isAuthenticationNeeded())
+    /**
+     *  Find out which protocols are both configured and supported.
+     *  Set common ones to System properties from where 
+     *  (and only there) they are accessed.
+
+     * @param sf
+     * @param verbose
+     */
+    private static void setProtocolsToSystemProperties(
+            AuthenticationInfo authInfo, 
+            SSLSocketFactory sf, 
+            boolean verbose)
+    {
+        String [] configuredProtocolsArray;
+        String [] possibleProtocolsArray;
+        Socket s = new Socket();
+        SSLSocket ssl;
+        
+        if (!authInfo.getEnabledProtocols().isEmpty())
         {
-            sb.append("Password authentication is used\n");
+            // There are protocols specified in the configuration
+            possibleProtocolsArray = authInfo.getEnabledProtocols().toArray(new String [0]);
+                       
+            if (possibleProtocolsArray.length == 0)
+            {
+                // We don't have any protocols in common. This is not good!
+                String message = "No configured protocols could be found. "
+                        + "Encryption is not possible.";              
+                logger.error(message + "\n");
+                throw new RuntimeException(message);
+
+            }
+        }
+        // Set System properties for protocols
+        setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
+                StringUtils.join(possibleProtocolsArray, ","), verbose);
+        setSystemProperty("https.protocols", 
+                StringUtils.join(possibleProtocolsArray, ","), verbose);
+    }
+
+    /**
+     *  Find out which cipher suites are both configured and supported.
+     *  Set selected ones to System properties from where 
+     *  (and only there) they are accessed.
+     * 
+     * @param authInfo
+     * @param sf
+     * @param verbose
+     */
+    private static void setCipherSuitesToSystemProperties(
+            AuthenticationInfo authInfo,
+            SSLSocketFactory sf,
+            boolean verbose)
+    {
+        String [] supportedCipherSuitesArray = sf.getDefaultCipherSuites();
+        String [] configuredCipherSuitesArray;
+        String [] possibleCipherSuitesArray;
+
+        if (!authInfo.getEnabledCipherSuites().isEmpty())
+        {
+            // There are cipher suites specified in the configuration
+            supportedCipherSuitesArray = sf.getSupportedCipherSuites();
+            configuredCipherSuitesArray = authInfo.getEnabledCipherSuites()
+                    .toArray(new String[0]);
+            possibleCipherSuitesArray = SecurityHelper.getMatchingStrings(
+                    supportedCipherSuitesArray, configuredCipherSuitesArray);
+            
+            if (possibleCipherSuitesArray.length == 0)
+            {
+                // We don't have any cipher suites in common. This is not good!
+                String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
+                StringBuffer sb = new StringBuffer(message).append("\n");
+                sb.append(String.format("SSL implementation supported cipher suites: %s\n",
+                        StringUtils.join(supportedCipherSuitesArray)));
+                sb.append(String.format(
+                        "Approved cipher suites from security.properties: %s\n",
+                                StringUtils.join(configuredCipherSuitesArray)));
+                logger.error(sb.toString());
+                throw new RuntimeException(message);
+            }
         }
         else
         {
-            sb.append("No password authentication\n");                        
+            /**
+             * Cipher suites aren't specified in configuration. Read 
+             * default cipher suites and use them.
+             */
+            possibleCipherSuitesArray = sf.getDefaultCipherSuites();
         }
-        return sb.toString();
+        // Set System properties for cipher suites
+        setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
+                StringUtils.join(possibleCipherSuitesArray, ","), verbose);
     }
 }
