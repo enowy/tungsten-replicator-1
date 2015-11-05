@@ -313,6 +313,17 @@ public interface Database extends UniversalConnection
             throws SQLException;
 
     /**
+     * Return a Tungsten table with all its accompanying Columns.
+     * 
+     * @param schemaName name of schema containing the table
+     * @param tableName name of the table
+     * @return a Table if matching was found
+     * @throws SQLException if an error occurs
+     */
+    public Table findTungstenTable(String schemaName, String tableName)
+            throws SQLException;
+
+    /**
      * Return the Table with all its accompanying Columns.
      * 
      * @param schemaName name of schema containing the table

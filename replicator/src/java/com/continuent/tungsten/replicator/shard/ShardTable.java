@@ -104,7 +104,7 @@ public class ShardTable
     public void initializeShardTable(Database database) throws SQLException
     {
         // Create the table.
-        if (database.findTable(shardTable.getSchema(), shardTable.getName()) == null)
+        if (database.findTungstenTable(shardTable.getSchema(), shardTable.getName()) == null)
         {
             if (logger.isDebugEnabled())
                 logger.debug("Creating shard table");

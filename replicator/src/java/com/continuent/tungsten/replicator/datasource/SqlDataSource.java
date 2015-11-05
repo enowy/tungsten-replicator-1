@@ -278,7 +278,7 @@ public class SqlDataSource extends AbstractDataSource
                 // Create consistency table but only if it does not exist.
                 Table consistency = ConsistencyTable
                         .getConsistencyTableDefinition(schema);
-                if (conn.findTable(consistency.getSchema(),
+                if (conn.findTungstenTable(consistency.getSchema(),
                         consistency.getName()) == null)
                 {
                     conn.createTable(consistency, false,

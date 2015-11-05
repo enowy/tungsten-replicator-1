@@ -316,7 +316,9 @@ public class JdbcApplier implements RawApplier
 
         if (master_cnt == this_cnt)
         {
-            if (0 == master_crc.compareTo(this_crc))
+            if ((master_crc != null && this_crc != null
+                    && 0 == master_crc.compareTo(this_crc))
+                    || (master_crc == null && this_crc == null))
             {
                 String msg = "Consistency check succeeded on table '"
                         + schemaName + "." + tableName + "' id: " + id
