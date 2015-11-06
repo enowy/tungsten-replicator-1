@@ -2171,7 +2171,7 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
       end
 
       # Now complete the find command with the filename we are looking for.
-      find_cmd = find_cmd + "-o -name '*.MYD' -print -quit"
+      find_cmd = find_cmd + "-prune -o -name '*.MYD' -print -quit"
       # Define the test command
       test_cmd= "test -x \"#{datadir}\""
 
