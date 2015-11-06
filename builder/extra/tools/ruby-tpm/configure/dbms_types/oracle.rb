@@ -579,7 +579,7 @@ class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
         }
         
         if ojdbc == nil
-          error("Unable to find an OJDBC Jar file for the deployment to #{key}")
+          warning("Unable to find an OJDBC Jar file for the deployment to #{key}")
         end
       end
     }
