@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s): Stephane Giron
+ * Contributor(s): Stephane Giron, Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -27,14 +27,15 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
+
+import javax.sql.rowset.serial.SerialException;
 
 import org.apache.log4j.Logger;
 
@@ -80,7 +81,9 @@ public class PlogReaderThread extends Thread
 
     private String lastProcessedEventId = null;
 
-    private boolean cancelled;
+    // Cancelled flag must be volatile to ensure visibility of changes across
+    // threads.
+    private volatile boolean cancelled;
 
     private boolean         currentlyInIFILE;
     private DataInputStream plogStreamPaused;
@@ -133,42 +136,6 @@ public class PlogReaderThread extends Thread
 
         return ((value1 & 0xff) << 0) + ((value2 & 0xff) << 8)
                 + ((value3 & 0xff) << 16) + ((value4 & 0xff) << 24);
-    }
-
-    /**
-     * Reads a unsigned integer (32-bit) from an InputStream. The value is
-     * converted to the opposed endian system while reading.
-     * 
-     * @param input source InputStream
-     * @return the value just read
-     * @throws IOException in case of an I/O problem
-     */
-    private static long readSwappedUnsignedInteger(final DataInputStream input)
-            throws IOException
-    {
-        final int value1 = input.readByte();
-        final int value2 = input.readByte();
-        final int value3 = input.readByte();
-        final int value4 = input.readByte();
-
-        final long low = (((value1 & 0xff) << 0) + ((value2 & 0xff) << 8)
-                + ((value3 & 0xff) << 16));
-
-        final long high = value4 & 0xff;
-
-        return (high << 24) + (0xffffffffL & low);
-    }
-
-    /**
-     * Converts a "int" value between endian systems.
-     * 
-     * @param value value to convert
-     * @return the converted value
-     */
-    private static int swapInteger(final int value)
-    {
-        return (((value >> 0) & 0xff) << 24) + (((value >> 8) & 0xff) << 16)
-                + (((value >> 16) & 0xff) << 8) + (((value >> 24) & 0xff) << 0);
     }
 
     /**
@@ -339,14 +306,27 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * Close plog file
-     * 
-     * @throws IOException
+     * Close plog file. This operation is idempotent to allow convenient cleanup
+     * at thread exit.
      */
-    private void closeFile() throws IOException
+    private void closeFile()
     {
-        plogStream.close();
-        logger.info("File " + plogFilename + " closed.");
+        if (plogStream != null)
+        {
+            try
+            {
+                plogStream.close();
+                logger.info("File " + plogFilename + " closed.");
+            }
+            catch (IOException e)
+            {
+                logger.warn("Unable to close file cleanly: " + plogFilename);
+            }
+            finally
+            {
+                plogStream = null;
+            }
+        }
     }
 
     /**
@@ -827,358 +807,403 @@ public class PlogReaderThread extends Thread
     @Override
     public void run()
     {
-        runTask();
+        try
+        {
+            runTask();
+        }
+        catch (InterruptedException e)
+        {
+            if (cancelled)
+                logger.info("Oracle reader thread exiting normally");
+            else
+                logger.warn(
+                        "Oracle reader thread was interrupted without cancellation request; exiting");
+        }
+        catch (Throwable e)
+        {
+            logger.error("Oracle reader thread failed: " + e.getMessage(), e);
+            try
+            {
+                queue.put(new PlogDBMSErrorMessage(
+                        "Oracle Reader thread failed", e));
+            }
+            catch (InterruptedException e1)
+            {
+                // If this happens it's because we should be quitting anyway.
+                logger.warn(
+                        "Oracle reader thread cancelled while signalling error");
+            }
+        }
+        finally
+        {
+            // Close current plog file, if any, to prevent file descriptor
+            // leaks.
+            closeFile();
+        }
     }
 
     /**
      * Thread main loop. Open the plogs, read them, parse the changes, on commit
      * send the changes through queue to PlogExtractor
      */
-    private void runTask()
+    private void runTask() throws InterruptedException, IOException,
+            SerialException, ReplicatorException, SQLException
     {
-        try
+        int firstSequence = Integer.MAX_VALUE;
+        // LinkedList<PLogLCR> listOfLCR = new LinkedList<PlogLCR>();
+        ArrayList<PlogTransaction> tranAtSameSCN = new ArrayList<PlogTransaction>();
+        long SCNAtSameSCN = 0;
+
+        if (lastProcessedEventId != null)
         {
-            int firstSequence = Integer.MAX_VALUE;
-            // LinkedList<PLogLCR> listOfLCR = new LinkedList<PlogLCR>();
-            ArrayList<PlogTransaction> tranAtSameSCN = new ArrayList<PlogTransaction>();
-            long SCNAtSameSCN = 0;
-
-            if (lastProcessedEventId != null)
+            firstSequence = setInternalLastEventId(lastProcessedEventId);
+        }
+        else
+        {
+            while (firstSequence == Integer.MAX_VALUE)
             {
-                firstSequence = setInternalLastEventId(lastProcessedEventId);
-            }
-            else
-            {
-                while (firstSequence == Integer.MAX_VALUE)
+                // Find oldest plog; check for interrupt on thread
+                // thereafter.
+                firstSequence = findOldestPlogSequence(plogDirectory);
+                if (Thread.currentThread().isInterrupted())
                 {
-                    firstSequence = findOldestPlogSequence(plogDirectory);
-                    if (firstSequence < Integer.MAX_VALUE)
-                    {
-                        logger.info(
-                                "Oldest plog found on disk: " + firstSequence);
-                        break;
-                    }
-                    logger.info("No plog found on disk, sleep and retry.");
-                    try
-                    {
-                        Thread.sleep(sleepSizeInMilliseconds);
-                    }
-                    catch (InterruptedException ie)
-                    {
-                        // does not matter if sleep is interrupted
-                    }
+                    throw new InterruptedException();
                 }
-            }
 
-            plogFilename = findMostRecentPlogFile(plogDirectory, firstSequence);
-            plogId = firstSequence; /*
-                                     * this will be overwritten by parsing the
-                                     * header - that is, if it's already in the
-                                     * file
-                                     */
+                if (firstSequence < Integer.MAX_VALUE)
+                {
+                    logger.info("Oldest plog found on disk: " + firstSequence);
+                    break;
+                }
+                logger.info("No plog found on disk, sleep and retry.");
+
+                // Bide a wee. If interrupted we just throw the exception
+                // and exit routine.
+                Thread.sleep(sleepSizeInMilliseconds);
+            }
+        }
+
+        // Get the starting plog file.
+        plogFilename = findMostRecentPlogFile(plogDirectory, firstSequence);
+
+        // This will be overwritten by parsing the header - that is, if it's
+        // already in the file.
+        plogId = firstSequence;
+
+        while (!cancelled)
+        {
+            // Report the last plog so that the MINE can clean up.
+            int lastObsolePlog = getLastObsoletePlog();
+            if (lastReportedObsolePlogSeq != lastObsolePlog
+                    && lastObsolePlog > 0)
+            {
+                reportLastObsoletePlog(lastObsolePlog);
+                lastReportedObsolePlogSeq = lastObsolePlog;
+            }
+            openFile(plogFilename);
+            readHeader();
+            int retryCount = 0;
 
             while (!cancelled)
             {
-                // Report the last plog so that the MINE can clean up.
-                int lastObsolePlog = getLastObsoletePlog();
-                if (lastReportedObsolePlogSeq != lastObsolePlog
-                        && lastObsolePlog > 0)
+                PlogLCR r1 = null;
+                while (r1 == null)
                 {
-                    reportLastObsoletePlog(lastObsolePlog);
-                    lastReportedObsolePlogSeq = lastObsolePlog;
-                }
-                openFile(plogFilename);
-                readHeader();
-                int retryCount = 0;
-
-                while (!cancelled)
-                {
-                    PlogLCR r1 = null;
-                    while (r1 == null)
+                    try
                     {
-                        try
-                        {
-                            r1 = readRawLCR();
+                        r1 = readRawLCR();
 
-                            // Test this update to see if it is a change to the
-                            // Tungsten TREP_COMMIT_SEQNO table, which should
-                            // not be replicated.
-                            if (tungstenSchema != null)
+                        // Test this update to see if it is a change to the
+                        // Tungsten TREP_COMMIT_SEQNO table, which should
+                        // not be replicated.
+                        if (tungstenSchema != null)
+                        {
+                            if (tungstenSchema.equalsIgnoreCase(r1.tableOwner)
+                                    && "trep_commit_seqno"
+                                            .equalsIgnoreCase(r1.tableName))
                             {
-                                if (tungstenSchema
-                                        .equalsIgnoreCase(r1.tableOwner)
-                                        && "trep_commit_seqno"
-                                                .equalsIgnoreCase(r1.tableName))
+                                if (logger.isDebugEnabled())
                                 {
-                                    if (logger.isDebugEnabled())
-                                    {
-                                        logger.debug(
-                                                "Ignoring update to trep_commit_seqno: scn="
-                                                        + r1.LCRid);
-                                    }
-                                    r1 = null;
-                                    continue;
+                                    logger.debug(
+                                            "Ignoring update to trep_commit_seqno: scn="
+                                                    + r1.LCRid);
                                 }
+                                r1 = null;
+                                continue;
                             }
                         }
-                        catch (java.io.EOFException e)
-                        { /*
-                           * wait for more data; also check if newer file is
-                           * there
-                           */
-                            if (currentlyInIFILE)
-                            { /*
-                               * we process only complete IFILEs, so this should
-                               * not ever happen
-                               */
-                                throw new FileNotFoundException(
-                                        currentIncludePlog.plogFilename
-
-                                + " ended prematurely, file is corrupted.");
-                            }
-                            if ((retryCount % 5) == 0)
-                            {
-                                String latestPlogFilename = findMostRecentPlogFile(
-                                        plogDirectory, plogId);
-                                if (!plogFilename.equals(latestPlogFilename))
-                                { /* newer file available */
-                                    retryCount = 0;
-                                    closeFile();
-                                    throwAwayAllLCRsInPlog(
-                                            plogId); /*
-                                                      * throw away all LCRs from
-                                                      * open transactions
-                                                      */
-                                    setInternalLastEventId(
-                                            lastProcessedEventId);
-                                    plogFilename = latestPlogFilename;
-                                    openFile(plogFilename);
-                                    readHeader();
-                                }
-                            }
-                            retryCount++;
-                            try
-                            {
-                                Thread.sleep(sleepSizeInMilliseconds);
-                            }
-                            catch (InterruptedException ie)
-                            {
-                                // does not matter if sleep is interrupted
-                            }
-                            logger.debug("Wait for more data in plog.");
-                        }
                     }
-
-                    if (r1.type == PlogLCR.ETYPE_CONTROL
-                            && r1.subtype == PlogLCR.ESTYPE_HEADER)
-                    { // plog header, read features etc.
-                        readControlHeader(r1);
-                        logger.info("Plog dict cache: "
-                                + this.plogDictCacheEnabled);
-                    }
-
-                    if (r1.type == PlogLCR.ETYPE_CONTROL
-                            && r1.subtype == PlogLCR.ESTYPE_FOOTER
-                            && !currentlyInIFILE)
+                    catch (java.io.EOFException e)
                     {
-                        break;
-                    } // plog footer
-
-                    if (r1.type == PlogLCR.ETYPE_LCR_PLOG)
-                    { /* Include PLOG (LOAD) */
-                        /*
-                         * Note that we wait for complete file. We do it by
-                         * waiting for end of ifile in the parent plog
-                         */
-                        if (r1.subtype == PlogLCR.ESTYPE_LCR_PLOG_IFILE)
+                        // wait for more data; also check if newer file is there
+                        if (currentlyInIFILE)
                         {
-                            currentIncludePlog = r1.parseIncludePlogLCR(this); // just
-                                                                               // parse
-                                                                               // the
-                                                                               // info
+                            // we process only complete IFILEs, so this
+                            // should not ever happen.
+                            throw new FileNotFoundException(
+                                    currentIncludePlog.plogFilename
+                                            + " ended prematurely, file is corrupted.");
+                        }
+                        if ((retryCount % 5) == 0)
+                        {
+                            String latestPlogFilename = findMostRecentPlogFile(
+                                    plogDirectory, plogId);
+                            if (!plogFilename.equals(latestPlogFilename))
+                            {
+                                // newer file available.
+                                retryCount = 0;
+                                closeFile();
+
+                                // throw away all LCRs from open transactions.
+                                throwAwayAllLCRsInPlog(plogId);
+                                setInternalLastEventId(lastProcessedEventId);
+                                plogFilename = latestPlogFilename;
+                                openFile(plogFilename);
+                                readHeader();
+                            }
+                        }
+                        retryCount++;
+                        Thread.sleep(sleepSizeInMilliseconds);
+                        if (logger.isDebugEnabled())
+                            logger.debug("Wait for more data in plog.");
+                    }
+                }
+
+                // This is header information for the plog. We just read it to
+                // find out which features are enabled.
+                if (r1.type == PlogLCR.ETYPE_CONTROL
+                        && r1.subtype == PlogLCR.ESTYPE_HEADER)
+                {
+                    // plog header, read features etc.
+                    readControlHeader(r1);
+                    logger.info(
+                            "Plog dict cache: " + this.plogDictCacheEnabled);
+                }
+
+                // This is the footer of the plog. Time to rotate over to the
+                // next file.
+                if (r1.type == PlogLCR.ETYPE_CONTROL
+                        && r1.subtype == PlogLCR.ESTYPE_FOOTER
+                        && !currentlyInIFILE)
+                {
+                    // plog footer
+                    break;
+                }
+
+                if (r1.type == PlogLCR.ETYPE_LCR_PLOG)
+                {
+                    // IFiles are referenced plogs that contain extracted data
+                    // used to provision full tables.
+                    //
+                    // Ifiles are not currently supported in the extractor, so
+                    // we just wailt for the end and return to the parent plog.
+                    if (r1.subtype == PlogLCR.ESTYPE_LCR_PLOG_IFILE)
+                    {
+                        // This is the header information, which we parse.
+                        currentIncludePlog = r1.parseIncludePlogLCR(this);
+                    }
+                    else if (r1.subtype == PlogLCR.ESTYPE_LCR_PLOG_IFILE_STATS)
+                    {
+                        // At this point we have the full file stats.
+                        plogStreamPaused = plogStream;
+                        openFile(currentIncludePlog.plogFilename);
+                        readHeader();
+                        currentlyInIFILE = true;
+                    }
+                }
+                if (r1.type == PlogLCR.ETYPE_CONTROL
+                        && r1.subtype == PlogLCR.ESTYPE_FOOTER
+                        && currentlyInIFILE)
+                {
+                    // We have finished the IFILE. Close and return to the
+                    // parent plog.
+                    closeFile();
+                    currentlyInIFILE = false;
+                    plogStream = plogStreamPaused;
+                }
+
+                // We have finished plog housekeeping and are now processing
+                // real transactions.
+
+                if (r1.SCN > SCNAtSameSCN && !tranAtSameSCN.isEmpty())
+                {
+                    // The current SCN has moved past the commit SCN of the
+                    // pending batch of transactions. We must release the queued
+                    // transactions now.
+
+                    // Sort transactions by the XID. This ensures a
+                    // deterministic ordering in case the replicator crashes or
+                    // stops before pending transactions reach the THL. This
+                    // also ensures that the ordering is deterministic even if
+                    // the mine process restarts or RAC is involved.
+                    Collections.sort(tranAtSameSCN);
+
+                    // Find the oldest open plog. This will be used to set the
+                    // plog position for restart.
+                    long oldestPlogId = minimalPlogIdInOpenTransactions();
+
+                    // Process DDL transactions first. This takes care of
+                    // the case where a DDL operation like CREATE TABLE xxx
+                    // FROM SELECT also generates DML. The split ensures we get
+                    // the DDL first.
+                    for (PlogTransaction t : tranAtSameSCN)
+                    {
+                        if (!t.transactionIsDML)
+                        {
+                            lastProcessedEventId = t.pushContentsToQueue(queue,
+                                    minimalSCNInOpenTransactions(),
+                                    transactionFragSize, oldestPlogId - 1);
+                            openTransactions.remove(t.XID);
+                            t.release();
+                        }
+                    }
+
+                    // Process DML transactions now that DDL has safely reached
+                    // the log.
+                    for (PlogTransaction t : tranAtSameSCN)
+                    {
+                        if (t.transactionIsDML)
+                        {
+                            lastProcessedEventId = t.pushContentsToQueue(queue,
+                                    minimalSCNInOpenTransactions(),
+                                    transactionFragSize, oldestPlogId - 1);
+                            openTransactions.remove(t.XID);
+                            t.release();
+                        }
+                    }
+                    tranAtSameSCN.clear();
+                }
+
+                // Transactional changes always have an XID but some LCRs may
+                // not because they are housekeeping operations. So if we have
+                // an XID that means we need to do something.
+                if (r1.XID != null)
+                {
+                    PlogTransaction t = openTransactions.get(r1.XID);
+                    if (t == null)
+                    {
+                        // TODO: two transactions can have same XID due to
+                        // splitting of redo reader splitting of DML and DDL.
+                        // This needs to be fixed in the redo reader.
+                        t = new PlogTransaction(cache, r1.XID);
+                        openTransactions.put(r1.XID, t);
+                    }
+                    t.putLCR(r1);
+                    if (t.isCommitted())
+                    {
+                        if (t.isEmpty())
+                        {
+                            // This either a housekeeping transaction or a
+                            // transaction on a table we don't replicate.
+                            // Throw it away.
+                            openTransactions.remove(r1.XID);
+                            t.release();
+                        }
+                        else if (t.commitSCN < restartEventCommitSCN)
+                        {
+                            // This is a transaction that is before our restart
+                            // point. We can safely throw it away.
+                            if (logger.isDebugEnabled())
+                            {
+                                logger.info(r1.XID + " committed at "
+                                        + t.commitSCN + ", before restart SCN "
+                                        + restartEventCommitSCN);
+                            }
+                            openTransactions.remove(r1.XID);
+                            t.release();
                         }
                         else
-                            if (r1.subtype == PlogLCR.ESTYPE_LCR_PLOG_IFILE_STATS)
+                            if (t.commitSCN == restartEventCommitSCN
+                                    && t.XID.compareTo(restartEventXID) < 0)
                         {
-                            plogStreamPaused = plogStream;
-                            openFile(currentIncludePlog.plogFilename);
-                            readHeader();
-                            currentlyInIFILE = true;
+                            // We have a transaction at the same SCN *but* the
+                            // XID is lower than the last XID that made it into
+                            // the log, because we sort by XID before posting
+                            // transactions at the same commitSCN. We throw
+                            // it away.
+                            //
+                            // TODO: This exposes a bug. Because we split DDL
+                            // and DML that means there are two XID orderings in
+                            // the transaction. 
+                            logger.info(r1.XID + " committed at " + t.commitSCN
+                                    + "= restart SCN " + restartEventCommitSCN
+                                    + ", but it's before restart XID "
+                                    + restartEventXID);
+                            openTransactions.remove(r1.XID);
+                            t.release();
                         }
-                    }
-                    if (r1.type == PlogLCR.ETYPE_CONTROL
-                            && r1.subtype == PlogLCR.ESTYPE_FOOTER
-                            && currentlyInIFILE)
-                    { // close IFILE, back to parent
-                        closeFile();
-                        currentlyInIFILE = false;
-                        plogStream = plogStreamPaused;
-                    }
-
-                    if (r1.SCN > SCNAtSameSCN && !tranAtSameSCN.isEmpty())
-                    {
-                        /*
-                         * we are at next SCN past last Commit, release the
-                         * queued transactions. And order them by XID - that's
-                         * the only reason why we don't output them right away.
-                         * Just to make sure the ordering will never change,
-                         * even if mine is restarted, RAC is involved and
-                         * whatever. To sort DDL transactions *before* any DML
-                         * (think of Create Table as select), process them
-                         * first.
-                         */
-                        Collections.sort(tranAtSameSCN);
-                        long oldestPlogId = minimalPlogIdInOpenTransactions();
-                        for (PlogTransaction t : tranAtSameSCN)
-                        {
-                            if (!t.transactionIsDML)
-                            {
-                                lastProcessedEventId = t.pushContentsToQueue(
-                                        queue, minimalSCNInOpenTransactions(),
-                                        transactionFragSize, oldestPlogId - 1);
-                                openTransactions.remove(t.XID);
-                                t.release();
-                            }
-                        }
-                        for (PlogTransaction t : tranAtSameSCN)
-                        {
-                            if (t.transactionIsDML)
-                            {
-                                lastProcessedEventId = t.pushContentsToQueue(
-                                        queue, minimalSCNInOpenTransactions(),
-                                        transactionFragSize, oldestPlogId - 1);
-                                openTransactions.remove(t.XID);
-                                t.release();
-                            }
-                        }
-                        tranAtSameSCN.clear();
-                    }
-
-                    if (r1.XID != null)
-                    {
-                        PlogTransaction t = openTransactions.get(r1.XID);
-                        if (t == null)
-                        {
-                            t = new PlogTransaction(cache, r1.XID);
-                            openTransactions.put(r1.XID, t);
-                        }
-                        t.putLCR(r1);
-                        if (t.isCommitted())
-                        {
-                            if (t.isEmpty())
-                            {
-                                // Empty transaction, throw way.
-                                openTransactions.remove(r1.XID);
-                                t.release();
-                            }
-                            else if (t.commitSCN < restartEventCommitSCN)
-                            {
-                                // Pre-restart transaction, throw away.
-                                if (logger.isDebugEnabled())
-                                {
-                                    logger.info(r1.XID + " committed at "
-                                            + t.commitSCN
-                                            + ", before restart SCN "
-                                            + restartEventCommitSCN);
-                                }
-                                openTransactions.remove(r1.XID);
-                                t.release();
-                            }
-                            else
+                        else
                                 if (t.commitSCN == restartEventCommitSCN
-                                        && t.XID.compareTo(restartEventXID) < 0)
+                                        && t.XID.equals(restartEventXID))
+                        {
+                            // We are looking at the last transaction that was
+                            // committed upstream to the log.
+                            logger.info(">>>" + r1.XID + " committed at "
+                                    + t.commitSCN + "= restart SCN "
+                                    + restartEventCommitSCN
+                                    + ", exactly restart XID "
+                                    + restartEventXID);
+                            if (restartEventChangeSeq.equals("LAST"))
                             {
-                                // Pre-restart transaction, throw away.
-                                logger.info(r1.XID + " committed at "
-                                        + t.commitSCN + "= restart SCN "
-                                        + restartEventCommitSCN
-                                        + ", but it's before restart XID "
-                                        + restartEventXID);
+                                // We are on the last fragment of the
+                                // transaction that was at the restart and is
+                                // the last event applied. This transaction must
+                                // now be discarded.
+                                logger.info(">>> was complete last time");
                                 openTransactions.remove(r1.XID);
                                 t.release();
                             }
                             else
-                                    if (t.commitSCN == restartEventCommitSCN
-                                            && t.XID.equals(restartEventXID))
                             {
-                                logger.info(">>>" + r1.XID + " committed at "
-                                        + t.commitSCN + "= restart SCN "
-                                        + restartEventCommitSCN
-                                        + ", exactly restart XID "
-                                        + restartEventXID);
-                                if (restartEventChangeSeq.equals("LAST"))
-                                {
-                                    logger.info(">>> was complete last time");
-                                }
-                                else
-                                {
-                                    t.setSkipSeq(Integer
-                                            .parseInt(restartEventChangeSeq));
-                                    tranAtSameSCN.add(t);
-                                    SCNAtSameSCN = t.commitSCN;
-                                }
-                            }
-                            else
-                            {
-                                if (logger.isDebugEnabled())
-                                {
-                                    logger.debug("XID: " + t.XID);
-                                }
-                                t.setSkipSeq(0);
+                                // This is a fragment that was already applied,
+                                // so skip this fragment. We do not need to
+                                // apply it because it should already have
+                                // been applied.
+                                t.setSkipSeq(Integer
+                                        .parseInt(restartEventChangeSeq));
                                 tranAtSameSCN.add(t);
                                 SCNAtSameSCN = t.commitSCN;
                             }
                         }
+                        else
+                        {
+                            // This is a normal transaction past the restart
+                            // point that should be committed. Add it to the
+                            // transactions to commit at this SCN.
+                            if (logger.isDebugEnabled())
+                            {
+                                logger.debug("XID: " + t.XID);
+                            }
+                            t.setSkipSeq(0);
+                            tranAtSameSCN.add(t);
+                            SCNAtSameSCN = t.commitSCN;
+                        }
                     }
                 }
-                closeFile();
+            }
+            closeFile();
 
-                plogFilename = null;
-                while (plogFilename == null)
+            plogFilename = null;
+            while (plogFilename == null && !cancelled)
+            {
+                try
                 {
-                    try
-                    {
-                        plogFilename = findMostRecentPlogFile(plogDirectory,
-                                plogId + 1);
-                    }
-                    catch (FileNotFoundException e)
-                    {
-                        logger.error("Waiting for next file to appear: "
-                                + e.getMessage());
-                    }
-                    try
-                    {
-                        Thread.sleep(sleepSizeInMilliseconds);
-                    }
-                    catch (InterruptedException ie)
-                    {
-                        // does not matter if sleep is interrupted
-                    }
+                    plogFilename = findMostRecentPlogFile(plogDirectory,
+                            plogId + 1);
                 }
-                plogId++; /*
-                           * this will be overwritten by parsing the header -
-                           * that is, if it's already in the file
-                           */
-            }
-        }
-        catch (Throwable e)
-        {
-            try
-            {
-                queue.put(new PlogDBMSErrorMessage(
-                        "Oracle Reader thread failed", e));
+                catch (FileNotFoundException e)
+                {
+                    logger.info("Waiting for next file to appear: "
+                            + e.getMessage());
+                }
 
-                StringWriter sw = new StringWriter();
-                e.printStackTrace(new PrintWriter(sw));
-                String exceptionAsString = sw.toString();
+                // Bide a wee.
+                Thread.sleep(sleepSizeInMilliseconds);
+            }
 
-                logger.error("Oracle Reader thread failed: " + e
-                        + exceptionAsString);
-                System.out.println(e);
-            }
-            catch (InterruptedException ignore)
-            {
-            }
+            // this will be overwritten by parsing the header -
+            // that is, if it's already in the file
+            plogId++;
         }
     }
 
@@ -1246,11 +1271,22 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * Request thread to stop.
+     * Request thread to stop. This sets the cancelled flag and posts an
+     * interrupt.
+     * 
+     * @throws InterruptedException
      */
-    public void cancel()
+    public synchronized void cancel() throws InterruptedException
     {
+        logger.info("Cancelling redo reader thread...");
         this.cancelled = true;
+        this.interrupt();
+        this.join(30000);
+        if (this.isAlive())
+        {
+            logger.warn(
+                    "Redo reader thread did not respond to cancellation...");
+        }
     }
 
     /**
@@ -1259,5 +1295,4 @@ public class PlogReaderThread extends Thread
     public void prepare()
     {
     }
-
 }

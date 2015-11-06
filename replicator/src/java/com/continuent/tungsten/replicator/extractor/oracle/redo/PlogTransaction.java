@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s): Stephane Giron
+ * Contributor(s): Stephane Giron, Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -57,12 +57,28 @@ class PlogTransaction implements Comparable<PlogTransaction>
     private static Logger logger = Logger.getLogger(PlogTransaction.class);
 
     private final LargeObjectArray<PlogLCR> LCRList;
-    final String                            XID;
-    boolean                                 committed = false;
-    boolean                                 empty     = true;
-    java.sql.Timestamp                      commitTime;
 
-    public long startSCN  = 0;
+    /**
+     * XID is a unique ID for this transaction. Oracle assigns a different XID
+     * to each transaction, unlike start or commit SCNs, which can be associated
+     * with more than one transactions.
+     */
+    final String       XID;
+    boolean            committed = false;
+    boolean            empty     = true;
+    java.sql.Timestamp commitTime;
+
+    /**
+     * SCN at which this transaction began. Value is taken from the first LCR
+     * added to the transaction. More than one transaction can begin at this
+     * SCN.
+     */
+    public long startSCN = 0;
+
+    /**
+     * SCN at which this transaction committed. Value is taken from the last
+     * LCR. More than one transaction can have the same commit SCN.
+     */
     public long commitSCN = 0;
 
     private int skipSeq = 0;
@@ -70,6 +86,10 @@ class PlogTransaction implements Comparable<PlogTransaction>
     public boolean transactionIsDML = true; // false=DDL,
                                             // true=DML
 
+    /**
+     * ID of the plog from where we read the first LCR. On restart we must open
+     * this file to read the entire transaction.
+     */
     public long startPlogId = 0;
 
     /**
@@ -215,12 +235,11 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * @param lastObsoletePlogSeq Last obsolete plog sequence (min() over all
      *            open transactions - 1)
      * @return lastProcessedEventId
-     * @throws UnsupportedEncodingException
      */
     public String pushContentsToQueue(BlockingQueue<DBMSEvent> q, long minSCN,
             int transactionFragSize, long lastObsoletePlogSeq)
                     throws UnsupportedEncodingException, ReplicatorException,
-                    SerialException, SQLException, InterruptedException
+                    SerialException, InterruptedException, SQLException
     {
         if (logger.isDebugEnabled())
         {

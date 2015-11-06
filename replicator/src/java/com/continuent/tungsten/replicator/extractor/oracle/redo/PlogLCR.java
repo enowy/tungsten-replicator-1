@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s): Stephane Giron
+ * Contributor(s): Stephane Giron, Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -215,7 +215,7 @@ class PlogLCR implements Serializable
          *             SerialException, SQLException
          */
         public void parseValue() throws UnsupportedEncodingException,
-                ReplicatorException, SerialException, SQLException
+                ReplicatorException, SQLException
         {
 
             if (alreadyParsedValue)
@@ -650,8 +650,6 @@ class PlogLCR implements Serializable
      * Fill in the given oneRowChange with info from this LCR
      * 
      * @param oneRowChange where to set all the data
-     * @throws UnsupportedEncodingException, ReplicatorException,
-     *             SerialException, SQLException
      */
     public void parseDataTypes(OneRowChange oneRowChange)
             throws UnsupportedEncodingException, ReplicatorException,

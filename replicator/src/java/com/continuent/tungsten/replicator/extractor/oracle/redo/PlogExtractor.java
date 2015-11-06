@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -169,6 +169,7 @@ public class PlogExtractor implements RawExtractor
         readerThread = new PlogReaderThread(context, queue, plogDirectory,
                 sleepSizeInMilliseconds, transactionFragSize,
                 replicateConsoleScript, replicateApplyName, byteCache);
+        readerThread.setName("plog-reader-task");
 
         readerThread.prepare();
     }
@@ -184,7 +185,10 @@ public class PlogExtractor implements RawExtractor
     {
         cancelled = true;
         if (readerThread != null)
+        {
             readerThread.cancel();
+            readerThread = null;
+        }
     }
 
     /**
