@@ -25,7 +25,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -458,7 +457,7 @@ public class SecurityHelper
 
         if (authInfo.isEncryptionNeeded())
         {
-            SSLSocketFactory sf;   
+            SSLSocketFactory sf;
             try
             {
                 sf = (SSLSocketFactory)SSLSocketFactory.getDefault();
@@ -988,31 +987,71 @@ public class SecurityHelper
             SSLSocketFactory sf, 
             boolean verbose)
     {
+        String[] supportedProtocolsArray;
         String [] configuredProtocolsArray;
         String [] possibleProtocolsArray;
-        Socket s = new Socket();
         SSLSocket ssl;
         
+        try
+        { 
+            ssl = ((SSLSocket) sf.createSocket());
+        }
+        catch (IOException e)
+        {
+            logger.error("Failed to create SSLSocket. " + e.getMessage());
+            throw new RuntimeException("Unable to find out"
+                    + "the protocols supported by current "
+                    + "underlying SSL implementation.");
+        }
+        supportedProtocolsArray = ssl.getSupportedProtocols();
+        
+        if (supportedProtocolsArray.length == 0)
+        {
+            throw new RuntimeException("Reading supported protocols from "
+                    + "SSLSocket returned empty set. Encryption is not "
+                    + "possible.");
+        }
+
         if (!authInfo.getEnabledProtocols().isEmpty())
         {
             // There are protocols specified in the configuration
-            possibleProtocolsArray = authInfo.getEnabledProtocols().toArray(new String [0]);
-                       
+            configuredProtocolsArray = authInfo.getEnabledProtocols().toArray(new String [0]);
+            // Find common protocols from configured and from supported lists
+            possibleProtocolsArray = SecurityHelper
+                    .getMatchingStrings(supportedProtocolsArray, configuredProtocolsArray);
+            
             if (possibleProtocolsArray.length == 0)
             {
                 // We don't have any protocols in common. This is not good!
-                String message = "No configured protocols could be found. "
-                        + "Encryption is not possible.";              
-                logger.error(message + "\n");
+                String message = "Configured and supported protocol lists "
+                        + "don't have anything in common. Encryption is not "
+                        + "possible.";
+                StringBuffer sb = new StringBuffer(message).append("\n");
+                sb.append(String.format("SSL implementation supports these "
+                        + "cipher suites: %s\n",
+                        StringUtils.join(supportedProtocolsArray, ",")));
+                sb.append(String.format(
+                        "These were the configured protocols : %s\n",
+                                StringUtils.join(configuredProtocolsArray, ",")));
+                logger.error(sb.toString());
                 throw new RuntimeException(message);
 
             }
+        }
+        else
+        {
+            StringBuffer sb = new StringBuffer("Unable to find protocol(s) "
+                    + "from user-provided configuration. Using all protocols"
+                    + " supported by SSL implementation.\n\tSupported protocols : ");
+            sb.append(StringUtils.join(supportedProtocolsArray, ", "));
+            logger.warn(sb.toString());
+            possibleProtocolsArray = supportedProtocolsArray;
         }
         // Set System properties for protocols
         setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
                 StringUtils.join(possibleProtocolsArray, ","), verbose);
         setSystemProperty("https.protocols", 
-                StringUtils.join(possibleProtocolsArray, ","), verbose);
+                StringUtils.join(possibleProtocolsArray, "\n"), verbose);
     }
 
     /**

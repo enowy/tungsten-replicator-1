@@ -119,6 +119,10 @@ public class SecurityHelperTest extends TestCase
         System.clearProperty("javax.net.ssl.keyStorePassword");
         System.clearProperty("javax.net.ssl.trustStore");
         System.clearProperty("javax.net.ssl.trustStorePassword");
+        System.clearProperty("javax.rmi.ssl.client.enabledCipherSuites");
+        System.clearProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS);
+        System.clearProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS);
+        System.clearProperty("https.protocols");
     }
 
     /**
