@@ -1420,6 +1420,23 @@ class KeystoresCheck < ConfigureValidationCheck
   end
 end
 
+class EncryptionCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Check for a valid encryption configuration"
+  end
+  
+  def validate
+    rmi_ssl = get_member_property(ENABLE_RMI_SSL)
+    rmi_authentication = get_member_property(ENABLE_RMI_AUTHENTICATION)
+    
+    if rmi_ssl != rmi_authentication
+      error("The --enable-rmi-ssl and --enable-rmi-authentication settings must match. Currently the configuration has --enable-rmi-ssl=#{rmi_ssl} and --enable-rmi-authentication=#{rmi_authentication}")
+    end
+  end
+end
+
 class ModifiedConfigurationFilesCheck < ConfigureValidationCheck
   include ClusterHostCheck
   
