@@ -606,12 +606,16 @@ class Configurator
         return false
       end
     else
-      if ! File.writable?(File.dirname(@options.config))
-        write "Config file directory must be writable: #{@options.config}", Logger::ERROR
+      config_parent_directory = File.dirname(@options.config)
+      unless File.exist?(config_parent_directory)
+        mkdir_if_absent(config_parent_directory)
+      end
+      if ! File.writable?(config_parent_directory)
+        write "Config file directory must be writable: #{config_parent_directory}", Logger::ERROR
         return false
       end
-      if ! File.readable?(File.dirname(@options.config))
-        write "Config file directory must be readable: #{@options.config}", Logger::ERROR
+      if ! File.readable?(config_parent_directory)
+        write "Config file directory must be readable: #{config_parent_directory}", Logger::ERROR
         return false
       end
     end
