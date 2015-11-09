@@ -108,7 +108,7 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
     "oracle"
   end
   
-  def getExternalLibraries()
+  def needsExternalLibraries()
     found_ojdbc = nil
     base = Configurator.instance.get_base_path()
     Dir.glob("#{base}/tungsten-replicator/lib/ojdbc*.jar").each{
@@ -117,6 +117,14 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
     }
     # There is already an OJDBC driver so we don't need to do anything
     if found_ojdbc != nil
+      return false
+    end
+    
+    return true
+  end
+  
+  def getExternalLibraries()
+    if needsExternalLibraries() == false
       return {}
     end
     
@@ -440,7 +448,10 @@ module OracleCheck
   end
   
   def enabled?
-    super() && @config.getProperty(REPL_DBTYPE) == DBMS_ORACLE
+    super() && (
+      @config.getProperty(REPL_DBTYPE) == DBMS_ORACLE ||
+      @config.getProperty(EXTRACTOR_REPL_DBTYPE) == DBMS_ORACLE
+    )
   end
 end
 
@@ -536,8 +547,11 @@ class HostOracleLibrariesFoundCheck < ConfigureValidationCheck
   
   def validate
     ds = get_applier_datasource()
-    libraries = ds.getExternalLibraries()
-    output_property("HostOracleLibrariesFoundCheck", libraries)
+    needs_libraries = ds.needsExternalLibraries()
+    if needs_libraries == true
+      libraries = ds.getExternalLibraries()
+      output_property("HostOracleLibrariesFoundCheck", libraries)
+    end
   end
 end
 
@@ -568,19 +582,27 @@ class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
       unless output.props.has_key?(key)
         next
       end
+      
+      unless (cfg.getProperty(REPL_DBTYPE) == DBMS_ORACLE ||
+        cfg.getProperty(EXTRACTOR_REPL_DBTYPE) == DBMS_ORACLE)
+        next
+      end
 
-      if output.props[key].has_key?("HostOracleLibrariesFoundCheck")
-        ojdbc = nil
-        output.props[key]["HostOracleLibrariesFoundCheck"].keys().each{
-          |lib|
-          if lib =~ /ojdbc.*\.jar/
-            ojdbc = lib
-          end
-        }
-        
-        if ojdbc == nil
-          warning("Unable to find an OJDBC Jar file for the deployment to #{key}")
+      libraries = output.props[key].has_key?("HostOracleLibrariesFoundCheck")
+      unless libraries.is_a?(Hash)
+        next
+      end
+      
+      ojdbc = nil
+      libraries.keys().each{
+        |lib|
+        if lib =~ /ojdbc.*\.jar/
+          ojdbc = lib
         end
+      }
+      
+      if ojdbc == nil
+        error("Unable to find an OJDBC Jar file for the deployment to #{key}")
       end
     }
   end

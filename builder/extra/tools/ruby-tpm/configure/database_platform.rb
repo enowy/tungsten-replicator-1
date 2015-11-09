@@ -181,6 +181,10 @@ class ConfigureDatabasePlatform
     nil
   end
   
+  def needsExternalLibraries
+    false
+  end
+  
   def getExternalLibraries()
     nil
   end
