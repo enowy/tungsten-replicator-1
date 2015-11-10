@@ -86,7 +86,18 @@ module ClusterDiagnosticPackage
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}")
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}/os_info")
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}/conf")
-      
+
+      licenses = @promotion_settings.getProperty([c_key, "licenses"])
+      if licenses.is_a?(Array)
+        if licenses.size() > 0
+          licenses = licenses.join("\n")
+        else
+          licenses = "No license information available"
+        end
+      elsif licenses.to_s() == ""
+        licenses = "No license information available"
+      end
+write_file("#{diag_dir}/#{h_alias}/host_licenses.txt",licenses)
       write_file("#{diag_dir}/#{h_alias}/manifest.json",@promotion_settings.getProperty([c_key, "manifest"]))
       write_file("#{diag_dir}/#{h_alias}/tpm.txt",@promotion_settings.getProperty([c_key, "tpm_reverse"]))
       write_file("#{diag_dir}/#{h_alias}/tpm_diff.txt",@promotion_settings.getProperty([c_key, "tpm_diff"]))
@@ -267,6 +278,7 @@ class ClusterDiagnosticCheck < ConfigureValidationCheck
     tpm_cmd = c.get_tpm_path(current_release_directory)
     
     begin
+      output_property("licenses", @config.getProperty(HOST_LICENSES))
       output_property("manifest", cmd_result("cat #{current_release_directory}/.manifest.json"))
       output_property("tpm_reverse", cmd_result("#{tpm_cmd} reverse --public"))
       output_property("tpm_diff", cmd_result("#{tpm_cmd} query modified-files"))

@@ -598,6 +598,12 @@ module MigrateFromReplicationServices
   end
 end
 
+module DefaultValueOnlyModule
+  include ConstantValueModule
+  include NoSystemDefault
+  include NoStoredConfigValue
+end
+
 module PortForUsers
   def self.register(group, min_name, max_name = nil)
     @paths ||= []

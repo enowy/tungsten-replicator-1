@@ -148,6 +148,8 @@ ABBR_VMWARE_REPLICATION = "vCR"
 PRODUCT_TUNGSTEN_REPLICATOR = "Tungsten Replicator"
 ABBR_TUNGSTEN_REPLICATOR = "TR"
 
+LICENSE_TRIAL = "TRIAL"
+
 class IgnoreError < StandardError
 end
 

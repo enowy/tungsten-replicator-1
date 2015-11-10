@@ -2274,3 +2274,71 @@ class HostPortsForReplicators < ConfigurePrompt
     @default = @default.uniq().sort()
   end
 end
+
+class HostTrialModeLicense < ConfigurePrompt
+  include ClusterHostPrompt
+  include HiddenValueModule
+  include NoSystemDefault
+  
+  def initialize
+    super(ENABLE_TRIAL_MODE, "Use trial-mode for this host", PV_BOOLEAN, "false")
+  end
+end
+
+class HostLicensesPaths < ConfigurePrompt
+  include ClusterHostPrompt
+  include DefaultValueOnlyModule
+  
+  def initialize
+    super(HOST_LICENSE_PATHS, "List of paths to search for licenses assigned to this host")
+  end
+  
+  def load_default_value
+    @default = [
+      "#{@config.getProperty(HOME_DIRECTORY)}/share/continuent.licenses",
+      "/etc/tungsten/continuent.licenses"
+    ]
+  end
+end
+
+class HostLicenses < ConfigurePrompt
+  include ClusterHostPrompt
+  include DefaultValueOnlyModule
+  
+  def initialize
+    super(HOST_LICENSES, "List of licenses assigned to this host", PV_ANY)
+  end
+  
+  def load_default_value
+    @default = nil
+    
+    # Allow for the --enable-trial-mode setting to override the default
+    # Any continuent.licenses files will override this setting
+    if @config.getProperty(ENABLE_TRIAL_MODE) == "true"
+      @default = [LICENSE_TRIAL]
+    end
+    
+    search_paths = @config.getPropertyOr(HOST_LICENSE_PATHS, [])
+    unless search_paths.is_a?(Array)
+      return
+    end
+    
+    search_paths.each{
+      |path|
+      if ! File.exist?(path)
+        next
+      end
+      
+      if ! File.readable?(path)
+        warning("Unable to read #{path}")
+        next
+      end
+      
+      File.open(path, "r") {
+        |f|
+        @default = f.readlines().join().strip().split("\n")
+        return
+      }
+    }
+  end
+end

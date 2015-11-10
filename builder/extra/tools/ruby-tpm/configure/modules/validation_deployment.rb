@@ -1743,3 +1743,74 @@ class NtpdRunningCheck < ConfigureValidationCheck
     super()
   end
 end
+
+class HostLicensesCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+
+  def set_vars
+    @title = "Check for VMware Continuent licenses"
+  end
+
+  def validate
+    @has_licenses = false
+    @has_invalid_licenses = false
+    @trial_license_found = false
+    
+    licenses = @config.getProperty(HOST_LICENSES)
+    if licenses.is_a?(Array)
+      if licenses.size() > 0
+        @has_licenses = true
+        licenses.each {
+          |lic|
+          if validate_license(lic.to_s()) != true
+            error("The license key #{lic} is invalid.")
+            @has_invalid_licenses = true
+          end
+        }
+      end
+    elsif licenses.to_s() != ""
+      @has_licenses = true
+      if validate_license(licenses.to_s()) != true
+        error("The license key #{licenses.to_s()} is invalid.")
+        @has_invalid_licenses = true
+      end
+    end
+    
+    if @has_licenses == true
+      if @has_invalid_licenses == true
+        error("There are problems with some of your licenses. Use a proper VMware V8 license for Continuent or temporarily enable trial-mode by using '#{LICENSE_TRIAL}'. The trial-mode does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
+      end
+      
+      if @trial_license_found == true
+        warning("You have trial-mode enabled. It does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
+      end
+    else
+      search_paths = @config.getProperty(HOST_LICENSE_PATHS)
+      if search_paths.is_a?(Array)
+        warning("Unable to find licenses for this host in any of the following locations: #{search_paths.join(', ')}. Place your VMware Continuent license key into one of the paths listed on every host.")
+      else
+        warning("Unable to find licenses for this host.")
+      end
+    end
+  end
+  
+  def validate_license(license)
+    # The regex matches values like ABCD1-FGHI2-KLMN3-PQRS4-UVWX5
+    if license == LICENSE_TRIAL
+      @trial_license_found = true
+      return true
+    elsif license =~ /^([A-Z0-9]{5}\-){4}[A-Z0-9]{5}$/
+      return true
+    else
+      return false
+    end
+  end
+  
+  def enabled?
+    if Configurator.instance.is_enterprise?()
+      super()
+    else
+      false
+    end
+  end
+end

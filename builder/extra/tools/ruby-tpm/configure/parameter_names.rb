@@ -53,6 +53,10 @@ STAGING_HOST = "staging_host"
 STAGING_USER = "staging_user"
 STAGING_DIRECTORY = "staging_directory"
 
+ENABLE_TRIAL_MODE = "enable_trial_mode"
+HOST_LICENSE_PATHS = "host_license_paths"
+HOST_LICENSES = "host_licenses"
+
 PORTS_FOR_USERS = "ports_for_users"
 PORTS_FOR_CONNECTORS = "ports_for_connectors"
 PORTS_FOR_MANAGERS = "ports_for_managers"
