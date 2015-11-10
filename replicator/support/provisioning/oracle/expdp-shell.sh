@@ -109,7 +109,7 @@ else
     reportError "ERROR : rsync to ${RSYNC_DESTINATION} failed"
   fi
   touch ${backup_dir}/rsync_complete.txt
-  rsync ${RSYNC_OPTIONS} ${backup_dir}/rsync_complete.txt $RSYNC_DESTINATION
+  rsync ${RSYNC_OPTIONS} ${backup_dir}/rsync_complete.txt ${RSYNC_DESTINATION}/${backup_name}
 fi
 
 # All done.
