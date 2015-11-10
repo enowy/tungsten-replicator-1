@@ -1807,10 +1807,10 @@ class HostLicensesCheck < ConfigureValidationCheck
   end
   
   def enabled?
-    if Configurator.instance.is_enterprise?()
-      super()
-    else
+    if Configurator.instance.is_open_source?()
       false
+    else
+      super()
     end
   end
 end

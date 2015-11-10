@@ -344,6 +344,7 @@ class OldServicesRunningCheck < ConfigureValidationCheck
     allowed_pid_files = []
     if @config.getProperty(HOST_ENABLE_REPLICATOR) == "true"
       allowed_pid_files << "#{current_release_target_dir}/tungsten-replicator/var/treplicator.pid"
+      allowed_pid_files << "#{current_release_target_dir}/tungsten-replicator/var/replicator.pid"
     end
     if @config.getProperty(HOST_ENABLE_MANAGER) == "true"
       allowed_pid_files << "#{current_release_target_dir}/tungsten-manager/var/tmanager.pid"

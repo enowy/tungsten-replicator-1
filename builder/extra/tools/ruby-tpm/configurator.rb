@@ -1132,21 +1132,26 @@ class Configurator
               "product" => parsed['product']
             }
             
-            if parsed['product'] == "Tungsten Replicator"
-              @release_details[:is_enterprise_package] = false
-              
-              if parsed["git"]["URL"] =~ /github\.com/
-                @release_details[:is_open_source] = true
-              else
-                @release_details[:is_open_source] = false
-              end
-            elsif parsed['product'] =~ /VMware Continuent Replication/
-              @release_details[:is_enterprise_package] = false
-            else
-              @release_details[:is_enterprise_package] = true
-            end
+            @release_details[:is_enterprise_package] = false
+            @release_details[:licensed_products] = []
             
-            if parsed["git"]["URL"] =~ /github\.com/
+            base = get_base_path()
+            Dir.glob("#{base}/cluster-home/lib/vmware/licenses/*").each {
+              |path|
+              edition = cmd_result("egrep '^LicenseEdition' #{path}")
+              match = edition.match(/^LicenseEdition = \"(.*)\"$/)
+              if match == nil
+                raise "Unable to parse license information from #{path}"
+              else
+                @release_details[:licensed_products] << match[1]
+                
+                if match[1] =~ /^continuent\.clustering\./
+                  @release_details[:is_enterprise_package] = true
+                end
+              end
+            }
+            
+            if @release_details[:licensed_products].size() == 0
               @release_details[:is_open_source] = true
             else
               @release_details[:is_open_source] = false
