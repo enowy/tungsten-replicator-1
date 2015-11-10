@@ -90,6 +90,7 @@ expdp ${DBMS_LOGIN}/${DBMS_PASSWORD}@${DBMS_SID} \
   directory=${EXPDP_DIR} \
   dumpfile=${backup_name}_%U \
   logfile=expdp.log
+
 if [ $? -ne 0 ]; then
     reportError "ERROR : Datapump export failed"
 fi
@@ -107,6 +108,8 @@ else
   if [ $? -ne 0 ]; then
     reportError "ERROR : rsync to ${RSYNC_DESTINATION} failed"
   fi
+  touch ${backup_dir}/rsync_complete.txt
+  rsync ${RSYNC_OPTIONS} ${backup_dir}/rsync_complete.txt $RSYNC_DESTINATION
 fi
 
 # All done.
