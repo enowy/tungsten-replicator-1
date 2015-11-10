@@ -37,6 +37,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -1107,4 +1108,57 @@ public class SecurityHelper
         setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
                 StringUtils.join(possibleCipherSuitesArray, ","), verbose);
     }
+    
+    /**
+     * Check that KeyStore and the keys it stores have a common password.
+     * 
+     * @param keystoreLocation
+     * @param keystoreType "jks", jceks", or "pkcs"
+     * @param password
+     * @throws ConfigurationException
+     * @throws GeneralSecurityException
+     * @throws IOException
+     */
+    public static void checkKeyStorePasswords(String keystoreLocation,
+            String keystoreType,
+            char [] password) throws ConfigurationException, GeneralSecurityException, IOException
+    {
+        String ksLocation;
+        // Check that varibale holding key store location gets non-empty value
+        if (keystoreLocation != null && !keystoreLocation.isEmpty())
+        {
+            ksLocation = keystoreLocation;
+        }
+        else if (SecurityHelper.getKeyStoreLocation() != null 
+                        && !SecurityHelper.getKeyStoreLocation().isEmpty())
+        {
+            ksLocation = SecurityHelper.getKeyStoreLocation();
+        }
+        else
+        {
+            throw new ConfigurationException("KeyStore location is not given.");
+        }
+        // Check that key store type is not null and either jks, jceks, or pkcs12
+        if (keystoreType == null || keystoreType.length() == 0
+                || (!keystoreType.equalsIgnoreCase("jks")
+                        && !keystoreType.equalsIgnoreCase("jceks")
+                        && !keystoreType.equalsIgnoreCase("pkcs12")))
+        {
+            throw new ConfigurationException("Invalid KeyStore type : " + keystoreType);          
+        }
+        FileInputStream fis = new FileInputStream(ksLocation);
+        String alg = KeyManagerFactory.getDefaultAlgorithm();
+        KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
+
+        KeyStore ks = KeyStore.getInstance(keystoreType);
+        ks.load(fis, password);
+        fis.close();
+
+        /**
+         *  Init the key manager factory with the loaded key store. If passwords 
+         *  of KeyStore and keys differ and exception is thrown.
+         */
+        kmFact.init(ks, password);
+    }
+
 }
