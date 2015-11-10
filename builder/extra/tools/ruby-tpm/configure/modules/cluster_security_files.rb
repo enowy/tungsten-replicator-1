@@ -1,5 +1,10 @@
 module ClusterSecurityFiles
   def create_default_security_files(config)
+    if Configurator.instance.is_locked?()
+      # We do not create these files from inside an installed directory
+      return
+    end
+    
     generate_tls = true
     
     # Backwards compatible section allows for the use of 
