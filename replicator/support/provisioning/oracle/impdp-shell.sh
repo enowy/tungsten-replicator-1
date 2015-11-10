@@ -66,8 +66,8 @@ then
   echo "### Registering backup directory with Oracle"
   sqlplus ${EXPDP_SYS_USER}/${EXPDP_SYS_PASSWORD}@${DBMS_SID} as sysdba <<END
 whenever sqlerror exit 2;
-create or replace directory ${EXPDP_DIR} as '$BACKUP_BASE_DIR';
-grant read,write on directory ${EXPDP_DIR} to $DBMS_LOGIN;
+create or replace directory ${IMPDP_DIR} as '$BACKUP_BASE_DIR';
+grant read,write on directory ${IMPDP_DIR} to $DBMS_LOGIN;
 END
   if [ $? -ne 0 ]; then
     reportError "ERROR : SQLPLUS command to create ${EXPDP_DIR} failed"
@@ -84,12 +84,21 @@ do
       cp ${source_base}/* ${BACKUP_BASE_DIR}
       touch ${source_base}/data_loaded.txt
 
+      #Clean up schema first
+      for schema in $(echo ${IMPDP_SCHEMAS}| tr "," " "); do
+        sqlplus ${EXPDP_SYS_USER}/${EXPDP_SYS_PASSWORD}@${DBMS_SID} as sysdba <<END
+        whenever sqlerror exit 2;
+        drop user ${schema} cascade;
+END
+      done
+
       # Execute data pump import.
       echo "### Executing data pump command"
       set -x
       impdp ${DBMS_LOGIN}/${DBMS_PASSWORD}@${DBMS_SID} \
-        full=${EXPDP_FULL} \
-        directory=${EXPDP_DIR} \
+        full=${IMPDP_FULL} \
+        schemas=${IMPDP_SCHEMAS} \
+        directory=${IMPDP_DIR} \
         dumpfile=${source_base}_%U \
         table_exists_action=replace \
         logfile=impdp.log
