@@ -493,13 +493,13 @@ EOF
     end
     
     if is_replicator?()
-      add_service("tungsten-replicator/bin/replicator", 40)
+      add_service("tungsten-replicator/bin/replicator", 25)
     end
     if is_manager?()
-      add_service("tungsten-manager/bin/manager", 20)
+      add_service("tungsten-manager/bin/manager", 50)
     end
     if is_connector?()
-      add_service("tungsten-connector/bin/connector", 50)
+      add_service("tungsten-connector/bin/connector", 75)
     end
     trigger_event(:register_services)
     
