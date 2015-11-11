@@ -46,7 +46,7 @@ module ClusterSecurityFiles
   end
   
   def generate_tls_certificate(config, first_time_warning = nil)
-    if config.getProperty(REPL_ENABLE_THL_SSL) != "true" || config.getProperty(ENABLE_RMI_SSL) != "true"
+    if config.getProperty(REPL_ENABLE_THL_SSL) != "true" && config.getProperty(ENABLE_RMI_SSL) != "true"
       # Do nothing because the TLS certificate is not used
       return
     end
