@@ -56,84 +56,82 @@ import com.continuent.tungsten.replicator.util.AtomicCounter;
  */
 public class THL implements Store
 {
-    protected static Logger     logger               = Logger.getLogger(THL.class);
+    protected static Logger logger = Logger.getLogger(THL.class);
 
     // Version information and constants.
-    public static final int     MAJOR                = 1;
-    public static final int     MINOR                = 3;
-    public static final String  SUFFIX               = "";
-    public static final String  PLAINTEXT_URI_SCHEME = "thl";
-    public static final String  SSL_URI_SCHEME       = "thls";
+    public static final int    MAJOR                = 1;
+    public static final int    MINOR                = 3;
+    public static final String SUFFIX               = "";
+    public static final String PLAINTEXT_URI_SCHEME = "thl";
+    public static final String SSL_URI_SCHEME       = "thls";
 
     // Name of this store.
-    private String              name;
+    private String name;
 
     /** URL of storage listener. Default listens on all interfaces. */
-    private String              storageListenerUri   = "thl://0.0.0.0:2112/";
+    private String storageListenerUri = "thl://0.0.0.0:2112/";
 
-    private String              logDir               = "/opt/continuent/logs/";
-    private String              eventSerializer      = ProtobufSerializer.class
-                                                             .getName();
+    private String logDir          = "/opt/continuent/logs/";
+    private String eventSerializer = ProtobufSerializer.class.getName();
 
     // Data source with which this THL is associated.
-    protected String            dataSource;
+    protected String dataSource;
 
     /** Number of events between resets on stream. */
-    private int                 resetPeriod          = 1;
+    private int resetPeriod = 1;
 
     /** Store and compare checksum values on the log. */
-    private boolean             doChecksum           = true;
+    private boolean doChecksum = true;
 
     /** Name of the class used to serialize events. */
-    protected String            eventSerializerClass = ProtobufSerializer.class
-                                                             .getName();
+    protected String eventSerializerClass = ProtobufSerializer.class.getName();
 
     /** Log file maximum size in bytes. */
-    protected int               logFileSize          = 1000000000;
+    protected int logFileSize = 1000000000;
 
     /** Log file retention in milliseconds. Defaults to 0 (= forever) */
-    protected long              logFileRetainMillis  = 0;
+    protected long logFileRetainMillis = 0;
 
     /** Idle log Connection timeout in seconds. */
-    protected int               logConnectionTimeout = 28800;
+    protected int logConnectionTimeout = 28800;
 
     /** I/O buffer size in bytes. */
-    protected int               bufferSize           = 131072;
+    protected int bufferSize = 131072;
 
     /**
      * Flush data after this many milliseconds. 0 flushes after every write.
      */
-    private long                flushIntervalMillis  = 0;
+    private long flushIntervalMillis = 0;
 
     /** If true, fsync when flushing. */
-    private boolean             fsyncOnFlush         = false;
+    private boolean fsyncOnFlush = false;
 
     // Catalog access and disk log.
-    private UniversalConnection conn                 = null;
-    private CommitSeqno         commitSeqno          = null;
-    private CommitSeqnoAccessor commitSeqnoAccessor  = null;
-    private DiskLog             diskLog              = null;
+    private UniversalConnection conn                = null;
+    private CommitSeqno         commitSeqno         = null;
+    private CommitSeqnoAccessor commitSeqnoAccessor = null;
+    private DiskLog             diskLog             = null;
 
     // Storage management variables.
-    protected PluginContext     context;
-    private AtomicCounter       sequencer;
+    protected PluginContext context;
+    private AtomicCounter   sequencer;
 
     // Storage connectivity.
-    private Server              server               = null;
+    private Server server = null;
 
-    private boolean             readOnly             = false;
+    private boolean readOnly = false;
 
     // This indicates whether replicator will stop or keep on trying to extract
     // data despite errors while storing its position into database
     // (CommitSeqno)
-    private boolean             stopOnDBError        = true;
+    private boolean stopOnDBError = true;
 
     // If true check log consistency with catalog when starting up.
-    private boolean             logConsistencyCheck  = false;
+    private boolean logConsistencyCheck = false;
 
     // A restart position that allows downstream stages to set the log
     // position when the log is empty.
-    private ReplDBMSHeader      restartPosition;
+    private ReplDBMSHeader restartPosition;
 
     /** Creates a store instance. */
     public THL()
@@ -332,8 +330,8 @@ public class THL implements Store
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#configure(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void configure(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void configure(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         // Store variables.
         this.context = context;
@@ -351,7 +349,8 @@ public class THL implements Store
         UniversalDataSource dataSourceImpl = context.getDataSource(dataSource);
         if (dataSourceImpl == null)
         {
-            logger.info("Data source is not specified or a dummy; catalog access is disabled");
+            logger.info(
+                    "Data source is not specified or a dummy; catalog access is disabled");
         }
         else
         {
@@ -415,7 +414,7 @@ public class THL implements Store
             }
             catch (ConfigurationException e)
             {
-                throw new ReplicatorException("Unable to start THL server", e);                
+                throw new ReplicatorException("Unable to start THL server", e);
             }
             catch (IOException e)
             {
@@ -423,7 +422,9 @@ public class THL implements Store
             }
             catch (GeneralSecurityException e)
             {
-                throw new ReplicatorException("Unable to start THL server. Could not establish SSL connection", e);
+                throw new ReplicatorException(
+                        "Unable to start THL server. Could not establish SSL connection",
+                        e);
             }
         }
     }
@@ -438,8 +439,8 @@ public class THL implements Store
      * This check is a separate function as there are numerous boundary
      * conditions for a successful check.
      */
-    private void ensureRestartPositionConsistency() throws ReplicatorException,
-            InterruptedException
+    private void ensureRestartPositionConsistency()
+            throws ReplicatorException, InterruptedException
     {
         // Establish boundary conditions for a check.
         if (!logConsistencyCheck)
@@ -449,13 +450,15 @@ public class THL implements Store
         }
         if (commitSeqno == null)
         {
-            logger.info("Restart consistency checking skipped because catalog is disabled");
+            logger.info(
+                    "Restart consistency checking skipped because catalog is disabled");
             return;
         }
         if (!"master".equals(context.getLastOnlineRoleName())
                 || !context.isSlave())
         {
-            logger.info("Restart consistency checking skipped as we are not recovering a master to a slave");
+            logger.info(
+                    "Restart consistency checking skipped as we are not recovering a master to a slave");
             return;
         }
 
@@ -465,20 +468,22 @@ public class THL implements Store
 
         if (lastCatalogEvent == null)
         {
-            logger.info("Restart consistency checking skipped as there is no restart point in catalog");
+            logger.info(
+                    "Restart consistency checking skipped as there is no restart point in catalog");
             return;
         }
         if (lastLogEvent == null)
         {
-            logger.info("Restart consistency checking skipped as THL does not contain events");
+            logger.info(
+                    "Restart consistency checking skipped as THL does not contain events");
             return;
         }
 
         // A check is useful and required.
-        logger.info("Checking restart consistency when recovering master to slave: THL seqno="
-                + lastLogEvent.getSeqno()
-                + " catalog seqno="
-                + lastCatalogEvent.getSeqno());
+        logger.info(
+                "Checking restart consistency when recovering master to slave: THL seqno="
+                        + lastLogEvent.getSeqno() + " catalog seqno="
+                        + lastCatalogEvent.getSeqno());
         if (lastLogEvent.getSeqno() > lastCatalogEvent.getSeqno())
         {
             // Bring catalog up to date but only if the epoch numbers match.
@@ -499,20 +504,22 @@ public class THL implements Store
             }
             else
             {
-                logger.warn("Unable to update catalog position as epoch numbers do not match: seqno="
-                        + lastLogEvent.getSeqno()
-                        + " THL epoch number="
-                        + lastLogEvent.getEpochNumber()
-                        + " catalog epoch number="
-                        + lastCatalogEvent.getEpochNumber());
+                logger.warn(
+                        "Unable to update catalog position as epoch numbers do not match: seqno="
+                                + lastLogEvent.getSeqno() + " THL epoch number="
+                                + lastLogEvent.getEpochNumber()
+                                + " catalog epoch number="
+                                + lastCatalogEvent.getEpochNumber());
             }
         }
         else if (lastLogEvent.getSeqno() < lastCatalogEvent.getSeqno())
         {
             // Note if the catalog is higher than the log. This could indicate a
             // consistency issue.
-            logger.info("Unable to update catalog position as last THL record is lower than catalog seqno");
-            logger.info("This condition may occur naturally if the THL has been truncated");
+            logger.info(
+                    "Unable to update catalog position as last THL record is lower than catalog seqno");
+            logger.info(
+                    "This condition may occur naturally if the THL has been truncated");
         }
         else
         {
@@ -538,7 +545,8 @@ public class THL implements Store
             catch (InterruptedException e)
             {
                 logger.warn(
-                        "Server stop operation was unexpectedly interrupted", e);
+                        "Server stop operation was unexpectedly interrupted",
+                        e);
             }
             finally
             {
@@ -596,25 +604,24 @@ public class THL implements Store
      * 
      * @throws ReplicatorException Thrown if update is unsuccessful
      */
-    public void updateCommitSeqno(THLEvent event) throws ReplicatorException,
-            InterruptedException
+    public void updateCommitSeqno(THLEvent event)
+            throws ReplicatorException, InterruptedException
     {
         if (commitSeqno == null)
         {
             if (logger.isDebugEnabled())
-                logger.debug("Seqno update is disabled: seqno="
-                        + event.getSeqno());
+                logger.debug(
+                        "Seqno update is disabled: seqno=" + event.getSeqno());
         }
         else
         {
             // Recreate header data.
-            long applyLatency = (System.currentTimeMillis() - event
-                    .getSourceTstamp().getTime()) / 1000;
-            ReplDBMSHeaderData header = new ReplDBMSHeaderData(
-                    event.getSeqno(), event.getFragno(), event.getLastFrag(),
-                    event.getSourceId(), event.getEpochNumber(),
-                    event.getEventId(), event.getShardId(),
-                    event.getSourceTstamp(), applyLatency);
+            long applyLatency = (System.currentTimeMillis()
+                    - event.getSourceTstamp().getTime()) / 1000;
+            ReplDBMSHeaderData header = new ReplDBMSHeaderData(event.getSeqno(),
+                    event.getFragno(), event.getLastFrag(), event.getSourceId(),
+                    event.getEpochNumber(), event.getEventId(),
+                    event.getShardId(), event.getSourceTstamp(), applyLatency);
 
             commitSeqnoAccessor.updateLastCommitSeqno(header, applyLatency);
         }
@@ -637,8 +644,8 @@ public class THL implements Store
      * @throws InterruptedException
      * @throws ReplicatorException
      */
-    public ReplDBMSHeader getLastAppliedEvent() throws ReplicatorException,
-            InterruptedException
+    public ReplDBMSHeader getLastAppliedEvent()
+            throws ReplicatorException, InterruptedException
     {
         // Look first in the log.
         ReplDBMSHeader lastHeader = getLastLoggedEvent();
@@ -669,8 +676,8 @@ public class THL implements Store
      * 
      * @return An event header or null if log is newly initialized
      */
-    public ReplDBMSHeader getLastLoggedEvent() throws ReplicatorException,
-            InterruptedException
+    public ReplDBMSHeader getLastLoggedEvent()
+            throws ReplicatorException, InterruptedException
     {
         // Look for maximum sequence number in log and use that if available.
         if (diskLog != null)
@@ -702,8 +709,9 @@ public class THL implements Store
                     // If we did not find the last fragment of the event
                     // we need to warn somebody.
                     if (thlEvent != null)
-                        logger.warn("Unable to find last fragment of event: seqno="
-                                + maxSeqno);
+                        logger.warn(
+                                "Unable to find last fragment of event: seqno="
+                                        + maxSeqno);
                 }
                 finally
                 {

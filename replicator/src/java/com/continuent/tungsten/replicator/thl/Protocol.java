@@ -49,17 +49,18 @@ import com.continuent.tungsten.replicator.plugin.PluginContext;
  */
 public class Protocol
 {
-    private static Logger        logger                   = Logger.getLogger(Protocol.class);
+    private static Logger logger = Logger.getLogger(Protocol.class);
 
     // Constants used for options and capabilities.
-    public static String         SOURCE_ID                = "source_id";
-    public static String         ROLE                     = "role";
-    public static String         VERSION                  = "version";
-    public static String         MIN_SEQNO                = "min_seqno";
-    public static String         MAX_SEQNO                = "max_seqno";
+    public static String SOURCE_ID     = "source_id";
+    public static String ROLE          = "role";
+    public static String VERSION       = "version";
+    public static String MIN_SEQNO     = "min_seqno";
+    public static String MAX_SEQNO     = "max_seqno";
+    public static String AUTH_REQUIRED = "auth_required";
 
-    protected PluginContext      pluginContext            = null;
-    protected SocketWrapper      socket                   = null;
+    protected PluginContext pluginContext = null;
+    protected SocketWrapper socket        = null;
 
     // Capabilities from a THL server.
     protected TungstenProperties serverCapabilities;
@@ -68,26 +69,26 @@ public class Protocol
     // automatically (no need to send a message to the master for each sequence
     // number). Warning : a sequence number can be found several times in the
     // history table when the transaction was fragmented.
-    private long                 prefetchRange            = Long.MAX_VALUE;
-    private long                 prefetchIndex            = 0;
-    private boolean              allPreviousFragmentsDone = true;
+    private long    prefetchRange            = Long.MAX_VALUE;
+    private long    prefetchIndex            = 0;
+    private boolean allPreviousFragmentsDone = true;
 
-    protected int                resetPeriod;
-    private int                  objectsSent              = 0;
+    protected int resetPeriod;
+    private int   objectsSent = 0;
 
-    protected ObjectInputStream  ois                      = null;
-    protected ObjectOutputStream oos                      = null;
+    protected ObjectInputStream  ois = null;
+    protected ObjectOutputStream oos = null;
 
-    protected String             clientSourceId           = null;
-    private long                 clientLastEpochNumber    = -1;
-    private long                 clientLastSeqno          = -1;
+    protected String clientSourceId        = null;
+    private long     clientLastEpochNumber = -1;
+    private long     clientLastSeqno       = -1;
 
     private int                  bufferSize;
-    private ArrayList<ReplEvent> buffer                   = new ArrayList<ReplEvent>();
-    private boolean              buffering                = false;
+    private ArrayList<ReplEvent> buffer    = new ArrayList<ReplEvent>();
+    private boolean              buffering = false;
 
-    private String               rmiHost                  = null;
-    private int                  rmiPort                  = -1;
+    private String rmiHost = null;
+    private int    rmiPort = -1;
 
     /**
      * Creates a new <code>Protocol</code> object
@@ -105,15 +106,16 @@ public class Protocol
         this.pluginContext = context;
         this.socket = socket;
 
-        oos = new ObjectOutputStream(new BufferedOutputStream(
-                socket.getOutputStream()));
+        oos = new ObjectOutputStream(
+                new BufferedOutputStream(socket.getOutputStream()));
         oos.flush();
 
         // Retrieve parameters available only in a casual Replicator service.
         if (context instanceof ReplicatorRuntime)
         {
             ReplicatorRuntime runtime = (ReplicatorRuntime) context;
-            if (runtime.getOpenReplicatorContext() instanceof OpenReplicatorManager)
+            if (runtime
+                    .getOpenReplicatorContext() instanceof OpenReplicatorManager)
             {
                 OpenReplicatorManager manager = (OpenReplicatorManager) runtime
                         .getOpenReplicatorContext();
@@ -125,13 +127,13 @@ public class Protocol
         resetPeriod = 1;
     }
 
-    public Protocol(PluginContext context, SocketWrapper socket, int resetPeriod)
-            throws IOException
+    public Protocol(PluginContext context, SocketWrapper socket,
+            int resetPeriod) throws IOException
     {
         this(context, socket);
         this.resetPeriod = resetPeriod;
-        this.bufferSize = context.getReplicatorProperties().getInt(
-                ReplicatorConf.THL_PROTOCOL_BUFFER_SIZE);
+        this.bufferSize = context.getReplicatorProperties()
+                .getInt(ReplicatorConf.THL_PROTOCOL_BUFFER_SIZE);
         buffering = bufferSize > 0;
         if (buffering && logger.isDebugEnabled())
             logger.debug("THL protocol buffering enabled: size=" + bufferSize);
@@ -173,13 +175,13 @@ public class Protocol
     /**
      * Read a message from network from either side.
      */
-    protected ProtocolMessage readMessage() throws IOException,
-            ReplicatorException
+    protected ProtocolMessage readMessage()
+            throws IOException, ReplicatorException
     {
         if (ois == null)
         {
-            ois = new ObjectInputStream(new BufferedInputStream(
-                    socket.getInputStream()));
+            ois = new ObjectInputStream(
+                    new BufferedInputStream(socket.getInputStream()));
         }
         Object obj;
         try
@@ -216,8 +218,9 @@ public class Protocol
      * Initiate a server handshake from the client side.
      */
     public void serverHandshake(ProtocolHandshakeResponseValidator validator,
-            long minSeqNo, long maxSeqNo) throws ReplicatorException,
-            IOException, InterruptedException
+            long minSeqNo, long maxSeqNo, boolean encryptionInUse)
+                    throws ReplicatorException, IOException,
+                    InterruptedException
     {
         ProtocolHandshake handshake = new ProtocolHandshake();
         handshake.setCapability(SOURCE_ID, pluginContext.getSourceId());
@@ -226,7 +229,13 @@ public class Protocol
                 ManifestParser.parseReleaseWithBuildNumber());
         handshake.setCapability(MIN_SEQNO, new Long(minSeqNo).toString());
         handshake.setCapability(MAX_SEQNO, new Long(maxSeqNo).toString());
-        serverCapabilities = new TungstenProperties(handshake.getCapabilities());
+
+        // Authorization is required for encrypted connections as of version
+        // 5.0.
+        handshake.setCapability(AUTH_REQUIRED,
+                new Boolean(encryptionInUse).toString());
+        serverCapabilities = new TungstenProperties(
+                handshake.getCapabilities());
         writeMessage(handshake);
         ProtocolMessage response = readMessage();
         if (response instanceof ProtocolHandshakeResponse)
@@ -236,12 +245,14 @@ public class Protocol
             try
             {
                 validator.validateResponse(handshakeResponse);
-                writeMessage(new ProtocolOK(new SeqNoRange(minSeqNo, maxSeqNo)));
+                writeMessage(
+                        new ProtocolOK(new SeqNoRange(minSeqNo, maxSeqNo)));
             }
             catch (THLException e)
             {
-                writeMessage(new ProtocolNOK(
-                        "Client response validation failed: " + e.getMessage()));
+                writeMessage(
+                        new ProtocolNOK("Client response validation failed: "
+                                + e.getMessage()));
                 throw e;
             }
         }
@@ -249,8 +260,8 @@ public class Protocol
         {
             writeMessage(new ProtocolNOK("Protocol error: message="
                     + response.getClass().getName()));
-            throw new THLException("Protocol error: message="
-                    + response.getClass().getName());
+            throw new THLException(
+                    "Protocol error: message=" + response.getClass().getName());
         }
     }
 
@@ -260,15 +271,21 @@ public class Protocol
      * @param lastEpochNumber Epoch number client has from last sequence number
      * @param lastSeqno Last sequence number client received
      * @param heartbeatMillis Number of milliseconds between heartbeat events
+     * @param lastEventId Last event ID to look for
+     * @param remoteLogin Remote login to use when authentication is required
+     * @param remotePassword Password for remote login
      * @return A sequence number range
      */
     public SeqNoRange clientHandshake(long lastEpochNumber, long lastSeqno,
-            int heartbeatMillis, String lastEventId)
-            throws ReplicatorException, IOException
+            int heartbeatMillis, String lastEventId, String remoteLogin,
+            String remotePassword) throws ReplicatorException, IOException
     {
+        // Read message from server.
         ProtocolMessage handshake = readMessage();
         if (handshake instanceof ProtocolHandshake == false)
             throw new THLException("Invalid handshake");
+
+        // Deserialize the server message.
         ProtocolHandshake protocolHandshake = (ProtocolHandshake) handshake;
         serverCapabilities = new TungstenProperties(
                 protocolHandshake.getCapabilities());
@@ -281,6 +298,27 @@ public class Protocol
                 ManifestParser.parseReleaseWithBuildNumber());
         response.setOption(ProtocolParams.RMI_HOST, rmiHost);
         response.setOption(ProtocolParams.RMI_PORT, Integer.toString(rmiPort));
+
+        // If the server requires authentication, set the remote login and
+        // password.
+        boolean authRequired = serverCapabilities.getBoolean(AUTH_REQUIRED);
+        if (authRequired)
+        {
+            if (remoteLogin == null)
+            {
+                logger.warn(
+                        "THL server requires authentication but remote login is not specified");
+            }
+            else if (remotePassword == null)
+            {
+                logger.warn(
+                        "THL server requires authentication but password is not available: remoteLogin="
+                                + remoteLogin);
+            }
+            response.setOption(ProtocolParams.REMOTE_LOGIN, remoteLogin);
+            response.setOption(ProtocolParams.REMOTE_PASSWORD, remotePassword);
+        }
+
         if (lastEventId != null)
             response.setOption(ProtocolParams.INIT_EVENT_ID, lastEventId);
         writeMessage(response);
@@ -306,8 +344,8 @@ public class Protocol
      * Request next event from the server after the given seqno (client side).
      */
     @SuppressWarnings("unchecked")
-    public ReplEvent requestReplEvent(long seqNo) throws ReplicatorException,
-            IOException
+    public ReplEvent requestReplEvent(long seqNo)
+            throws ReplicatorException, IOException
     {
         ReplEvent ret = null;
         if (!buffer.isEmpty())
@@ -318,7 +356,8 @@ public class Protocol
         {
             if (prefetchIndex == 0 && allPreviousFragmentsDone)
             {
-                writeMessage(new ProtocolReplEventRequest(seqNo, prefetchRange));
+                writeMessage(
+                        new ProtocolReplEventRequest(seqNo, prefetchRange));
             }
 
             // Read the next message, skipping over any heartbeat events, which
@@ -348,8 +387,9 @@ public class Protocol
                 else
                     logger.warn("Received an empty buffer");
             }
-            else if (msg instanceof ProtocolNOK
-                    && msg.getPayload() instanceof String)
+            else
+                if (msg instanceof ProtocolNOK
+                        && msg.getPayload() instanceof String)
             {
                 String message = (String) msg.getPayload();
                 throw new THLException(message);
@@ -376,13 +416,12 @@ public class Protocol
                 {
                     ReplDBMSFilteredEvent event = (ReplDBMSFilteredEvent) ret;
 
-                    if ((1 + prefetchIndex + event.getSeqnoEnd() - event
-                            .getSeqno()) > prefetchRange)
+                    if ((1 + prefetchIndex + event.getSeqnoEnd()
+                            - event.getSeqno()) > prefetchRange)
                         prefetchIndex = 0;
                     else
-                        prefetchIndex = (1 + prefetchIndex
-                                + event.getSeqnoEnd() - event.getSeqno())
-                                % prefetchRange;
+                        prefetchIndex = (1 + prefetchIndex + event.getSeqnoEnd()
+                                - event.getSeqno()) % prefetchRange;
                 }
                 else
                     prefetchIndex = (prefetchIndex + 1) % prefetchRange;

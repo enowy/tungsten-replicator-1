@@ -46,28 +46,32 @@ import com.continuent.tungsten.replicator.plugin.ReplicatorPlugin;
  */
 public class Connector implements ReplicatorPlugin
 {
-    private static Logger       logger          = Logger.getLogger(Connector.class);
+    private static Logger logger = Logger.getLogger(Connector.class);
 
-    protected PluginContext     pluginContext   = null;
-    protected String            host            = null;
-    protected int               port            = 2112;
+    // Operational parameters.
+    protected PluginContext     pluginContext = null;
+    protected String            host          = null;
+    protected int               port          = 2112;
     private ClientSocketWrapper clientSocket;
-    private long                minSeqNo        = -1;
-    private long                maxSeqNo        = -1;
-    private Protocol            protocol        = null;
+    private long                minSeqNo      = -1;
+    private long                maxSeqNo      = -1;
+    private Protocol            protocol      = null;
     private TungstenProperties  serverCapabilities;
     protected boolean           useSSL;
 
-    protected int               resetPeriod;
-    protected long              lastSeqno;
-    protected long              lastEpochNumber;
-    protected int               heartbeatMillis = 3000;
-    protected String            lastEventId;
+    // Connector properties.
+    protected int    resetPeriod;
+    protected long   lastSeqno;
+    protected long   lastEpochNumber;
+    protected int    heartbeatMillis = 3000;
+    protected String lastEventId;
+    protected String remoteLogin;
+    protected String remotePassword;
 
-    private String              remoteURI       = null;
+    private String remoteURI = null;
 
     // Marked true to show this connector has been closed.
-    boolean                     closed;
+    boolean closed;
 
     /**
      * Creates a new instance. This is required so the connector can be
@@ -87,7 +91,7 @@ public class Connector implements ReplicatorPlugin
      */
     public Connector(PluginContext context, String remoteURI, int resetPeriod,
             long lastSeqno, long lastEpochNumber, int heartbeatMillis)
-            throws ReplicatorException
+                    throws ReplicatorException
     {
         this.pluginContext = context;
         this.remoteURI = remoteURI;
@@ -98,14 +102,16 @@ public class Connector implements ReplicatorPlugin
     }
 
     /**
-     * Connect to master. 
-     * @throws ConfigurationException 
+     * Connect to master.
+     * 
+     * @throws ConfigurationException
      */
-    public void connect() throws ReplicatorException, IOException, ConfigurationException
+    public void connect()
+            throws ReplicatorException, IOException, ConfigurationException
     {
         if (logger.isDebugEnabled())
-            logger.debug("Connecting to " + host + ":" + port + " useSSL="
-                    + useSSL);
+            logger.debug(
+                    "Connecting to " + host + ":" + port + " useSSL=" + useSSL);
         try
         {
             // Create the socket and connect with a relatively short timeout.
@@ -144,7 +150,8 @@ public class Connector implements ReplicatorPlugin
         // Perform handshake with server.
         protocol = new Protocol(pluginContext, clientSocket, resetPeriod);
         SeqNoRange seqNoRange = protocol.clientHandshake(lastEpochNumber,
-                lastSeqno, heartbeatMillis, lastEventId);
+                lastSeqno, heartbeatMillis, lastEventId, remoteLogin,
+                remotePassword);
 
         minSeqNo = seqNoRange.getMinSeqNo();
         maxSeqNo = seqNoRange.getMaxSeqNo();
@@ -173,8 +180,8 @@ public class Connector implements ReplicatorPlugin
      * @throws ReplicatorException
      * @throws IOException
      */
-    public ReplEvent requestEvent(long seqNo) throws ReplicatorException,
-            IOException
+    public ReplEvent requestEvent(long seqNo)
+            throws ReplicatorException, IOException
     {
         ReplEvent retval;
         if (logger.isDebugEnabled())
@@ -183,8 +190,8 @@ public class Connector implements ReplicatorPlugin
         if (logger.isDebugEnabled() && retval instanceof ReplDBMSEvent)
         {
             ReplDBMSEvent ev = (ReplDBMSEvent) retval;
-            logger.debug("Received event " + ev.getSeqno() + "/"
-                    + ev.getFragno());
+            logger.debug(
+                    "Received event " + ev.getSeqno() + "/" + ev.getFragno());
         }
         return retval;
     }
@@ -213,8 +220,8 @@ public class Connector implements ReplicatorPlugin
         return maxSeqNo;
     }
 
-    public void configure(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void configure(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         this.pluginContext = context;
         try
@@ -243,13 +250,13 @@ public class Connector implements ReplicatorPlugin
         }
     }
 
-    public void prepare(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void prepare(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
     }
 
-    public void release(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void release(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
     }
 
@@ -297,5 +304,17 @@ public class Connector implements ReplicatorPlugin
     public void setLastEventId(String lastEventId)
     {
         this.lastEventId = lastEventId;
+    }
+
+    /** Sets the login to use when remote server requires authentication. */
+    public void setRemoteLogin(String remoteLogin)
+    {
+        this.remoteLogin = remoteLogin;
+    }
+
+    /** Sets the password to use when remote server requires authentication. */
+    public void setRemotePassword(String remotePassword)
+    {
+        this.remotePassword = remotePassword;
     }
 }

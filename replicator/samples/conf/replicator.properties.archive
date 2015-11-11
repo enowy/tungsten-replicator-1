@@ -230,6 +230,13 @@ replicator.store.thl.readOnly=@{REPL_SVC_THL_READ_ONLY}
 replicator.extractor.thl-remote=com.continuent.tungsten.replicator.thl.RemoteTHLExtractor
 replicator.extractor.thl-remote.connectUri=${replicator.master.connect.uri}
 
+# Login for use with encrypted THL connections.  THL servers require that
+# encrypted THL connections be authenticated using a login and password.  
+# The password must be stored in the Java password store, whose path is 
+# provided in the security.properties file. Contents of the file are 
+# configured automatically during installation. 
+replicator.extractor.thl-remote.remoteLogin=@{RMI_USER}
+
 # If true, check to ensure logs are consistent on connection to master by 
 # comparing epoch numbers of last committed transaction.  This can be 
 # temporarily overridden when going online using 'trepctl online -force'.

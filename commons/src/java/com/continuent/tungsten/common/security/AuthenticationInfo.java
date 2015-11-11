@@ -972,6 +972,7 @@ public final class AuthenticationInfo
      * ciphers available on the JVM.</li>
      * </ol>
      */
+    @JsonIgnore
     public List<String> getJvmEnabledCipherSuites()
     {
         String[] jvmSupportedCiphers = SecurityHelper.getJvmSupportedCiphers();

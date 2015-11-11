@@ -29,6 +29,10 @@ import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cluster.resource.OpenReplicatorParams;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.PasswordManager;
+import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 import com.continuent.tungsten.replicator.InSequenceNotification;
 import com.continuent.tungsten.replicator.OutOfSequenceNotification;
 import com.continuent.tungsten.replicator.ReplicatorException;
@@ -68,6 +72,7 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     private String       preferredRole        = null;
     private int          preferredRoleTimeout = 32;
     private int          retryInterval        = 1;
+    private String       remoteLogin;
 
     // Connection control variables.
     private PluginContext  pluginContext;
@@ -76,6 +81,10 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     private Connector      conn;
 
     private ReplEvent pendingEvent;
+
+    // Remote password, which is set if we detect authentication will
+    // be required due to use of encryption.
+    private String remotePassword;
 
     // Set to show that we have been shut down.
     private volatile boolean shutdown = false;
@@ -187,6 +196,17 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
     public void setRetryInterval(int retryTimeout)
     {
         this.retryInterval = retryTimeout;
+    }
+
+    public String getRemoteLogin()
+    {
+        return remoteLogin;
+    }
+
+    /** Sets the login to use when connecting to a remote THL server. */
+    public void setRemoteLogin(String remoteLogin)
+    {
+        this.remoteLogin = remoteLogin;
     }
 
     /**
@@ -393,6 +413,50 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                     .get(ReplicatorConf.MASTER_CONNECT_URI));
         }
 
+        // Test the uri list URLs to see if any of them requires encryption.
+        boolean authRequired = false;
+        for (String uri : uriList)
+        {
+            if (uri.startsWith("thls"))
+            {
+                authRequired = true;
+                break;
+            }
+        }
+
+        // If so, fetch out our password.
+        if (authRequired)
+        {
+            logger.info(
+                    "Authentication expected due to encrypted connection(s) to remote THL");
+            if (remoteLogin == null)
+            {
+                throw new ReplicatorException(
+                        "Property remoteLogin is not set; required for encrypted THL connections");
+            }
+
+            // Load security properties.
+            try
+            {
+                logger.info("Loading password for remote login: remoteLogin="
+                        + remoteLogin);
+                AuthenticationInfo authenticationInfo = SecurityHelper
+                        .loadAuthenticationInformation(
+                                TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+                PasswordManager passwordManager = new PasswordManager(
+                        authenticationInfo.getParentPropertiesFileLocation());
+                remotePassword = passwordManager
+                        .getClearTextPasswordForUser(remoteLogin);
+            }
+            catch (ConfigurationException e)
+            {
+                throw new ReplicatorException(
+                        "Unable to retrieve password for THL login: remoteLogin="
+                                + remoteLogin,
+                        e);
+            }
+        }
+
         // See if we have an online option that overrides serialization
         // checking.
         if (pluginContext.getOnlineOptions()
@@ -540,6 +604,8 @@ public class RemoteTHLExtractor implements Extractor, ShutdownHook
                     conn.setResetPeriod(resetPeriod);
                     conn.setHeartbeatMillis(heartbeatMillis);
                     conn.setLastEventId(this.lastEventId);
+                    conn.setRemoteLogin(remoteLogin);
+                    conn.setRemotePassword(remotePassword);
                     if (this.lastEvent == null
                             || this.checkSerialization == false)
                     {
