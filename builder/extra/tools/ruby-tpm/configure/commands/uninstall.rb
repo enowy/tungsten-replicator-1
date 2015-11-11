@@ -167,11 +167,30 @@ module UninstallClusterDeploymentStep
     end
     
     if File.exist?("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
+      Configurator.instance.debug("Remove MySQL Connector/J")
       linked = File.readlink("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
       FileUtils.rm_f(linked)
       FileUtils.rm_f("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
     end
+    
+    # Look for the deployed files for each of these and delete if present
+    [JAVA_TLS_KEYSTORE_PATH, JAVA_JGROUPS_KEYSTORE_PATH].each {
+      |key|
+      source_file = @config.getProperty(key)
+      target_file = @config.getTemplateValue(key)
+      
+      if source_file == target_file
+        # Do not delete the file because it was provided to the installation
+        next
+      end
+      
+      if File.exist?(target_file)
+        Configurator.instance.debug("Remove #{target_file}")
+        File.unlink(target_file)
+      end
+    }
 
+    Configurator.instance.debug("Remove home directory contents")
     FileUtils.rmtree("#{@config.getProperty(HOME_DIRECTORY)}/#{LOGS_DIRECTORY_NAME}")
     FileUtils.rmtree("#{@config.getProperty(HOME_DIRECTORY)}/#{METADATA_DIRECTORY_NAME}")
     FileUtils.rmtree(@config.getProperty(CONFIG_DIRECTORY))

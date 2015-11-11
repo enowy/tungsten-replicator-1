@@ -1577,7 +1577,9 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   def validate_value(value)
     super(value)
     if is_valid?() && value != "" && value != AUTOGENERATE
-      unless File.exists?(value)
+      if value == get_template_value()
+        error("The provided JGroups keystore may not be placed at #{get_template_value()} as it will conflict with installation. Move the file to another location and update --java-jgroups-keystore-path.")
+      elsif File.exists?(value) != true
         error("The file #{value} does not exist")
       end
     end
@@ -1900,7 +1902,9 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
   def validate_value(value)
     super(value)
     if is_valid?() && value != "" && value != AUTOGENERATE
-      unless File.exists?(value)
+      if value == get_template_value()
+        error("The provided TLS keystore may not be placed at #{get_template_value()} as it will conflict with installation. Move the file to another location and update --java-tls-keystore-path.")
+      elsif File.exists?(value) != true
         error("The file #{value} does not exist")
       end
     end
