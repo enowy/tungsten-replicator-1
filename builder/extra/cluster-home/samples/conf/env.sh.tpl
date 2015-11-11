@@ -76,7 +76,8 @@ set_tungsten_env() {
       COMPREPLY=( $(compgen -W "${trepctl_opts} ${trepctl_commands}" -- ${cur}) )
       return 0
     else
-      eval opts='$trepctl_'${COMP_WORDS[1]}
+			ESCAPED_COMP_WORD=`echo ${COMP_WORDS[1]} | tr "-" "_"`
+			eval opts='$trepctl_'${ESCAPED_COMP_WORD}
       COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
       return 0
     fi
@@ -102,7 +103,8 @@ set_tungsten_env() {
       COMPREPLY=( $(compgen -W "${thl_commands} ${thl_options}" -- ${cur}) )
       return 0
     else
-      eval opts='$thl_'${COMP_WORDS[1]}
+			ESCAPED_COMP_WORD=`echo ${COMP_WORDS[1]} | tr "-" "_"`
+			eval opts='$thl_'${ESCAPED_COMP_WORD}
       COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
       return 0
     fi

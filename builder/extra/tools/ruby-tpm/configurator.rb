@@ -455,7 +455,7 @@ class Configurator
       end  
       @command.advanced?(advanced)
       
-      if @command.enable_log?()
+      if @command.enable_log?() && @command.display_help?() == false
         initialize_log()
         debug("Logging started to #{get_log_filename()}")
       else
@@ -748,7 +748,11 @@ class Configurator
   def initialize_log
     unless @log
       begin
-        @log = File.open(get_log_filename(), "a")
+        logfile = File.expand_path(get_log_filename())
+        if File.exist?(logfile) && ! File.writable?(logfile)
+          raise "Unable to write to log at #{logfile}. Update the permissions or specify a new location with the --log option."
+        end
+        @log = File.open(logfile, "a")
       rescue => e
         raise e
       end
