@@ -1046,6 +1046,14 @@ class Configurator
   end
   
   def get_log_filename
+    if @command_log_filename == nil
+      @command_log_filename = build_log_filename()
+    end
+    
+    @command_log_filename
+  end
+  
+  def build_log_filename
     if is_locked?
       "#{get_base_path()}/tungsten-configure.log"
     else
@@ -1054,6 +1062,8 @@ class Configurator
         filename = "tungsten-configure_pid#{Process.pid}.log"
       when "timestamp"
         filename = "tungsten-configure_#{DateTime.now.strftime('%Y%m%d%H%M%S')}.log"
+      when "username"
+        filename = "tungsten-configure_#{whoami()}.log"
       else
         if @options.log_name == nil
           filename = "tungsten-configure.log"
@@ -1067,7 +1077,15 @@ class Configurator
       end
       
       if File.exists?("/tmp") && File.writable?("/tmp")
-        "/tmp/#{filename}"
+        logfile = "/tmp/#{filename}"
+        if File.exists?(logfile) && File.writable?(logfile) != true
+          logfile = "/tmp/#{whoami()}/#{filename}"
+          mkdir_if_absent(File.dirname(logfile))
+          notice("Log output being sent to #{logfile}")
+          return logfile
+        else
+          return logfile
+        end
       else
         "#{get_base_path()}/#{filename}"
       end
