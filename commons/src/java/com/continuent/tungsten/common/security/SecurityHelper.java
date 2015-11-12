@@ -1190,15 +1190,26 @@ public class SecurityHelper
             throw new ConfigurationException(message);   
         }
         FileInputStream fis;
+        KeyStore ks;
+        KeyManagerFactory kmFact;
+        
         try
         {
             fis = new FileInputStream(ksLocation);
             String alg = KeyManagerFactory.getDefaultAlgorithm();
-            KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
-
-            KeyStore ks = KeyStore.getInstance(keystoreType);
+            kmFact = KeyManagerFactory.getInstance(alg);
+            ks = KeyStore.getInstance(keystoreType);
             ks.load(fis, password);
             fis.close();
+        }
+        catch (IOException e)
+        {
+            String message = "Reading or accessing key store file of type " 
+                    + keystoreType + " failed. " + e.getMessage();
+            throw new IOException(message);
+        }
+        try
+        {
 
             /**
              *  Init the key manager factory with the loaded key store. If passwords 
@@ -1212,13 +1223,6 @@ public class SecurityHelper
                     + keystoreType + " failed. " + e.getMessage();
             logger.info(message);
             throw new GeneralSecurityException(message);
-        }
-        catch (IOException e)
-        {
-            String message = "Reading or accessing key store file of type " 
-                    + keystoreType + " failed. " + e.getMessage();
-            logger.info(message);
-            throw new IOException(message);
         }
     }
 
