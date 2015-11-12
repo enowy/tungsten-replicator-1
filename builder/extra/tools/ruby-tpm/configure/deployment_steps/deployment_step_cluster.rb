@@ -305,6 +305,7 @@ EOF
   end
   
   def commit_release
+    trigger_event(:before_commit_release)
     prepare_dir = @config.getProperty(PREPARE_DIRECTORY)
     target_dir = @config.getProperty(TARGET_DIRECTORY)
     
@@ -491,6 +492,7 @@ EOF
         Configurator.instance.limit_file_permissions(thl_file)
       }
     end
+    trigger_event(:after_commit_release)
     
     if is_replicator?()
       add_service("tungsten-replicator/bin/replicator", 25)

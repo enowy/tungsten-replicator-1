@@ -485,6 +485,18 @@ module OracleCheck
   end
 end
 
+module OracleRedoReaderCheck
+  def enabled?
+    if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
+      false
+    elsif @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) != "redo"
+      false
+    else
+      super()
+    end
+  end
+end
+
 class OracleLoginCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include OracleCheck
@@ -516,6 +528,7 @@ end
 class OraclePermissionsCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include OracleCheck
+  include OracleRedoReaderCheck
 
   def set_vars
     @title = "Oracle replication user permissions check"
