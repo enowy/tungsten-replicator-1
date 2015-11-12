@@ -170,7 +170,18 @@ public class DsQueryCtrl
             Database database = DatabaseFactory.createDatabase(url, user,
                     password);
 
-            database.connect();
+            try
+            {
+                database.connect();
+            }
+            catch (SQLException e)
+            {
+                System.out.println(e.getMessage());
+                // Send the stack trace to SYSERR
+                e.printStackTrace();
+                // Adn return the error code
+                System.exit(e.getErrorCode());
+            }
 
             String sql = null;
 
