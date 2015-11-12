@@ -525,7 +525,8 @@ class OraclePermissionsCheck < ConfigureValidationCheck
     has_missing_priv = false
     
     user = @config.getProperty(get_member_key(REPL_DBLOGIN))
-    results = get_applier_datasource.sql_result("SELECT COUNT(*) AS CNT FROM DBA_TAB_PRIVS WHERE GRANTEE = UPPER('#{user}') AND TABLE_NAME = 'DBMS_FLASHBACK' AND PRIVILEGE = 'EXECUTE'")
+    results = get_applier_datasource.sql_result("SELECT COUNT(*) AS CNT FROM USER_TAB_PRIVS WHERE GRANTEE = UPPER('#{user}') AND TABLE_NAME = 'DBMS_FLASHBACK' AND PRIVILEGE = 'EXECUTE'")
+    
     privs_cnt = nil
     if results.size() > 0 && results[0].is_a?(Hash)
       privs_cnt = results[0]["CNT"]
