@@ -2187,11 +2187,11 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
         # Run the bash find command to search for MyISAM files having an extension of MYD. Quit after the first match.
         myisam_result = cmd_result(find_cmd)
         if myisam_result.include? ".MYD"
-          warning("MyISAM tables exist within this instance - These tables are not crash safe and may lead to data loss in a failover")
+          error("MyISAM tables were found. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
         end
         # If an error was raised then one of those two commands failed, indicating a lack of permissions.
         rescue CommandError => ce
-          warning("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories.")
+          error("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
       end
     end
   end
