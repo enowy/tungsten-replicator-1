@@ -86,6 +86,11 @@ public class DsQueryCtrl
             String configFile = null;
             String fileName = null;
             String user = null, password = null, url = null;
+            
+            Database database = null;
+            String sql = null;
+            SQLException sqlEx;
+            JSONArray jsonArr = new JSONArray();
 
             // Parse command line arguments.
             ArgvIterator argvIterator = new ArgvIterator(argv);
@@ -125,15 +130,29 @@ public class DsQueryCtrl
                 }
 
                 else if (curArg.startsWith("-"))
-                    fatal("Unrecognized option: " + curArg, null);
+                {
+                    JSONObject error = new JSONObject();
+                    jsonArr.add(error);
+                    error.put("rc", 1);
+                    error.put("error", "Unrecognized option: " + curArg);
+                    println(jsonArr.toJSONString());
+                    System.exit(1);
+                }
             }
 
             if (configFile != null)
             {
                 File file = new File(configFile);
                 if (!file.exists() || !file.canRead())
-                    fatal("Unable to read config file (" + configFile + ")",
-                            null);
+                {
+                    JSONObject error = new JSONObject();
+                    jsonArr.add(error);
+                    error.put("rc", 1);
+                    error.put("error", "Unable to read config file (" + configFile + ")");
+                    println(jsonArr.toJSONString());
+                    System.exit(1);
+                }
+
                 TungstenProperties props = new TungstenProperties();
                 props.load(new FileInputStream(file));
 
@@ -148,8 +167,15 @@ public class DsQueryCtrl
             }
 
             if (url == null)
-                fatal("URL must be provided (either using -url option or in configuration file)",
-                        null);
+            {
+                JSONObject error = new JSONObject();
+                jsonArr.add(error);
+                error.put("rc", 1);
+                error.put("error", "URL must be provided (either using -url option or in configuration file)");
+                println(jsonArr.toJSONString());
+                System.exit(1);
+            }
+
             BufferedReader br = null;
 
             boolean readingFromStdIn = false;
@@ -162,21 +188,47 @@ public class DsQueryCtrl
             {
                 File file = new File(fileName);
                 if (!file.exists() || !file.canRead())
-                    fatal("Unable to read sql file (" + fileName + ")", null);
+                {
+                    JSONObject error = new JSONObject();
+                    jsonArr.add(error);
+                    error.put("rc", 1);
+                    error.put("error", "Unable to read sql file (" + fileName + ")");
+                    println(jsonArr.toJSONString());
+                    System.exit(1);
+                }
 
                 br = new BufferedReader(new FileReader(file));
             }
 
-            Database database = DatabaseFactory.createDatabase(url, user,
-                    password);
 
-            database.connect();
+            try
+            {
+                database = DatabaseFactory.createDatabase(url, user,
+                        password);
+            }
+            catch (RuntimeException e)
+            {
+                JSONObject error = new JSONObject();
+                jsonArr.add(error);
+                error.put("rc", 1);
+                error.put("error", logError(e));
+                println(jsonArr.toJSONString());
+                System.exit(1);
+            }
 
-            String sql = null;
-
-            SQLException sqlEx;
-
-            JSONArray jsonArr = new JSONArray();
+            try
+            {
+                database.connect();
+            }
+            catch (SQLException e)
+            {
+                JSONObject error = new JSONObject();
+                jsonArr.add(error);
+                error.put("rc", e.getErrorCode());
+                error.put("error", logError(e));
+                println(jsonArr.toJSONString());
+                System.exit(1);
+            }
 
             while ((sql = br.readLine()) != null)
             {
@@ -221,14 +273,23 @@ public class DsQueryCtrl
                     jsonObj.put("error", logError(sqlEx));
 
                 }
-                catch (Exception e)
+                catch (SQLException e)
                 {
-                    e.printStackTrace();
+                    // If statement cannot be created
+                    jsonObj.put("rc", e.getErrorCode());
+                    jsonObj.put("error", logError(e));
                 }
                 finally
                 {
                     if (stmt != null)
-                        stmt.close();
+                        try
+                        {
+                            stmt.close();
+                        }
+                        catch (SQLException ignore)
+                        {
+                            // Failed to close statement. Just keep on processing. 
+                        }
                 }
             }
             DsQueryCtrl.println(jsonArr.toJSONString());
@@ -239,7 +300,7 @@ public class DsQueryCtrl
         }
     }
 
-    private static Object logError(SQLException sqlEx)
+    private static Object logError(Exception sqlEx)
     {
         if (sqlEx == null)
             return null;
@@ -268,7 +329,13 @@ public class DsQueryCtrl
                 {
                     if (rs != null)
                     {
-                        rs.close();
+                        try
+                        {
+                            rs.close();
+                        }
+                        catch (SQLException ignore)
+                        {
+                        }
                         rs = null;
                     }
                 }
