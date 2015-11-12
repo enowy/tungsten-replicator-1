@@ -231,6 +231,36 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
   def applier_supports_reset?
     true
   end
+  
+  def can_sql?
+    true
+  end
+  
+  def sql_url
+    scan = @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "")
+    sid = @config.getPropertyOr(@prefix + [REPL_ORACLE_SID], "")
+    service = @config.getPropertyOr(@prefix + [REPL_ORACLE_SERVICE], "")
+    
+    if scan == ""
+      host_parameter = @host
+    else
+  	  host_parameter = scan
+    end
+    
+    if sid == ""
+      separator = "@//"
+    else
+      separator = "@"
+    end
+    
+    if sid == ""
+      suffix = "/#{service}"
+    else
+      suffix = ":#{sid}"
+    end
+    
+    "jdbc:oracle:thin:#{separator}#{host_parameter}:#{@port}#{suffix}"
+  end
 end
 
 #
@@ -452,6 +482,60 @@ module OracleCheck
       @config.getProperty(REPL_DBTYPE) == DBMS_ORACLE ||
       @config.getProperty(EXTRACTOR_REPL_DBTYPE) == DBMS_ORACLE
     )
+  end
+end
+
+class OracleLoginCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+
+  def set_vars
+    @title = "Oracle replication credentials login check"
+    @fatal_on_error = true
+  end
+  
+  def validate
+    results = get_applier_datasource.sql_result("SELECT 1 FROM ALL_USERS WHERE ROWNUM = 1")
+    login_output = nil
+    if results.size() > 0 && results[0].is_a?(Hash)
+      login_output = results[0]["1"]
+    end
+    
+    if login_output == 1
+      info("Oracle server and login is OK for #{get_applier_datasource.get_connection_summary()}")
+    else
+      error("Unable to connect to the Oracle server using #{get_applier_datasource.get_connection_summary()}")
+      
+      if get_applier_datasource().password.to_s() == ""
+        help("Try specifying a password for #{get_applier_datasource.get_connection_summary()}")
+      end
+    end
+  end
+end
+
+class OraclePermissionsCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+
+  def set_vars
+    @title = "Oracle replication user permissions check"
+  end
+  
+  def validate
+    has_missing_priv = false
+    
+    user = @config.getProperty(get_member_key(REPL_DBLOGIN))
+    results = get_applier_datasource.sql_result("SELECT COUNT(*) AS CNT FROM DBA_TAB_PRIVS WHERE GRANTEE = UPPER('#{user}') AND TABLE_NAME = 'DBMS_FLASHBACK' AND PRIVILEGE = 'EXECUTE'")
+    privs_cnt = nil
+    if results.size() > 0 && results[0].is_a?(Hash)
+      privs_cnt = results[0]["CNT"]
+    end
+
+    if privs_cnt == 0
+      error("The database user is missing some privileges. Run 'GRANT EXECUTE ON dbms_flashback TO #{user};'")
+    else
+      info("All privileges configured correctly")
+    end
   end
 end
 

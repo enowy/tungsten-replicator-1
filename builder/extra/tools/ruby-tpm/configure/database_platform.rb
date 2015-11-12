@@ -358,6 +358,119 @@ class ConfigureDatabasePlatform
     false
   end
   
+  def can_sql?
+    false
+  end
+  
+  def sql_url
+    raise "Undefined function: #{self.class.name}.sql_url"
+  end
+
+  def sql_libraries
+    libraries = getExternalLibraries()
+    if libraries.is_a?(Hash)
+      return libraries.keys()
+    else
+      return []
+    end
+  end
+  
+  def sql_results(sql)
+    unless can_sql?()
+      raise "Unable to run SQL command for the #{get_connection_summary}. The datasource type does not support SQL commands."
+    end
+    
+    sql_results_from_url(sql, sql_url(), @username, @password)
+  end
+  
+  def sql_results_from_url(sql, url, user, password)
+    cfg = nil
+    command = nil
+    begin
+      cfg = Tempfile.new("cnf")
+      cfg.puts("url=#{url}")
+      cfg.puts("user=#{user}")
+      cfg.puts("password=#{password}")
+      cfg.close()
+      
+      command = Tempfile.new("query")
+      if sql.is_a?(Array)
+        command.puts(sql.join("\n"))
+      else
+        command.puts(sql)
+      end
+      command.close()
+      
+      libraries = sql_libraries()
+      if libraries.is_a?(Array)
+        set_classpath = "CP=#{libraries.join(':')}"
+      else
+        set_classpath = ""
+      end
+      
+      base_path = Configurator.instance.get_base_path()
+      output = cmd_result("#{set_classpath} #{base_path}/tungsten-replicator/bin/query -conf #{cfg.path} -file #{command.path}")
+    rescue CommandError => ce
+      Configurator.instance.debug(ce)
+      raise "There was an error processing the query: #{ce.result}"
+    ensure
+      if cfg != nil
+        cfg.close()
+        cfg.unlink()
+      end
+      
+      if command != nil
+        command.close()
+        command.unlink()
+      end
+    end
+    
+    results = JSON.parse(output)
+    results.each {
+      |result|
+      if result["rc"] == 0
+        result["error"] = nil
+      else
+        obj = CommandError.new(result["statement"], result["rc"], result["results"], result["error"])
+        result["error"] = obj
+      end
+    }
+    results
+  end
+  
+  def sql_result(sql)
+    results = sql_results(sql)
+    
+    return_first_result(results)
+  end
+  
+  def sql_result_from_url(sql, url, user, password)
+    results = sql_results_from_url(sql, url, user, password)
+    
+    return_first_result(results)
+  end
+  
+  def return_first_result(results)
+    if results.size() == 0
+      raise "No results were returned by #{sql}"
+    end
+    
+    if results[0]["error"] == nil
+      return results[0]["results"][0]
+    else
+      raise results[0]["error"]
+    end
+  end
+  
+  def check_sql_results(results)
+    results.each{
+      |r|
+      if r["error"] != nil
+        raise r["error"]
+      end
+    }
+  end
+  
   def self.build(prefix, config, extractor = false)
     if extractor == true
       key = EXTRACTOR_REPL_DBTYPE
