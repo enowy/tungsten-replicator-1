@@ -1185,21 +1185,41 @@ public class SecurityHelper
                         && !keystoreType.equalsIgnoreCase("jceks")
                         && !keystoreType.equalsIgnoreCase("pkcs12")))
         {
-            throw new ConfigurationException("Invalid KeyStore type : " + keystoreType);          
+            String message = "Invalid KeyStore type : " + keystoreType;
+            logger.error(message);
+            throw new ConfigurationException(message);   
         }
-        FileInputStream fis = new FileInputStream(ksLocation);
-        String alg = KeyManagerFactory.getDefaultAlgorithm();
-        KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
+        FileInputStream fis;
+        try
+        {
+            fis = new FileInputStream(ksLocation);
+            String alg = KeyManagerFactory.getDefaultAlgorithm();
+            KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
 
-        KeyStore ks = KeyStore.getInstance(keystoreType);
-        ks.load(fis, password);
-        fis.close();
+            KeyStore ks = KeyStore.getInstance(keystoreType);
+            ks.load(fis, password);
+            fis.close();
 
-        /**
-         *  Init the key manager factory with the loaded key store. If passwords 
-         *  of KeyStore and keys differ and exception is thrown.
-         */
-        kmFact.init(ks, password);
+            /**
+             *  Init the key manager factory with the loaded key store. If passwords 
+             *  of KeyStore and keys differ and exception is thrown.
+             */
+            kmFact.init(ks, password);
+        }
+        catch (GeneralSecurityException e)
+        {
+            String message = "Reading or accessing key store file of type " 
+                    + keystoreType + " failed. " + e.getMessage();
+            logger.info(message);
+            throw new GeneralSecurityException(message);
+        }
+        catch (IOException e)
+        {
+            String message = "Reading or accessing key store file of type " 
+                    + keystoreType + " failed. " + e.getMessage();
+            logger.info(message);
+            throw new IOException(message);
+        }
     }
 
 }

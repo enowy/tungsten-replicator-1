@@ -101,4 +101,6 @@ public class SecurityConf
     static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                            = "javax.rmi.ssl.client.enabledProtocols";
     static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                              = "javax.rmi.ssl.client.enabledCipherSuites";
 
+    /** KeyStore types */
+    static final String []    SECURITY_KEYSTORE_TYPES                                                     = {"jks", "jceks", "pkcs12"};
 }
