@@ -50,6 +50,7 @@ import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
+import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
 import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 import com.continuent.tungsten.common.utils.CLLogLevel;
 import com.continuent.tungsten.common.utils.CLUtils;
@@ -65,7 +66,8 @@ import com.continuent.tungsten.common.utils.CLUtils;
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 public final class AuthenticationInfo
 {
-    private static final Logger          logger                                   = Logger.getLogger(AuthenticationInfo.class);
+    private static final Logger          logger                                   = Logger
+            .getLogger(AuthenticationInfo.class);
     /** Location of the file from which this was built **/
     private String                  parentPropertiesFileLocation             = null;
     /** Properties from the files from which this was built **/
@@ -73,8 +75,8 @@ public final class AuthenticationInfo
     private TUNGSTEN_APPLICATION_NAME    tungstenApplicationName                  = null;
 
     private boolean                      authenticationNeeded                     = false;
-    private Integer                      minWaitOnFailedLogin                     = null;                                      // (ms)
-    private Integer                      maxWaitOnFailedLogin                     = null;                                      // (ms)
+    private Integer                      minWaitOnFailedLogin                     = null;                         // (ms)
+    private Integer                      maxWaitOnFailedLogin                     = null;                         // (ms)
     private Integer                      incrementStepWaitOnFailedLogin           = 1;
 
     private boolean                      authenticationByCertificateNeeded        = false;
@@ -136,7 +138,7 @@ public final class AuthenticationInfo
 
     public void checkAndCleanAuthenticationInfo(
             TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
-            throws ServerRuntimeException, ConfigurationException
+                    throws ServerRuntimeException, ConfigurationException
     {
         // --- Check security.properties location ---
         if (this.parentPropertiesFileLocation != null)
@@ -156,8 +158,8 @@ public final class AuthenticationInfo
                         SECURITY_CONFIG_FILE_LOCATION,
                         this.parentPropertiesFileLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
         }
         // --- Clean up ---
@@ -180,8 +182,9 @@ public final class AuthenticationInfo
                 : SecurityConf.SECURITY_KEYSTORE_PASSWORD;
 
         if ((this.isEncryptionNeeded() && this.keystoreLocation != null)
-                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR) && this
-                        .isConnectorUseSSL()))
+                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
+                        || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR)
+                        && this.isConnectorUseSSL()))
         {
             // --- Check file location is specified ---
             if (this.keystoreLocation == null)
@@ -192,8 +195,8 @@ public final class AuthenticationInfo
                         this.isConnectorUseSSL(), keystoreLocationProperty,
                         this.keystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
             File f = new File(this.keystoreLocation);
             // --- Find absolute path if needed
@@ -209,8 +212,8 @@ public final class AuthenticationInfo
                         "Cannot find or read {0} file: {1}", KEYSTORE_LOCATION,
                         this.keystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
 
             // --- Check password is defined
@@ -221,9 +224,10 @@ public final class AuthenticationInfo
         }
 
         // --- Check that the keystore is not empty ---
-        if ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API && this
-                .isEncryptionNeeded())
-                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR && this.connectorUseSSL)
+        if ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REST_API
+                && this.isEncryptionNeeded())
+                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
+                        && this.connectorUseSSL)
                 || this.isEncryptionNeeded())
         {
             boolean succp = false;
@@ -231,13 +235,15 @@ public final class AuthenticationInfo
              * Check accessibility of both key store and keys with a given
              * password
              */
-            for (String type : SecurityConf.SECURITY_KEYSTORE_TYPES)
+            for (KEYSTORE_TYPE keystoreType : KEYSTORE_TYPE
+                    .values())
             {
                 try
                 {
-                    SecurityHelper.checkKeyStorePasswords(this
-                            .getKeystoreLocation(), type, this
-                            .getKeystorePassword().toCharArray());
+                    SecurityHelper.checkKeyStorePasswords(
+                            this.getKeystoreLocation(), keystoreType,
+                            this.getKeystorePassword(), null,
+                            this.getKeystorePassword());
                 }
                 catch (GeneralSecurityException e)
                 {
@@ -283,8 +289,9 @@ public final class AuthenticationInfo
 
         // --- Check Aliases are defined in the keystore ---
         if ((this.isEncryptionNeeded() && this.keystoreLocation != null)
-                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR) && this
-                        .isConnectorUseSSL()))
+                || ((tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
+                        || tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.REPLICATOR)
+                        && this.isConnectorUseSSL()))
         {
             FileInputStream is = null;
             try
@@ -297,12 +304,12 @@ public final class AuthenticationInfo
                 boolean connector_alias_connector_to_db_isFound = false;
                 boolean replicator_alias_master_to_slave_isFound = false;
 
-                String connector_alias_client_to_connector = mapAliases
-                        .get(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR);
-                String connector_alias_connector_to_db = mapAliases
-                        .get(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB);
-                String replicator_alias_master_to_slave = mapAliases
-                        .get(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+                String connector_alias_client_to_connector = mapAliases.get(
+                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR);
+                String connector_alias_connector_to_db = mapAliases.get(
+                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB);
+                String replicator_alias_master_to_slave = mapAliases.get(
+                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
 
                 // If an aliase is not defined, do not look for it...obviously
                 connector_alias_client_to_connector_isFound = (connector_alias_client_to_connector == null)
@@ -322,8 +329,8 @@ public final class AuthenticationInfo
                         || !replicator_alias_master_to_slave_isFound)
                 {
                     is = new FileInputStream(this.getKeystoreLocation());
-                    KeyStore keystore = KeyStore.getInstance(KeyStore
-                            .getDefaultType());
+                    KeyStore keystore = KeyStore
+                            .getInstance(KeyStore.getDefaultType());
                     String password = this.getKeystorePassword();
                     keystore.load(is, password.toCharArray());
 
@@ -340,16 +347,19 @@ public final class AuthenticationInfo
                         // b = keystore.isCertificateEntry(alias);
 
                         connector_alias_client_to_connector_isFound = connector_alias_client_to_connector_isFound == true
-                                || (connector_alias_client_to_connector != null && connector_alias_client_to_connector
-                                        .equals(alias));
+                                || (connector_alias_client_to_connector != null
+                                        && connector_alias_client_to_connector
+                                                .equals(alias));
 
                         connector_alias_connector_to_db_isFound = connector_alias_connector_to_db_isFound == true
-                                || (connector_alias_connector_to_db != null && connector_alias_connector_to_db
-                                        .equals(alias));
+                                || (connector_alias_connector_to_db != null
+                                        && connector_alias_connector_to_db
+                                                .equals(alias));
 
                         replicator_alias_master_to_slave_isFound = replicator_alias_master_to_slave_isFound == true
-                                || (replicator_alias_master_to_slave != null && replicator_alias_master_to_slave
-                                        .equals(alias));
+                                || (replicator_alias_master_to_slave != null
+                                        && replicator_alias_master_to_slave
+                                                .equals(alias));
                     }
                     // --- Exception when an alias is defined but not found ---
 
@@ -415,8 +425,8 @@ public final class AuthenticationInfo
 
         // --- Check Truststore location ---
         if ((this.isEncryptionNeeded() && this.truststoreLocation != null)
-                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR && this
-                        .isConnectorUseSSL()))
+                || (tungstenApplicationName == TUNGSTEN_APPLICATION_NAME.CONNECTOR
+                        && this.isConnectorUseSSL()))
         {
             // --- Check file location is specified ---
             if (this.truststoreLocation == null)
@@ -428,8 +438,8 @@ public final class AuthenticationInfo
                         SecurityConf.CONNECTOR_SECURITY_TRUSTSTORE_LOCATION,
                         this.truststoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
             File f = new File(this.truststoreLocation);
             // --- Find absolute path if needed
@@ -445,8 +455,8 @@ public final class AuthenticationInfo
                         "Cannot find or read {0} file: {1}",
                         TRUSTSTORE_LOCATION, this.truststoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
         }
         else if (this.isEncryptionNeeded() && this.truststoreLocation == null)
@@ -471,8 +481,8 @@ public final class AuthenticationInfo
                         SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION,
                         this.clientKeystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
             File f = new File(this.clientKeystoreLocation);
             // --- Find absolute path if needed
@@ -488,8 +498,8 @@ public final class AuthenticationInfo
                         "Cannot find or read {0} file: {1}", KEYSTORE_LOCATION,
                         this.clientKeystoreLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
         }
         else if (this.isAuthenticationNeeded()
@@ -525,8 +535,8 @@ public final class AuthenticationInfo
                         SecurityConf.SECURITY_PASSWORD_FILE_LOCATION,
                         this.passwordFileLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
         }
 
@@ -548,8 +558,8 @@ public final class AuthenticationInfo
                         SecurityConf.SECURITY_ACCESS_FILE_LOCATION,
                         this.accessFileLocation);
                 CLUtils.println(msg, CLLogLevel.detailed);
-                throw new ServerRuntimeException(msg, new AssertionError(
-                        "File must exist"));
+                throw new ServerRuntimeException(msg,
+                        new AssertionError("File must exist"));
             }
         }
 
@@ -1007,9 +1017,8 @@ public final class AuthenticationInfo
         }
         else
         {
-            String[] enabledAndSupported = SecurityHelper
-                    .getJvmEnabledCiphers(enabledCipherSuites
-                            .toArray(new String[0]));
+            String[] enabledAndSupported = SecurityHelper.getJvmEnabledCiphers(
+                    enabledCipherSuites.toArray(new String[0]));
             return Arrays.asList(enabledAndSupported);
         }
     }
@@ -1039,14 +1048,14 @@ public final class AuthenticationInfo
                 if (candidateFile.isFile())
                 {
                     foundFile = candidateFile;
-                    logger.debug(MessageFormat
-                            .format("File was specified with name only, and found in default location: {0}",
-                                    foundFile.getAbsoluteFile()));
+                    logger.debug(MessageFormat.format(
+                            "File was specified with name only, and found in default location: {0}",
+                            foundFile.getAbsoluteFile()));
                 }
                 else
-                    throw new ConfigurationException(MessageFormat.format(
-                            "File does not exist: {0}",
-                            candidateFile.getAbsolutePath()));
+                    throw new ConfigurationException(
+                            MessageFormat.format("File does not exist: {0}",
+                                    candidateFile.getAbsolutePath()));
             }
         }
         catch (ConfigurationException e)
@@ -1121,8 +1130,8 @@ public final class AuthenticationInfo
         return json;
     }
 
-    public String toJSON(boolean prettyPrint) throws JsonGenerationException,
-            JsonMappingException, IOException
+    public String toJSON(boolean prettyPrint)
+            throws JsonGenerationException, JsonMappingException, IOException
     {
         String json = null;
         ObjectMapper mapper = new ObjectMapper(); // Setup Jackson
@@ -1146,10 +1155,9 @@ public final class AuthenticationInfo
     public String toString()
     {
         StringBuilder strAuthInfo = new StringBuilder();
-        strAuthInfo
-                .append(MessageFormat
-                        .format("------------------------------------------------------------------- ### security.properties ### {0}\n",
-                                this.getTungstenApplicationName()));
+        strAuthInfo.append(MessageFormat.format(
+                "------------------------------------------------------------------- ### security.properties ### {0}\n",
+                this.getTungstenApplicationName()));
         switch (tungstenApplicationName)
         {
             case ANY :
@@ -1159,16 +1167,14 @@ public final class AuthenticationInfo
                 strAuthInfo.append(MessageFormat.format("\t\t\t\t{0}={1}\n",
                         SecurityConf.SECURITY_JMX_USE_AUTHENTICATION,
                         this.isAuthenticationNeeded()));
-                strAuthInfo
-                        .append(MessageFormat
-                                .format("\t\t\t\t{0}={1}\n",
-                                        SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD,
-                                        this.useEncryptedPasswords));
+                strAuthInfo.append(MessageFormat.format("\t\t\t\t{0}={1}\n",
+                        SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD,
+                        this.useEncryptedPasswords));
                 break;
         }
 
-        strAuthInfo
-                .append("\t\t\t\t-------------------------------------------------------------------");
+        strAuthInfo.append(
+                "\t\t\t\t-------------------------------------------------------------------");
         return strAuthInfo.toString();
     }
 

@@ -26,9 +26,11 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -49,7 +51,7 @@ import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
-import com.continuent.tungsten.common.sockets.SSLSocketFactoryGenerator;
+import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
 import com.continuent.tungsten.common.utils.CLUtils;
 
 /**
@@ -1145,13 +1147,13 @@ public class SecurityHelper
         }
         else
         {
-            sb.append("No password authentication\n");                        
+            sb.append("No password authentication\n");
         }
         return sb.toString();
     }
-    
+
     /**
-     * Check that KeyStore and the keys it stores have a common password.
+     * Check that KeyStore and the keys inside have a common password.
      * 
      * @param keystoreLocation
      * @param keystoreType "jks", jceks", or "pkcs"
@@ -1161,8 +1163,9 @@ public class SecurityHelper
      * @throws IOException
      */
     public static void checkKeyStorePasswords(String keystoreLocation,
-            String keystoreType,
-            char [] password) throws ConfigurationException, GeneralSecurityException, IOException
+            KEYSTORE_TYPE keystoreType, String password,
+            String aliasToFind, String keyPassword) throws ConfigurationException,
+                    GeneralSecurityException, IOException
     {
         String ksLocation;
         // Check that varibale holding key store location gets non-empty value
@@ -1170,8 +1173,8 @@ public class SecurityHelper
         {
             ksLocation = keystoreLocation;
         }
-        else if (SecurityHelper.getKeyStoreLocation() != null 
-                        && !SecurityHelper.getKeyStoreLocation().isEmpty())
+        else if (SecurityHelper.getKeyStoreLocation() != null
+                && !SecurityHelper.getKeyStoreLocation().isEmpty())
         {
             ksLocation = SecurityHelper.getKeyStoreLocation();
         }
@@ -1179,51 +1182,62 @@ public class SecurityHelper
         {
             throw new ConfigurationException("KeyStore location is not given.");
         }
-        // Check that key store type is not null and either jks, jceks, or pkcs12
-        if (keystoreType == null || keystoreType.length() == 0
-                || (!keystoreType.equalsIgnoreCase("jks")
-                        && !keystoreType.equalsIgnoreCase("jceks")
-                        && !keystoreType.equalsIgnoreCase("pkcs12")))
+        // Check that key store type is not null
+        if (keystoreType == null)
         {
-            String message = "Invalid KeyStore type : " + keystoreType;
-            logger.error(message);
-            throw new ConfigurationException(message);   
+            throw new ConfigurationException(
+                    "Invalid KeyStore type : " + keystoreType);
         }
-        FileInputStream fis;
-        KeyStore ks;
-        KeyManagerFactory kmFact;
-        
-        try
-        {
-            fis = new FileInputStream(ksLocation);
-            String alg = KeyManagerFactory.getDefaultAlgorithm();
-            kmFact = KeyManagerFactory.getInstance(alg);
-            ks = KeyStore.getInstance(keystoreType);
-            ks.load(fis, password);
-            fis.close();
-        }
-        catch (IOException e)
-        {
-            String message = "Reading or accessing key store file of type " 
-                    + keystoreType + " failed. " + e.getMessage();
-            throw new IOException(message);
-        }
-        try
-        {
+        FileInputStream fis = new FileInputStream(ksLocation);
+        String alg = KeyManagerFactory.getDefaultAlgorithm();
+        KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
 
-            /**
-             *  Init the key manager factory with the loaded key store. If passwords 
-             *  of KeyStore and keys differ and exception is thrown.
-             */
-            kmFact.init(ks, password);
-        }
-        catch (GeneralSecurityException e)
+        char[] charPassword = password.toCharArray();
+        KeyStore ks = KeyStore.getInstance(keystoreType.name());
+        ks.load(fis, charPassword);
+        fis.close();
+
+        // --- Enumerate keys and try to retrieve then with given password
+        List<String> listKeysWithWrongPassword = new ArrayList<String>();
+        boolean aliasToFindIsFound = false;
+
+        Enumeration<String> enumeration = ks.aliases();
+
+        while (enumeration.hasMoreElements())
         {
-            String message = "Reading or accessing key store file of type " 
-                    + keystoreType + " failed. " + e.getMessage();
-            logger.info(message);
-            throw new GeneralSecurityException(message);
+            String alias = (String) enumeration.nextElement();
+            if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
+                aliasToFindIsFound = true;
+
+            try
+            {
+                logger.info(MessageFormat.format("Trying alias:{0}", alias));
+                Key key = ks.getKey(alias, keyPassword.toCharArray());
+            }
+            catch (Exception e)
+            {
+                if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
+                    listKeysWithWrongPassword.add(alias);
+                else if (aliasToFind==null)
+                    listKeysWithWrongPassword.add(alias);
+            }
+
         }
+
+        // Throw exception if aliasToFind was not inside keystore
+        if (aliasToFind != null && !aliasToFindIsFound)
+            throw new ConfigurationException(MessageFormat.format(
+                    "Keystore does not contain alias={0}", aliasToFind));
+        // Throw exception if wrong password found
+        if (!listKeysWithWrongPassword.isEmpty())
+        {
+            String strListKeysWithWrongPassword = StringUtils
+                    .join(listKeysWithWrongPassword, ",");
+            throw new UnrecoverableKeyException(MessageFormat.format(
+                    "Incorrect password for following keys:{0}",
+                    strListKeysWithWrongPassword));
+        }
+
     }
 
 }

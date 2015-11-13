@@ -19,6 +19,14 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.lang.StringUtils;
+
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+
 /**
  * This class defines a SecurityConf This matches parameters used for
  * Authentication and Encryption
@@ -100,7 +108,55 @@ public class SecurityConf
     /** System variable names */
     static final String        SYSTEM_PROP_CLIENT_SSLPROTOCOLS                                            = "javax.rmi.ssl.client.enabledProtocols";
     static final String        SYSTEM_PROP_CLIENT_SSLCIPHERS                                              = "javax.rmi.ssl.client.enabledCipherSuites";
+    
+    
+    /**
+     * Defines the different kinds of keystore.
+     * Encapsulates utility functions
+     * 
+     * @author <a href="mailto:llauner@vmware.com">Ludovic Launer</a>
+     * @version 1.0
+     */
+    public static enum KEYSTORE_TYPE
+    {
+        jks, jceks, pkcs12;
 
-    /** KeyStore types */
-    static final String []    SECURITY_KEYSTORE_TYPES                                                     = {"jks", "jceks", "pkcs12"};
+        /**
+         * Converts a string into the corresponding KEYSTORE_TYPE
+         * 
+         * @param x
+         * @return
+         * @throws ConfigurationException if it cannot cast
+         */
+        public static KEYSTORE_TYPE fromString(String x)
+                throws ConfigurationException
+        {
+            for (KEYSTORE_TYPE currentType : KEYSTORE_TYPE
+                    .values())
+            {
+                if (x.equalsIgnoreCase(currentType.toString()))
+                    return currentType;
+            }
+            throw new ConfigurationException(MessageFormat.format(
+                    "Cannot cast into a known CERTIFICATE_KEY_TYPE: {0}", x));
+        }
+
+        /**
+         * Get the list of possible values as a String
+         * 
+         * @param separator to separate elements in the string
+         * @return
+         */
+        public static String getListValues(String separator)
+        {
+            List<String> listValues = new ArrayList<String>();
+
+            for (KEYSTORE_TYPE value : KEYSTORE_TYPE.values())
+            {
+                listValues.add(value.name());
+            }
+            return StringUtils.join(listValues, separator);
+        }
+
+    }
 }
