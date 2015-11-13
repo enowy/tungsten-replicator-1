@@ -1000,7 +1000,7 @@ class MySQLConnectorJPath < ConfigurePrompt
   
   def value_is_different?(old_cfg)
     old_value = old_cfg.getProperty(get_name())
-    if File.basename(get_value()) != File.basename(old_value)
+    if File.basename(get_value().to_s()) != File.basename(old_value.to_s())
       true
     else
       false
@@ -1020,7 +1020,7 @@ class MySQLGlobalConnectorJPath < ConfigurePrompt
   
   def value_is_different?(old_cfg)
     old_value = old_cfg.getProperty(get_name())
-    if File.basename(get_value()) != File.basename(old_value)
+    if File.basename(get_value().to_s()) != File.basename(old_value.to_s())
       true
     else
       false

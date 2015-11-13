@@ -773,6 +773,53 @@ class CurrentReleaseDirectoryIsSymlink < ConfigureValidationCheck
   end
 end
 
+class NewDirectoryRequiredCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Determine if the update operation must go to a new directory"
+  end
+  
+  def validate
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    @original_config = Properties.new()
+    @original_config.load(current_release_directory + "/." + Configurator::HOST_CONFIG + '.orig')
+    Configurator.instance.command.build_topologies(@original_config)
+    
+    updated_keys = @config.getPromptHandler().get_updated_keys(@original_config)
+    unless is_valid?()
+      return is_valid?()
+    end
+    
+    # Check the changed values to see what components need to be restarted
+    updated_keys.each{
+      |k|
+      p = @config.getPromptHandler().find_prompt(k.split('.'))
+      if p.allow_inplace_upgrade?() == false
+        error("A configuration change to --#{p.get_command_line_argument()} requires a new installation directory. This can be done by running `tpm update --replace-release` from the staging directory.")
+      end
+    }
+  end
+  
+  def enabled?
+    if super() == false
+      return false
+    end
+    
+    # This check is only needed if we are updating an existing
+    # installed directory
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    if File.exists?(current_release_directory)
+      realpath = File.readlink(current_release_directory)
+      if realpath == @config.getProperty(TARGET_DIRECTORY)
+        return true
+      end
+    end
+    
+    return false
+  end
+end
+
 class CommitDirectoryCheck < ConfigureValidationCheck
   include ClusterHostCheck
   include CommitValidationCheck

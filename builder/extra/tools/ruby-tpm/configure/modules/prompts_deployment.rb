@@ -2020,6 +2020,7 @@ end
 
 class HostFileProtectionLevel < ConfigurePrompt
   include ClusterHostPrompt
+  include NewDirectoryUpdate
   
   def initialize
     validator = PropertyValidator.new("^user|group|none$", 
@@ -2034,7 +2035,7 @@ class HostFileProtectionLevel < ConfigurePrompt
       if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
         @default = "none"
       else
-        @default = "user"
+        @default = "group"
       end
     end
   end

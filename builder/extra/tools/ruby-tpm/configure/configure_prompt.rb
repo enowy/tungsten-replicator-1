@@ -341,7 +341,7 @@ class ConfigurePrompt
   
   def value_is_different?(old_cfg)
     old_value = old_cfg.getProperty(get_name())
-    if get_value() != old_value
+    if get_value().to_s() != old_value.to_s()
       true
     else
       false

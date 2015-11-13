@@ -42,7 +42,7 @@ module ClusterSecurityFiles
   end
   
   def generate_tls_certificate_warning
-    "Generating a certificate for SSL communication. Create your own JCE keystore for --java-tls-keystore-path, or set --java-tls-keystore-path=autogenerate to disable this warning."
+    "Generating a certificate for SSL communication. Create your own JKS keystore for --java-tls-keystore-path, or set --java-tls-keystore-path=autogenerate to disable this warning."
   end
   
   def generate_tls_certificate(config, first_time_warning = nil)

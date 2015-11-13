@@ -13,7 +13,12 @@ module MonitorUnsecuredFiles
     
     tested_modes = {}
     unsecured_files = []
-    Dir.glob("#{dir}/**/*").each {
+    
+    all_files = Dir.glob("#{dir}/**/*")
+    all_files = Dir.glob("#{dir}/**/.*")
+    all_files = all_files + Dir.glob("#{dir}/*")
+    all_files = all_files + Dir.glob("#{dir}/.*")
+    all_files.each {
       |f|
       mode = File.stat(f).mode
       if tested_modes.has_key?(mode)
