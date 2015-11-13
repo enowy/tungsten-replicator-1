@@ -1212,7 +1212,7 @@ public class SecurityHelper
         
         try
         {
-                // logger.info(MessageFormat.format("Trying alias:{0}", alias));
+                logger.debug(MessageFormat.format("Trying alias:{0}", alias));
                 Key key = ks.getKey(alias, keyPassword.toCharArray());
             }
             catch (Exception e)
