@@ -59,7 +59,16 @@ else
 fi
 SYSDBA="$sys_user/$syspass AS SYSDBA"
 
-oracle_version="`sqlplus -S ${SYSDBA} @get_oracle_version`" 
+oracle_version="`sqlplus -S ${SYSDBA} @get_oracle_version`"
+
+# Oracle Change Data Capture is not included in Oracle Database 12c
+if [ $oracle_version -ge 12 ]
+then
+   echo ""
+   echo "IMPORTANT: starting from Oracle Database 12c version Oracle Change Data Capture is *not* available"
+   echo "Please refer to VMware Continuent documentation for using redo log based extractor instead"
+   exit 2
+fi 
 
 echo ""
 echo "Configuring CDC for service '${service}' for Oracle ${oracle_version}. Change Set is '${CHANGE_SET}'"
