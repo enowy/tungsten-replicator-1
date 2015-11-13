@@ -52,6 +52,7 @@ import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
 import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
+import com.continuent.tungsten.common.sockets.SSLSocketFactoryGenerator;
 import com.continuent.tungsten.common.utils.CLUtils;
 
 /**
