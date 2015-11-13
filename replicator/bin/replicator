@@ -36,7 +36,7 @@
 # and they will be sourced on startup.  This is better than altering
 # the script directly.
 
-@{#(FILE_PROTECTION_LEVEL)}umask @{FILE_PROTECTION_LEVEL|0007}
+@{#(FILE_PROTECTION_LEVEL)}umask @{FILE_PROTECTION_LEVEL|0037}
  
 # Initialization block for the install_initd and remove_initd scripts used by
 #  SUSE linux distributions.

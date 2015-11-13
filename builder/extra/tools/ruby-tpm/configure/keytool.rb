@@ -101,6 +101,20 @@ class JavaKeytool
     end
   end
   
+  def test_key_password(store_password, key_alias, key_password)
+    begin
+      cmd = Configurator.instance.get_base_path() + "/cluster-home/bin/tkeystoremanager"
+      parts = ["#{cmd} -c",
+        "-ks #{@keystore} -kt #{@type} -ka #{key_alias}",
+        "-ksp #{store_password} -kp #{key_password}"]
+      self.cmd(parts.join(" "))
+      return true
+    rescue CommandError => ce
+      Configurator.instance.debug(ce)
+      raise "Invalid keystore password, key alias or key password"
+    end
+  end
+  
   def import(source, keyalias, password)
     if File.exist?(@keystore)
       listing = self.list(password)
@@ -205,6 +219,7 @@ class JavaKeytool
     result = ""
     threads = []
     
+    Configurator.instance.debug("Execute `#{command}`")
     status = Open4::popen4("export LANG=en_US; #{command}") do |pid, stdin, stdout, stderr|
       if password.is_a?(Array)
         stdin.puts(password.join("\n"))
@@ -237,12 +252,16 @@ class JavaKeytool
     original_errors = errors
     rc = status.exitstatus
     
+    if errors == ""
+      errors = "No STDERR"
+    else
+      errors = "Errors: #{errors}"
+    end
+    
+    Configurator.instance.debug("RC: #{rc}, Result: #{result}, #{errors}")
+    
     if rc != 0 && ! ignore_fail
-      if original_errors.to_s() == ""
-        raise result
-      else
-        raise original_errors
-      end
+      raise CommandError.new(command, rc, result, original_errors)
     end
 
     return result

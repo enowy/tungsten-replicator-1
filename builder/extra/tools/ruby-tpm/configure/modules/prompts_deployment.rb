@@ -1603,7 +1603,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
       
       keytool = which("keytool")
       if keytool == nil
-        raise "Unable to generate a file for --java-jgroups-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--jgroups-ssl=false'."
+        raise "Unable to generate a file for --java-jgroups-keystore-path because the keytool command is not available. Install keytool or disable the feature with '--jgroups-ssl=false'."
       end
       
       if first_time_warning != nil
@@ -1928,7 +1928,7 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
       
       keytool = which("keytool")
       if keytool == nil
-        raise "Unable to generate a file for --java-tls-keystore-path. Install keytool, provide a proper keystore file or disable the feature with '--rmi-ssl=false --thl-ssl=false'."
+        raise "Unable to generate a file for --java-tls-keystore-path because the keytool command is not available. Install keytool or disable the feature with '--rmi-ssl=false --rmi-authentication=false --thl-ssl=false'."
       end
       
       if first_time_warning != nil
@@ -2045,7 +2045,7 @@ class HostFileProtectionLevel < ConfigurePrompt
     when "user"
       return "0077"
     when "group"
-      return "0007"
+      return "0037"
     else
       return nil
     end
