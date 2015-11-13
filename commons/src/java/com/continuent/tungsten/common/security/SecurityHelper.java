@@ -1209,10 +1209,10 @@ public class SecurityHelper
             String alias = (String) enumeration.nextElement();
             if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
                 aliasToFindIsFound = true;
-
-            try
-            {
-                logger.info(MessageFormat.format("Trying alias:{0}", alias));
+        
+        try
+        {
+                // logger.info(MessageFormat.format("Trying alias:{0}", alias));
                 Key key = ks.getKey(alias, keyPassword.toCharArray());
             }
             catch (Exception e)
