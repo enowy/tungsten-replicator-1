@@ -32,6 +32,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
@@ -45,39 +46,39 @@ import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
 public class KeystoreManagerCtrl
 {
 
-    private static Logger                       logger             = Logger
+    private static Logger              logger             = Logger
             .getLogger(KeystoreManagerCtrl.class);
 
-    private static KeystoreManagerCtrl          keystoreManager    = null;
+    private static KeystoreManagerCtrl keystoreManager    = null;
 
-    private Options                             helpOptions        = new Options();
-    private Options                             options            = new Options();
+    private Options                    helpOptions        = new Options();
+    private Options                    options            = new Options();
 
     // --- Options overriding elements in security.properties ---
-    private String                              keystoreLocation   = null;
-    private String                              keyAlias           = null;
-    private KEYSTORE_TYPE keyType            = null;
+    private String                     keystoreLocation   = null;
+    private String                     keyAlias           = null;
+    private KEYSTORE_TYPE              keyType            = null;
 
-    private String                              keystorePassword   = null;
-    private String                              keyPassword        = null;
+    private String                     keystorePassword   = null;
+    private String                     keyPassword        = null;
 
     // -- Define constants for command line arguments ---
-    private static final String                 HELP               = "help";
-    private static final String                 _HELP              = "h";
-    private static final String                 _CHECK             = "c";
-    private static final String                 CHECK              = "check";
-    private static final String                 KEYSTORE_LOCATION  = "keystore.location";
-    private static final String                 _KEYSTORE_LOCATION = "ks";
-    private static final String                 KEYSTORE_PASSWORD  = "keystore.password";
-    private static final String                 _KEYSTORE_PASSWORD = "ksp";
-    private static final String                 KEY_ALIAS          = "key.alias";
-    private static final String                 _KEY_ALIAS         = "ka";
-    private static final String                 KEY_TYPE           = "key.type";
-    private static final String                 _KEY_TYPE          = "kt";
-    private static final String                 KEY_PASSWORD       = "key.password";
-    private static final String                 _KEY_PASSWORD      = "kp";
+    private static final String        HELP               = "help";
+    private static final String        _HELP              = "h";
+    private static final String        _CHECK             = "c";
+    private static final String        CHECK              = "check";
+    private static final String        KEYSTORE_LOCATION  = "keystore.location";
+    private static final String        _KEYSTORE_LOCATION = "ks";
+    private static final String        KEYSTORE_PASSWORD  = "keystore.password";
+    private static final String        _KEYSTORE_PASSWORD = "ksp";
+    private static final String        KEY_ALIAS          = "key.alias";
+    private static final String        _KEY_ALIAS         = "ka";
+    private static final String        KEY_TYPE           = "key.type";
+    private static final String        _KEY_TYPE          = "kt";
+    private static final String        KEY_PASSWORD       = "key.password";
+    private static final String        _KEY_PASSWORD      = "kp";
 
-    private static Option                       check;
+    private static Option              check;
 
     // --- Exit codes ---
     public enum EXIT_CODE
@@ -184,11 +185,6 @@ public class KeystoreManagerCtrl
             line = parser.parse(keystoreManager.options, argv);
 
             // --- Compulsory arguments : Get options ---
-            if (line.hasOption(_HELP))
-            {
-                DisplayHelpAndExit(EXIT_CODE.EXIT_OK);
-            }
-
             if (line.hasOption(_KEYSTORE_LOCATION))
                 keystoreManager.keystoreLocation = line
                         .getOptionValue(_KEYSTORE_LOCATION);
@@ -213,10 +209,25 @@ public class KeystoreManagerCtrl
                         .getOptionValue(_KEY_PASSWORD);
 
         }
+        catch (ParseException exp)
+        {
+            logger.error(exp.getMessage());
+            DisplayHelpAndExit(EXIT_CODE.EXIT_ERROR);
+        }
         catch (Exception e)
         {
-            logger.error(e);
-            DisplayHelpAndExit(EXIT_CODE.EXIT_ERROR);
+            // Workaround for Junit test
+            if (e.toString().contains("CheckExitCalled"))
+            {
+                throw e;
+            }
+            else
+            // Normal behaviour
+            {
+                logger.error(e.getMessage());
+                Exit(EXIT_CODE.EXIT_ERROR);
+            }
+
         }
 
         // --- Perform commands ---
