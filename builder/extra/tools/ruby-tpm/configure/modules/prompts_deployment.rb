@@ -2300,7 +2300,9 @@ class HostLicensesPaths < ConfigurePrompt
   
   def load_default_value
     @default = [
+      "#{@config.getProperty(HOME_DIRECTORY)}/share/continuent.license",
       "#{@config.getProperty(HOME_DIRECTORY)}/share/continuent.licenses",
+      "/etc/tungsten/continuent.license",
       "/etc/tungsten/continuent.licenses"
     ]
   end
