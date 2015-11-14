@@ -69,6 +69,7 @@ public class PlogReaderThread extends Thread
     private String       replicateApplyName;
     private String       tungstenSchema;
     private RawByteCache cache;
+    private int          lcrBufferLimit;
 
     /*
      * dict cache enabled / disabled for current plog
@@ -775,7 +776,7 @@ public class PlogReaderThread extends Thread
             BlockingQueue<DBMSEvent> queue, String plogDirectory,
             int sleepSizeInMilliseconds, int transactionFragSize,
             String replicateConsoleScript, String replicateApplyName,
-            RawByteCache cache) throws ReplicatorException
+            RawByteCache cache, int lcrBufferLimit) throws ReplicatorException
     {
 
         logger.info("PlogReaderThread: " + plogDirectory + "/"
@@ -789,6 +790,7 @@ public class PlogReaderThread extends Thread
         this.replicateApplyName = replicateApplyName;
         this.tungstenSchema = context.getReplicatorSchemaName().toLowerCase();
         this.cache = cache;
+        this.lcrBufferLimit = lcrBufferLimit;
 
         this.registerThisExtractorAtMine();
     }
@@ -1085,7 +1087,7 @@ public class PlogReaderThread extends Thread
                         // TODO: two transactions can have same XID due to
                         // splitting of redo reader splitting of DML and DDL.
                         // This needs to be fixed in the redo reader.
-                        t = new PlogTransaction(cache, r1.XID);
+                        t = new PlogTransaction(cache, r1.XID, lcrBufferLimit);
                         openTransactions.put(r1.XID, t);
                     }
                     t.putLCR(r1);
@@ -1124,7 +1126,7 @@ public class PlogReaderThread extends Thread
                             //
                             // TODO: This exposes a bug. Because we split DDL
                             // and DML that means there are two XID orderings in
-                            // the transaction. 
+                            // the transaction.
                             logger.info(r1.XID + " committed at " + t.commitSCN
                                     + "= restart SCN " + restartEventCommitSCN
                                     + ", but it's before restart XID "

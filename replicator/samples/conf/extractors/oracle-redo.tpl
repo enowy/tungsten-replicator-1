@@ -13,10 +13,21 @@ replicator.extractor.dbms.transactionFragSize=@{REPL_ORACLE_REDO_MINER_TRANSACTI
 # redo reader. 
 replicator.extractor.dbms.replicateConsoleScript=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/start-console.sh
 
+# Number of row changes per transaction to hold as Java objects.  Above this
+# number transactions spill to byte array cache in storage.  The value should
+# be large enough to ensure that all normally occurring OLTP transactions
+# remain as Java objects.  
+replicator.extractor.dbms.lcrBufferLimit=10000
+
+# Location of cache used to buffer large Oracle transactions while waiting for
+# a commit in order to serialize. The required storage space is potentially 
+# in the range of multiple gigabytes
+replicator.extractor.dbms.cacheDir=@{HOME_DIRECTORY}/tmp/@{SERVICE.DEPLOYMENT_SERVICE}/bytecache
+
 # The extractor queue size, which is the maximum number of rows that 
 # plog extraction can enqueue before pausing to wait for processing. 
 replicator.extractor.dbms.queueSize=100
 
 # The number of milliseconds to pause if no new data is in the current plog
 # file. 
-replicator.extractor.dbms.sleepSizeInMilliseconds=1000
+replicator.extractor.dbms.sleepSizeInMilliseconds=500

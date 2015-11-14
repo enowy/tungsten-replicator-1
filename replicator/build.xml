@@ -189,7 +189,7 @@
         <junit printsummary="yes" haltonfailure="no" fork="yes"
           dir="${test.work}" failureproperty="tests.failed" timeout="500000">
             <jvmarg value="-Dreplicator.log.dir=." />
-            <jvmarg value="-Dlog4j.rootAppender=console" />
+            <jvmarg value="-Dlog4j.rootAppender=stdout" />
             <classpath>
                 <pathelement location="${classes.dir}"/>
                 <pathelement location="${test.classes.dir}"/>

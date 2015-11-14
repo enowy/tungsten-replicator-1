@@ -21,28 +21,24 @@
 package com.continuent.tungsten.common.cache;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.util.NoSuchElementException;
 
 /**
- * Implements a scan operation that returns all elements of the array in order
- * by deserializing them in sequence.
+ * Implements a scan operator that returns all elements of the array.
  */
 public class LargeObjectScanner<T extends Serializable> implements AutoCloseable
 {
+    // The scanner state includes the array itself and a cursor on it.
     private final LargeObjectArray<T> array;
-    private InputStream               byteInput;
-    private int                       count = 0;
+    private final long                cursorId;
 
     /**
-     * Creates a new scanner on anbounded array.
+     * Creates a new scanner on the array.
      */
     public LargeObjectScanner(LargeObjectArray<T> array) throws IOException
     {
         this.array = array;
-        byteInput = array.getByteCache().allocateStream(array.getKey());
+        this.cursorId = array.cursorAllocate();
     }
 
     /**
@@ -50,7 +46,7 @@ public class LargeObjectScanner<T extends Serializable> implements AutoCloseable
      */
     public boolean hasNext()
     {
-        return count < array.size();
+        return array.cursorHasNext(cursorId);
     }
 
     /**
@@ -58,35 +54,7 @@ public class LargeObjectScanner<T extends Serializable> implements AutoCloseable
      */
     public T next()
     {
-        if (hasNext())
-        {
-            try
-            {
-                // Allocate object input stream to read next serialized object,
-                // which is serialized separately. We don't close the stream
-                // as that would screw up the position of the underlying byte
-                // reader.
-                ObjectInputStream objectInput = new ObjectInputStream(
-                        byteInput);
-                @SuppressWarnings("unchecked")
-                T nextObject = (T) objectInput.readObject();
-                count++;
-                return nextObject;
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeException(
-                        "Unable to deserialize next object: count=" + count, e);
-            }
-            catch (ClassNotFoundException e)
-            {
-                throw new RuntimeException(
-                        "Unable to deserialize next object: count=" + count, e);
-            }
-        }
-        else
-            throw new NoSuchElementException(
-                    "Scanner exceeded array size: count=" + count);
+        return array.cursorNext(cursorId);
     }
 
     /**
@@ -97,12 +65,6 @@ public class LargeObjectScanner<T extends Serializable> implements AutoCloseable
     @Override
     public void close()
     {
-        try
-        {
-            byteInput.close();
-        }
-        catch (IOException e)
-        {
-        }
+        array.cursorDeallocate(cursorId);
     }
 }

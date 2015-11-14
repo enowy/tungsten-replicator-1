@@ -97,10 +97,10 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param XID = transaction id
      */
-    public PlogTransaction(RawByteCache cache, String XID)
+    public PlogTransaction(RawByteCache cache, String XID, int lcrBufferLimit)
     {
         this.XID = XID;
-        this.LCRList = new LargeObjectArray<PlogLCR>(cache);
+        this.LCRList = new LargeObjectArray<PlogLCR>(cache, lcrBufferLimit);
     }
 
     /**

@@ -72,11 +72,9 @@ class PlogDBMSErrorMessage extends DBMSEvent
  * <p/>
  * This extractor converts interleaved Oracle transactions to the fully
  * serialized Tungsten format. The conversion requires that large transactions
- * be buffered in order to await a final commit. The class uses a byte vector
- * cache for this purpose. For best performance the cache should have as much
- * memory as possible allocated. Serializing buffered transactions to storage
- * may be too orders of memory slower than using memory, hence should be avoided
- * except for very large transactions.
+ * be buffered in order to await a final commit. The class buffers LCRs for
+ * single transactions as Java objects up to a set number of objects and then
+ * spills transactions into a byte vector cache once they exceed the limit.
  */
 public class PlogExtractor implements RawExtractor
 {
@@ -99,12 +97,16 @@ public class PlogExtractor implements RawExtractor
     private String replicateConsoleScript;
     private String replicateApplyName      = "TungstenApply";
 
-    // Cache used for storing byte vectors.
+    // Cache used for storing byte vectors. For now the cache does not
+    // use object serialization to memory, hence the 0 defaults.
     private RawByteCache byteCache;
     private File         cacheDir;
-    private long         cacheMaxTotalBytes  = 50000000;
-    private long         cacheMaxObjectBytes = 1000000;
+    private long         cacheMaxTotalBytes  = 0;
+    private long         cacheMaxObjectBytes = 0;
     private int          cacheMaxOpenFiles   = 50;
+
+    // Number of LCRs to buffer as Java objects before using the cache.
+    private int lcrBufferLimit = 10000;
 
     // Data source used to get DBMS connections.
     private SqlDataSource dataSourceImpl;
@@ -154,6 +156,13 @@ public class PlogExtractor implements RawExtractor
                 cacheMaxObjectBytes, cacheMaxOpenFiles);
         byteCache.prepare();
 
+        // Note the number of LCRs that will be buffered as Java objects.
+        logger.info(
+                "Number of LCRs that will be buffered per transaction in Java before flushing to byte cache: "
+                        + lcrBufferLimit);
+        logger.info(
+                "Raising lcrBufferLimit can speed extraction; lowering saves memory when there are concurrent large transactions");
+
         // Set up the data source so we can fetch current SCN, etc.
         // Locate our data source from which we are extracting.
         logger.info("Connecting to data source");
@@ -168,7 +177,8 @@ public class PlogExtractor implements RawExtractor
         queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
         readerThread = new PlogReaderThread(context, queue, plogDirectory,
                 sleepSizeInMilliseconds, transactionFragSize,
-                replicateConsoleScript, replicateApplyName, byteCache);
+                replicateConsoleScript, replicateApplyName, byteCache,
+                lcrBufferLimit);
         readerThread.setName("plog-reader-task");
 
         readerThread.prepare();
@@ -308,6 +318,15 @@ public class PlogExtractor implements RawExtractor
     public void setCacheMaxOpenFiles(int cacheMaxOpenFiles)
     {
         this.cacheMaxOpenFiles = cacheMaxOpenFiles;
+    }
+
+    /**
+     * Maximum number of LCRs to buffer as Java objects before spilling to byte
+     * vector cache.
+     */
+    public void setLcrBufferLimit(int lcrBufferLimit)
+    {
+        this.lcrBufferLimit = lcrBufferLimit;
     }
 
     /**
