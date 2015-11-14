@@ -14,10 +14,8 @@ module MonitorUnsecuredFiles
     tested_modes = {}
     unsecured_files = []
     
-    all_files = Dir.glob("#{dir}/**/*")
-    all_files = Dir.glob("#{dir}/**/.*")
-    all_files = all_files + Dir.glob("#{dir}/*")
-    all_files = all_files + Dir.glob("#{dir}/.*")
+    all_files = Dir.glob("#{dir}/**/*", File::FNM_DOTMATCH)
+    all_files.concat(Dir.glob("#{dir}/*", File::FNM_DOTMATCH))
     all_files.each {
       |f|
       mode = File.stat(f).mode

@@ -37,10 +37,8 @@ module ConfigureDeploymentStepDeployment
       debug("Copy #{package_path} to #{prepare_dir}")
       FileUtils.cp_r(package_path, prepare_dir, :preserve => true)
       
-      all_files = Dir.glob("#{prepare_dir}/**/*")
-      all_files = Dir.glob("#{prepare_dir}/**/.*")
-      all_files = all_files + Dir.glob("#{prepare_dir}/.*")
-      all_files = all_files + Dir.glob("#{prepare_dir}/*")
+      all_files = Dir.glob("#{prepare_dir}/**/*", File::FNM_DOTMATCH)
+      all_files.concat(Dir.glob("#{prepare_dir}/*", File::FNM_DOTMATCH))
       all_files.each{
         |f|
         Configurator.instance.limit_file_permissions(f)
