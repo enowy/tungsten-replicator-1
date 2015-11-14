@@ -485,6 +485,18 @@ module OracleCheck
   end
 end
 
+module OracleCDCCheck
+  def enabled?
+    if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
+      false
+    elsif @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) != "cdc"
+      false
+    else
+      super()
+    end
+  end
+end
+
 module OracleRedoReaderCheck
   def enabled?
     if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
@@ -521,6 +533,45 @@ class OracleLoginCheck < ConfigureValidationCheck
       if get_applier_datasource().password.to_s() == ""
         help("Try specifying a password for #{get_applier_datasource.get_connection_summary()}")
       end
+    end
+  end
+end
+
+class OracleVersionCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+
+  def set_vars
+    @title = "Oracle version check"
+  end
+  
+  def validate
+    supported_versions = []
+    if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
+      return true
+    else
+      extractor_method = get_member_property(REPL_ORACLE_EXTRACTOR_METHOD)
+      if extractor_method == "redo"
+        supported_versions = [10, 11, 12]
+      elsif extractor_method == "cdc"
+        supported_versions = [10, 11]
+      end
+    end
+    
+    begin
+      version = get_applier_datasource.sql_column("SELECT * FROM v$version WHERE banner LIKE 'Oracle%'", "BANNER")
+      match = version.match(/([0-9]+)\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)
+      if match == nil
+        warning("Unable to identify the Oracle version")
+      else
+        debug("The Oracle server at #{get_applier_datasource.get_connection_summary()} is running version #{match[1]}")
+        unless supported_versions.include?(match[1].to_i())
+          warning("The Oracle #{extractor_method} extractor does not support version #{match[1]}")
+        end
+      end
+    rescue => e
+      debug(e)
+      warning("Unable to check the version for #{get_applier_datasource.get_connection_summary()}")
     end
   end
 end

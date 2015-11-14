@@ -444,6 +444,21 @@ class ConfigureDatabasePlatform
     return_first_result(results)
   end
   
+  def sql_column(sql, column)
+    column.upcase!()
+    result = sql_result(sql)
+    
+    if result.size() > 0 && result[0].is_a?(Hash)
+      if result[0].has_key?(column)
+        return result[0][column]
+      else
+        raise MessageError.new("The SQL result does not contain the '#{column}' column")
+      end
+    else
+      return nil
+    end
+  end
+  
   def sql_result_from_url(sql, url, user, password)
     results = sql_results_from_url(sql, url, user, password)
     
