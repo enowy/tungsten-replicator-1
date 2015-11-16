@@ -49,6 +49,25 @@ class JavaKeytool
     @sha256_regex ||= Regexp.compile(/SHA256:[ ]+([A-F0-9:]+)\n/)
   end
   
+  def count(password)
+    # Create a counter
+    c = 0
+    
+    if @keystore.to_s() == ""
+      raise "The keystore value is required"
+    end
+    
+    begin
+      raw = self.cmd("keytool -list -v -keystore #{@keystore} -storetype #{@type}", password).split("*******************************************\n*******************************************")      
+      raw.each{
+        |key|
+        c = c+1
+      }
+    end
+    
+    return c
+  end
+  
   def list(password)
     # Create an array to hold all listed certs
     r = {}

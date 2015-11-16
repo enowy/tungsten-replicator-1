@@ -1720,7 +1720,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
   
   def validate_keystore(store_path, store_password, store_type = JavaKeytool::TYPE_JKS)
     keystore = JavaKeytool.new(store_path, store_type)
-    keystore.list(store_password)
+    keystore.count(store_password)
     
     return true
   end
