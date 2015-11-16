@@ -1726,8 +1726,20 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
   end
   
   def validate_tls_keystore
-    keystore_path = @config.getProperty(JAVA_TLS_KEYSTORE_PATH)
-    if keystore_path.to_s() != ""
+    key = JAVA_TLS_KEYSTORE_PATH
+    keystore_path = @config.getProperty(key).to_s()
+    if keystore_path == ""
+      keystore_path = @config.getTemplateValue(key).to_s()
+      if keystore_path != ""
+        unless File.exists?(keystore_path)
+          # Reset the keystore path since we should treat 
+          # this as if the argument is not set
+          keystore_path = ""
+        end
+      end
+    end
+    
+    if keystore_path != ""
       password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
       tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
       begin
@@ -1741,7 +1753,19 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
   end
   
   def validate_jgroups_keystore
-    keystore_path = @config.getProperty(JAVA_JGROUPS_KEYSTORE_PATH)
+    key = JAVA_JGROUPS_KEYSTORE_PATH
+    keystore_path = @config.getProperty(key).to_s()
+    if keystore_path == ""
+      keystore_path = @config.getTemplateValue(key).to_s()
+      if keystore_path != ""
+        unless File.exists?(keystore_path)
+          # Reset the keystore path since we should treat 
+          # this as if the argument is not set
+          keystore_path = ""
+        end
+      end
+    end
+    
     if keystore_path.to_s() != ""
       password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
       jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
