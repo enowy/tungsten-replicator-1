@@ -1712,6 +1712,13 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
     return true
   end
   
+  def validate_keystore(store_path, store_password, store_type = JavaKeytool::TYPE_JKS)
+    keystore = JavaKeytool.new(store_path, store_type)
+    keystore.list(store_password)
+    
+    return true
+  end
+  
   def validate_tls_keystore
     keystore_path = @config.getProperty(JAVA_TLS_KEYSTORE_PATH)
     if keystore_path.to_s() != ""
@@ -1750,9 +1757,9 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
       tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
       begin
-        validate_keystore_alias(keystore_path, password, tls_alias, password)
+        validate_keystore(keystore_path, password)
       rescue => e
-        error("There was an issue validating the SSL keystore: #{e.message}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
+        warning("There was an issue validating the SSL keystore: #{e.message}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
       end
     end
   end
@@ -1769,9 +1776,9 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       password = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
       tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
       begin
-        validate_keystore_alias(truststore_path, password, tls_alias, password)
+        validate_keystore(truststore_path, password)
       rescue => e
-        error("There was an issue validating the SSL truststore: #{e.message}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
+        warning("There was an issue validating the SSL truststore: #{e.message}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
       end
     end
   end
