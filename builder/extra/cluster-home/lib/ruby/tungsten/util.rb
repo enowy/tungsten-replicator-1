@@ -154,6 +154,17 @@ class TungstenUtil
     @log.puts(old_log.read())
   end
   
+  def limit_file_permissions(path)
+    if File.exists?(path)
+      # Get values like 0660 or 0700 for the log and umask
+      log_perms = sprintf("%o", File.stat(path).mode)[-4,4].to_i(8)
+      max_perms = sprintf("%04d", 777-sprintf("%o", File.umask()).to_i()).to_i(8)
+      # Calculate the target permissions for @log and set them
+      set_to_perms = log_perms & max_perms
+      File.chmod(sprintf("%o", set_to_perms).to_i(8), path)
+    end
+  end
+  
   def reset_errors
     @num_errors = 0
   end
