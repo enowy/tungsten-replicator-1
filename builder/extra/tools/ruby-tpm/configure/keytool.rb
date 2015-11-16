@@ -105,9 +105,8 @@ class JavaKeytool
     begin
       cmd = Configurator.instance.get_base_path() + "/cluster-home/bin/tkeystoremanager"
       parts = ["#{cmd} -c",
-        "-ks #{@keystore} -kt #{@type} -ka #{key_alias}",
-        "-ksp #{store_password} -kp #{key_password}"]
-      self.cmd(parts.join(" "))
+        "-ks #{@keystore} -kt #{@type} -ka #{key_alias}"]
+      self.cmd(parts.join(" "), [store_password, key_password])
       return true
     rescue CommandError => ce
       Configurator.instance.debug(ce)
