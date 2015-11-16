@@ -1690,9 +1690,15 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
     end
     
     if ssl_enabled == true
-      validate_tls_keystore()
-      validate_complete_keystore()
-      validate_complete_truststore()
+      ks_path = @config.getProperty(JAVA_KEYSTORE_PATH).to_s()
+      ts_path = @config.getProperty(JAVA_TRUSTSTORE_PATH).to_s()
+      if ks_path != "" || ts_path != ""
+        # Both keystore and truststore must be provided if either is provided
+        validate_complete_keystore()
+        validate_complete_truststore()
+      else
+        validate_tls_keystore()
+      end
     end
     
     if @config.getProperty(ENABLE_JGROUPS_SSL) == "true"
@@ -1729,6 +1735,8 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       rescue => e
         error("There was an issue validating the TLS keystore: #{e.message}. Check the values of --java-tls-keystore-path and --java-keystore-password.")
       end
+    else
+      error("Encryption of cluster communications is enabled but no certificate has been provided. Specify a TLS keystore using --java-tls-keystore-path or include '--replace-tls-certificate' in the `tpm update` command. You may disable this encryption by adding '--rmi-ssl=false --rmi-authentication=false'.")
     end
   end
   
@@ -1742,6 +1750,8 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       rescue => e
         error("There was an issue validating the JGroups keystore: #{e.message}. Check the values of --java-jgroups-keystore-path and --java-keystore-password.")
       end
+    else
+      error("Encryption of JGroups data is enabled but no certificate has been provided. Specify a JGroups keystore using --java-jgroups-keystore-path or include '--replace-jgroups-certificate' in the `tpm update` command. You may disable this encryption by adding '--jgroups-ssl=false'.")
     end
   end
   
@@ -1759,7 +1769,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       begin
         validate_keystore(keystore_path, password)
       rescue => e
-        warning("There was an issue validating the SSL keystore: #{e.message}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
+        error("There was an issue validating the SSL keystore: #{e.message}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
       end
     end
   end
@@ -1778,7 +1788,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       begin
         validate_keystore(truststore_path, password)
       rescue => e
-        warning("There was an issue validating the SSL truststore: #{e.message}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
+        error("There was an issue validating the SSL truststore: #{e.message}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
       end
     end
   end
