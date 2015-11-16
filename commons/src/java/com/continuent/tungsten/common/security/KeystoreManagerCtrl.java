@@ -22,6 +22,10 @@ package com.continuent.tungsten.common.security;
 
 import java.security.UnrecoverableKeyException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 
 import org.apache.commons.cli.CommandLine;
@@ -237,17 +241,28 @@ public class KeystoreManagerCtrl
         {
             try
             {
-                // --- Get passwords from stdin if not given on command line
-                if (keystoreManager.keystorePassword == null)
-                    keystoreManager.keystorePassword = keystoreManager
-                            .getUserInputFromStdin("Keystore password:");
+                if (keystoreManager.keystorePassword == null
+                        || keystoreManager.keyPassword == null)
+                {
+                    // --- Get passwords from stdin if not given on command line
+                    List<String> listPrompts = Arrays
+                            .asList("Keystore password:",
+                                    MessageFormat.format(
+                                            "Password for key {0}:",
+                                            keystoreManager.keyAlias));
+                    List<String> listUserInput = keystoreManager
+                            .getUserInputFromStdin(listPrompts);
 
-                if (keystoreManager.keyPassword == null)
-                    keystoreManager.keyPassword = keystoreManager
-                            .getUserInputFromStdin(MessageFormat.format(
-                                    "Password for key {0}:",
-                                    keystoreManager.keyAlias));
-
+                    if (listUserInput.size() == listPrompts.size())
+                    {
+                        keystoreManager.keystorePassword = listUserInput.get(0);
+                        keystoreManager.keyPassword = listUserInput.get(1);
+                    }
+                    else
+                    {
+                        throw new NoSuchElementException();
+                    }
+                }
                 try
                 {
                     // --- Check that all keys in keystore use the keystore
@@ -279,10 +294,15 @@ public class KeystoreManagerCtrl
                 }
 
             }
+            catch (NoSuchElementException nse)
+            {
+                logger.error(nse.getMessage());
+                Exit(EXIT_CODE.EXIT_ERROR);
+            }
             catch (Exception e)
             {
                 logger.error(MessageFormat.format(
-                        "Error while authenticating user: {0}",
+                        "Error while running the program: {0}",
                         e.getMessage()));
                 Exit(EXIT_CODE.EXIT_ERROR);
             }
@@ -294,20 +314,40 @@ public class KeystoreManagerCtrl
     /**
      * Reads user input from stdin
      * 
-     * @return
+     * @param listPrompts list of prompts to display, asking for user input
+     * @return a list containing user inputs
      */
-    private String getUserInputFromStdin(String prompt)
+    private List<String> getUserInputFromStdin(List<String> listPrompts)
     {
-        // create a scanner so we can read the command-line input
-        Scanner scanner = new Scanner(System.in);
+        List<String> listUserInput = new ArrayList<String>();
 
-        // prompt for the user's name
-        System.out.print(prompt);
+        Scanner console = new Scanner(System.in);
+        Scanner lineTokenizer = null;
 
-        // get their input as a String
-        String userInput = scanner.next();
+        for (String prompt : listPrompts)
+        {
+            System.out.println(prompt);
 
-        return userInput;
+            try
+            {
+                lineTokenizer = new Scanner(console.nextLine());
+            }
+            catch (NoSuchElementException nse)
+            {
+                console.close();
+                throw new NoSuchElementException(MessageFormat
+                        .format("Missing user input=  {0}", prompt));
+            }
+
+            if (lineTokenizer.hasNext())
+            {
+                String userInput = lineTokenizer.next();
+                listUserInput.add(userInput);
+            }
+        }
+
+        console.close();
+        return listUserInput;
     }
 
     /**
