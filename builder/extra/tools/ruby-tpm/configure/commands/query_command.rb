@@ -12,13 +12,12 @@ class QueryCommand
   QUERY_DEFAULT = "default"
   QUERY_VALUES = "values"
   QUERY_MODIFIED_FILES = "modified-files"
-  QUERY_UNSECURED_FILES = "unsecured-files"
   QUERY_USERMAP = "usermap"
   QUERY_DEPLOYMENTS = "deployments"
   QUERY_PRODUCT = "product"
   
   def allowed_subcommands
-    [QUERY_VERSION, QUERY_MANIFEST, QUERY_CONFIG, QUERY_TOPOLOGY, QUERY_DATASERVICES, QUERY_STAGING, QUERY_DEFAULT, QUERY_VALUES, QUERY_MODIFIED_FILES, QUERY_USERMAP, QUERY_DEPLOYMENTS, QUERY_EXTERNAL_CONFIGURATION, QUERY_PRODUCT, QUERY_UNSECURED_FILES]
+    [QUERY_VERSION, QUERY_MANIFEST, QUERY_CONFIG, QUERY_TOPOLOGY, QUERY_DATASERVICES, QUERY_STAGING, QUERY_DEFAULT, QUERY_VALUES, QUERY_MODIFIED_FILES, QUERY_USERMAP, QUERY_DEPLOYMENTS, QUERY_EXTERNAL_CONFIGURATION, QUERY_PRODUCT]
   end
   
   def allow_multiple_tpm_commands?
@@ -51,8 +50,6 @@ class QueryCommand
       output_values()
     when QUERY_MODIFIED_FILES
       output_modified_files()
-    when QUERY_UNSECURED_FILES
-      output_unsecured_files()
     when QUERY_USERMAP
       output_usermap_summary()
     when QUERY_DEPLOYMENTS
@@ -281,16 +278,7 @@ class QueryCommand
       Configurator.instance.output(cfg.to_s())
     }
   end
-  
-  def output_unsecured_files
-    base = Configurator.instance.get_base_path()
-    
-    MonitorUnsecuredFiles.find_unsecured_files(base).each {
-      |f|
-      Configurator.instance.output(f)
-    }
-  end
-  
+
   def allow_command_hosts?
     false
   end

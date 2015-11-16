@@ -237,25 +237,14 @@ class Configurator
       if @config.getNestedProperty([DEPLOYMENT_HOST]) != nil
         target_umask = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
         if target_umask != nil
-          target_umask = target_umask.to_i(8)
+          umask(target_umask.to_i(8))
         end
       else
-        target_umask = nil
-        
         # Convert the umask to match the base directory
         if Configurator.instance.default_security?() == true
           staging_mode = sprintf("%o", File.stat(get_base_path()).mode)
           staging_umask = 777 - staging_mode[-3,3].to_i()
-          target_umask = sprintf("%04d", staging_umask).to_i(8)
-        end
-      end
-      
-      if target_umask != nil
-        File.umask(target_umask)
-        
-        # Update the @log permissions to be under the umask
-        if @log
-          limit_file_permissions(@log.path())
+          umask(sprintf("%04d", staging_umask).to_i(8))
         end
       end
 			
@@ -1323,6 +1312,15 @@ class Configurator
   def version
     release_details = get_release_details()
     release_details["version"]
+  end
+  
+  def umask(umask)
+    File.umask(umask)
+    
+    # Update the @log permissions to be under the umask
+    if @log
+      limit_file_permissions(@log.path())
+    end
   end
   
   def limit_file_permissions(path)

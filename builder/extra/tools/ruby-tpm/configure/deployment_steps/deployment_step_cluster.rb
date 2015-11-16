@@ -437,13 +437,6 @@ EOF
       debug("Create symlink to #{target_dir}")
       FileUtils.rm_f(current_release_directory)
       FileUtils.ln_s(target_dir, current_release_directory)
-      
-      # All files should be secured, but this is a safety valve
-      # to clean up any that aren't
-      MonitorUnsecuredFiles.find_unsecured_files(target_dir).each {
-        |f|
-        Configurator.instance.limit_file_permissions(f)
-      }
     end
     
     # Update the mtime for the directory so sorting is easier

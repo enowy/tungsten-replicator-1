@@ -1177,12 +1177,20 @@ module ConfigureCommand
               Thread.current.kill
             end
             
-            # This is a local server and we need to make sure the 
-            # PREFERRED_PATH is added
-            path = config_obj.getProperty(PREFERRED_PATH)
-            unless path.to_s() == ""
-              debug("Adding #{path} to $PATH")
-              ENV['PATH'] = path + ":" + ENV['PATH']
+            hostname = host_cfg.getProperty([HOSTS, h_alias, HOST])
+            if Configurator.instance.is_localhost?(hostname)
+              # This is a local server and we need to make sure the 
+              # PREFERRED_PATH is added
+              path = config_obj.getProperty(PREFERRED_PATH)
+              unless path.to_s() == ""
+                debug("Adding #{path} to $PATH")
+                ENV['PATH'] = path + ":" + ENV['PATH']
+              end
+              
+              target_umask = config_obj.getTemplateValue(FILE_PROTECTION_LEVEL)
+              if target_umask != nil
+                Configurator.instance.umask(target_umask.to_i(8))
+              end
             end
 
             tracking_key = to_identifier("#{config_obj.getProperty(HOST)}:#{config_obj.getProperty(HOME_DIRECTORY)}")
