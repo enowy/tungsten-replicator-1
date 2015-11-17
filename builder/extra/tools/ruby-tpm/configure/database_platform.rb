@@ -244,6 +244,8 @@ class ConfigureDatabasePlatform
   def get_service_control_command(subcommand)
     control_type = nil
     default_control_type = @config.getProperty(DEFAULT_SERVICE_CONTROL_TYPE)
+    default_initd_script = get_default_start_script()
+    default_systemctl_script = get_default_systemctl_service()
     initd_script = @config.getProperty(@prefix + [REPL_BOOT_SCRIPT])
     systemctl_service = @config.getProperty(@prefix + [REPL_SYSTEMCTL_SERVICE])
     
@@ -262,28 +264,43 @@ class ConfigureDatabasePlatform
       end
     end
     
-    # use the default service control type since no overrides were found
+    # Check the default control type to make sure it has a valid script
     if control_type == nil
-      control_type = default_control_type
+      case default_control_type
+      when HostServiceControlType::INITD
+        if default_initd_script.to_s() != ""
+          control_type = HostServiceControlType::INITD
+          initd_script = default_initd_script
+        end
+      when HostServiceControlType::SYSTEMCTL
+        if default_systemctl_script.to_s() != ""
+          control_type = HostServiceControlType::SYSTEMCTL
+          systemctl_service = default_systemctl_script
+        end
+      end
+    end
+    
+    # If no other match has been found, go through all possible 
+    # start scripts to find a possible match
+    if control_type == nil
+      if default_systemctl_script.to_s() != ""
+        control_type = HostServiceControlType::SYSTEMCTL
+        systemctl_service = default_systemctl_script
+      elsif default_initd_script.to_s() != ""
+        control_type = HostServiceControlType::INITD
+        initd_script = default_initd_script
+      end
     end
     
     # Convert the final control_type and relevant path into a full command
     case control_type
     when HostServiceControlType::INITD
       if initd_script.to_s() == ""
-        initd_script = get_default_start_script()
-      end
-      
-      if initd_script.to_s() == ""
         return nil
       end
       
       return "#{initd_script} #{subcommand}"
     when HostServiceControlType::SYSTEMCTL
-      if systemctl_service.to_s() == ""
-        systemctl_service = get_default_systemctl_service()
-      end
-      
       if systemctl_service.to_s() == ""
         return nil
       end
