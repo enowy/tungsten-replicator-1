@@ -23,6 +23,10 @@ package com.continuent.tungsten.common.security;
 import java.io.File;
 import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.log4j.Logger;
 
@@ -184,6 +188,36 @@ public class PasswordManager
     }
 
     /**
+     * list users defined in the password file
+     * 
+     * @return
+     */
+    public List<String> listUsers(ClientApplicationType clientApplicationType)
+    {
+        List<String> listUsers = new ArrayList<String>();
+
+        // --- Load passwords from file if necessary
+        if (this.passwordsProperties == null)
+            this.loadPasswordsAsTungstenProperties();
+
+        Set<String> setUsernames = this.passwordsProperties.keyNames();
+
+        for (String entry : setUsernames)
+        {
+            String username = this.getUsernameFromEntry(entry);
+            ClientApplicationType applicationType = this
+                    .getClientApplicationTypeFromEntry(entry);
+
+            if (applicationType == clientApplicationType)
+                listUsers.add(username);
+        }
+
+        Collections.sort(listUsers);
+
+        return listUsers;
+    }
+
+    /**
      * Tries to authenticate a user with a given password
      * 
      * @param username
@@ -319,6 +353,51 @@ public class PasswordManager
             }
 
         return _username;
+    }
+
+    /**
+     * Retrieve the user name from a password file entry
+     * 
+     * @param passwordFileEntry the entry (line) in the password file
+     * @return
+     */
+    public String getUsernameFromEntry(String passwordFileEntry)
+    {
+        // Get username
+        int startApplicationDelim = passwordFileEntry.lastIndexOf(".");
+
+        String username = (startApplicationDelim == -1)
+                ? passwordFileEntry
+                : passwordFileEntry.substring(startApplicationDelim + 1,
+                        passwordFileEntry.length());
+
+        return username;
+    }
+
+    /**
+     * Retrieve the application type from a password file entry.
+     * 
+     * @param passwordFileEntry the entry (line) in the password file
+     * @return
+     */
+    public ClientApplicationType getClientApplicationTypeFromEntry(
+            String passwordFileEntry)
+    {
+        ClientApplicationType clientApplicationType = ClientApplicationType.UNKNOWN;
+
+        // Get application type
+        int startApplicationDelim = passwordFileEntry.lastIndexOf(".");
+
+        if (startApplicationDelim != -1)
+        {
+            String _applicationType = passwordFileEntry.substring(0,
+                    startApplicationDelim);
+            // This will raise an exception if it cannot cast
+            clientApplicationType = ClientApplicationType
+                    .fromString(_applicationType);
+        }
+
+        return clientApplicationType;
     }
 
     /**

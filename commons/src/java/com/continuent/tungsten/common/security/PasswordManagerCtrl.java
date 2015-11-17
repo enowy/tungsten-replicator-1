@@ -24,6 +24,8 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.HashMap;
+import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -102,6 +104,8 @@ public class PasswordManagerCtrl
     private static final String                          PASSWORD_FILE_LOCATION         = "password.file.location";
     private static final String                          _USER_PASSWORD_FILE_LOCATION   = "upf";
     private static final String                          USER_PASSWORD_FILE_LOCATION    = "user.password.file.location";
+    private static final String                          _LIST_USERS                    = "l";
+    private static final String                          LIST_USERS                     = "list";
 
     private static Option                                create;
     private static Option                                authenticate;
@@ -128,6 +132,9 @@ public class PasswordManagerCtrl
         // --- Options on the command line ---
         Option help = OptionBuilder.withLongOpt(HELP)
                 .withDescription("Displays this message").create(_HELP);
+        Option listUsers = OptionBuilder.withLongOpt(LIST_USERS)
+                .withDescription("List known users").create(_LIST_USERS);
+
         Option file = OptionBuilder.withLongOpt(FILE).withArgName("filename")
                 .hasArgs()
                 .withDescription("Location of the "
@@ -147,6 +154,7 @@ public class PasswordManagerCtrl
                 .withArgName("username").hasArgs()
                 .withDescription("Deletes a user").create(_DELETE);
 
+        optionGroup.addOption(listUsers);
         optionGroup.addOption(authenticate);
         optionGroup.addOption(create);
         optionGroup.addOption(delete);
@@ -485,6 +493,51 @@ public class PasswordManagerCtrl
 
             // --- Perform commands ---
 
+            // ######### List users ##########
+            if (line.hasOption(_LIST_USERS))
+            {
+                try
+                {
+                    logger.info("Listing users by application type:");
+                    HashMap<String, List<String>> mapUsers = new HashMap<String, List<String>>();
+
+                    // Get users for each application type
+                    for (ClientApplicationType applicationType : ClientApplicationType
+                            .values())
+                    {
+                        List<String> listUsernames = pwd.passwordManager
+                                .listUsers(applicationType);
+                        mapUsers.put(applicationType.name(), listUsernames);
+                    }
+
+                    // Display result
+                    for (ClientApplicationType applicationType : ClientApplicationType
+                            .values())
+                    {
+                        List<String> listUsers = mapUsers
+                                .get(applicationType.name());
+                        if (listUsers != null && !listUsers.isEmpty())
+                        {
+                            logger.info("\n");
+                            logger.info(MessageFormat.format("[{0}]",
+                                    applicationType.name().toLowerCase()));
+                            logger.info("-----------");
+                            for (String user : listUsers)
+                            {
+                                logger.info(user);
+                            }
+                        }
+
+                    }
+                    logger.info("\n");
+                }
+                catch (Exception e)
+                {
+                    logger.error(MessageFormat.format(
+                            "Error while listing users: {0}", e.getMessage()));
+                    Exit(EXIT_CODE.EXIT_ERROR);
+                }
+            }
             // ######### Authenticate ##########
             if (line.hasOption(_AUTHENTICATE))
             {

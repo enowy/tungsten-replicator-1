@@ -310,6 +310,29 @@ public class PasswordManagerCtrlTest
     }
 
     /**
+     * Confirm that we can get the list of users
+     */
+    @Test
+    public void testListUsers()
+    {
+        String commnandLine = "-l -p " + PASSWORDS_STORE_LOCATION + "";
+        String argv[] = commnandLine.split(" ");
+
+        try
+        {
+            exit.expectSystemExitWithStatus(EXIT_OK);
+            PasswordManagerCtrl.main(argv);
+        }
+        catch (Exception e)
+        {
+            // Confirm that we got the right exit code
+            int exitCode = getExitCode(e);
+            assertEquals("The program did not exist with expected status",
+                    EXIT_OK, exitCode);
+        }
+    }
+
+    /**
      * Retrieve exit code from CheckExitCalled exception
      * 
      * @param e CheckExitCalled exception
