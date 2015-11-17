@@ -1241,4 +1241,10 @@ public class SecurityHelper
 
     }
 
+    public static void testSetSecurityProperties(AuthenticationInfo authInfo,
+            boolean verbose) throws ConfigurationException
+    {
+        setSecurityProperties(authInfo, verbose);
+    }
+
 }

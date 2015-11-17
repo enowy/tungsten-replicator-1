@@ -20,7 +20,11 @@
 package com.continuent.tungsten.common.security;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+
+import javax.net.ssl.SSLSocketFactory;
 
 import junit.framework.TestCase;
 
@@ -284,6 +288,66 @@ public class SecurityHelperTest extends TestCase
                 null);
         assertNull(systemProperty);
 
+    }
+
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocol
+     * property
+     */
+    public void testSSLWithEmptyProtocolSettings()
+    {
+        // Reset info
+        resetSecuritySystemProperties();
+
+        // Confirm that by default connector.security.use.SSL=false
+        AuthenticationInfo authInfo = null;
+        try
+        {
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "sample.security.properties");
+            // Set empty protocol property
+            authInfo.setEnabledProtocols(new ArrayList<String>());
+            // Test
+            SecurityHelper.testSetSecurityProperties(authInfo, true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertFalse("Could not load authentication and securiy information",
+                    true);
+        }
+        assertTrue(authInfo.isConnectorUseSSL());
+        // Reset info
+        resetSecuritySystemProperties();
+    }
+
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty cipher
+     * suites property
+     */
+    public void testSSLWithEmptyCipherSuitesSettings()
+    {
+        // Reset info
+        resetSecuritySystemProperties();
+
+        // Confirm that by default connector.security.use.SSL=false
+        AuthenticationInfo authInfo = null;
+        try
+        {
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "sample.security.properties");
+            // Set empty protocol property
+            authInfo.setEnabledCipherSuites(new ArrayList<String>());
+            // Test
+            SecurityHelper.testSetSecurityProperties(authInfo, true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertFalse("Could not load authentication and securiy information",
+                    true);
+        }
+        assertTrue(authInfo.isConnectorUseSSL());
+        // Reset info
+        resetSecuritySystemProperties();
     }
 
     /**
