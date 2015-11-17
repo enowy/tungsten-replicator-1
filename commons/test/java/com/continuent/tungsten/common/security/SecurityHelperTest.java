@@ -290,41 +290,41 @@ public class SecurityHelperTest extends TestCase
 
     }
 
+    // Determines whether protocols, cipher suites or both properties is set to empty.
+    private static enum TEST_ARG {PROTOCOLS, CIPHERS, BOTH}; 
+    
     /**
      * check that loading AuthenticationInfo also succeeds with empty protocol
      * property
      */
-    public void testSSLWithEmptyProtocolSettings()
+    public void testSSLWithEmptyProtocolsProperty()
     {
-        // Reset info
-        resetSecuritySystemProperties();
-
-        // Confirm that by default connector.security.use.SSL=false
-        AuthenticationInfo authInfo = null;
-        try
-        {
-            authInfo = SecurityHelper.loadAuthenticationInformation(
-                    "sample.security.properties");
-            // Set empty protocol property
-            authInfo.setEnabledProtocols(new ArrayList<String>());
-            // Test
-            SecurityHelper.testSetSecurityProperties(authInfo, true);
-        }
-        catch (ConfigurationException e)
-        {
-            assertFalse("Could not load authentication and securiy information",
-                    true);
-        }
-        assertTrue(authInfo.isConnectorUseSSL());
-        // Reset info
-        resetSecuritySystemProperties();
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.PROTOCOLS);
     }
 
     /**
      * check that loading AuthenticationInfo also succeeds with empty cipher
      * suites property
      */
-    public void testSSLWithEmptyCipherSuitesSettings()
+    public void testSSLWithEmptyCipherSuitesProperty()
+    {
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.CIPHERS);
+    }
+
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocols
+     * and cipher suites properties
+     */
+    public void testSSLWithEmptyProtocolsAndCipherSuitesProperties()
+    {
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.BOTH);
+    }
+    
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocols
+     * and cipher suites properties
+     */
+    private void testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG arg)
     {
         // Reset info
         resetSecuritySystemProperties();
@@ -333,10 +333,27 @@ public class SecurityHelperTest extends TestCase
         AuthenticationInfo authInfo = null;
         try
         {
+            List <String> emptyList = new ArrayList <String>();
             authInfo = SecurityHelper.loadAuthenticationInformation(
                     "sample.security.properties");
-            // Set empty protocol property
-            authInfo.setEnabledCipherSuites(new ArrayList<String>());
+            if (arg == SecurityHelperTest.TEST_ARG.PROTOCOLS)
+            {
+                // Set empty protocols property
+                authInfo.setEnabledProtocols(emptyList);
+            } 
+            else if (arg == SecurityHelperTest.TEST_ARG.CIPHERS)
+            {
+                // Set empty cipher suites property
+                authInfo.setEnabledCipherSuites(emptyList);
+            }
+            else if (arg == SecurityHelperTest.TEST_ARG.BOTH)
+            {
+                // Set empty protocols property
+                authInfo.setEnabledProtocols(emptyList);
+                // Set empty cipher suites property
+                authInfo.setEnabledCipherSuites(emptyList);
+            }
+            
             // Test
             SecurityHelper.testSetSecurityProperties(authInfo, true);
         }
@@ -350,6 +367,7 @@ public class SecurityHelperTest extends TestCase
         resetSecuritySystemProperties();
     }
 
+    
     /**
      * Confirm behavior when connector.security.use.SSL=true
      * 
