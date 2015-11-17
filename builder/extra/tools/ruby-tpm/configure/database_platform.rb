@@ -244,8 +244,16 @@ class ConfigureDatabasePlatform
   def get_service_control_command(subcommand)
     control_type = nil
     default_control_type = @config.getProperty(DEFAULT_SERVICE_CONTROL_TYPE)
-    default_initd_script = get_default_start_script()
-    default_systemctl_script = get_default_systemctl_service()
+    begin
+      default_initd_script = get_default_start_script()
+    rescue
+      default_initd_script = nil
+    end
+    begin
+      default_systemctl_script = get_default_systemctl_service()
+    rescue
+      default_systemctl_script = nil
+    end
     initd_script = @config.getProperty(@prefix + [REPL_BOOT_SCRIPT])
     systemctl_service = @config.getProperty(@prefix + [REPL_SYSTEMCTL_SERVICE])
     
@@ -290,6 +298,10 @@ class ConfigureDatabasePlatform
         control_type = HostServiceControlType::INITD
         initd_script = default_initd_script
       end
+    end
+    
+    if control_type == nil
+      control_type = default_control_type
     end
     
     # Convert the final control_type and relevant path into a full command
