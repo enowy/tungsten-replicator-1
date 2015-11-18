@@ -560,17 +560,29 @@ class OracleVersionCheck < ConfigureValidationCheck
     
     begin
       version = get_applier_datasource.sql_column("SELECT * FROM v$version WHERE banner LIKE 'Oracle%'", "BANNER")
+    rescue => e
+      debug(e)
+    end
+    
+    if version == nil && which("sqlplus")
+      begin
+        version = cmd_result("sqlplus -v")
+      rescue CommandError => ce
+        debug(ce)
+      end
+    end
+    
+    if version != nil
       match = version.match(/([0-9]+)\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)
       if match == nil
-        warning("Unable to identify the Oracle version")
+        warning("Unable to identify the Oracle version for #{get_applier_datasource.get_connection_summary()}")
       else
         debug("The Oracle server at #{get_applier_datasource.get_connection_summary()} is running version #{match[1]}")
         unless supported_versions.include?(match[1].to_i())
           warning("The Oracle #{extractor_method} extractor does not support version #{match[1]}")
         end
       end
-    rescue => e
-      debug(e)
+    else
       warning("Unable to check the version for #{get_applier_datasource.get_connection_summary()}")
     end
   end
