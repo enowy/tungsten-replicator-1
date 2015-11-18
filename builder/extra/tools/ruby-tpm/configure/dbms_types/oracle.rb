@@ -152,6 +152,14 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
     
     {}
   end
+  
+  def missingExternalLibrariesErrorMessage
+    oracle_home = @config.getProperty(get_key(REPL_ORACLE_HOME))
+    if oracle_home.to_s() == ""
+      oracle_home = "<ORACLE_HOME>"
+    end
+    "The OJDBC JAR file was not located in #{oracle_home}/jdbc/lib. Update the --oracle-home setting or copy the appropriate file into tungten-replicator/lib before proceeding."
+  end
 
   def get_extractor_template
     if @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "") != ""
@@ -602,7 +610,7 @@ class OraclePermissionsCheck < ConfigureValidationCheck
     
     user = @config.getProperty(get_member_key(REPL_DBLOGIN))
     results = get_applier_datasource.sql_result("SELECT COUNT(*) AS CNT FROM USER_TAB_PRIVS WHERE GRANTEE = UPPER('#{user}') AND TABLE_NAME = 'DBMS_FLASHBACK' AND PRIVILEGE = 'EXECUTE'")
-    
+      
     privs_cnt = nil
     if results.size() > 0 && results[0].is_a?(Hash)
       privs_cnt = results[0]["CNT"]
@@ -749,7 +757,10 @@ class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
         next
       end
 
-      libraries = output.props[key].has_key?("HostOracleLibrariesFoundCheck")
+      libraries = nil
+      if output.props[key].has_key?("HostOracleLibrariesFoundCheck")
+        libraries = output.props[key]["HostOracleLibrariesFoundCheck"]
+      end
       unless libraries.is_a?(Hash)
         next
       end
@@ -763,7 +774,7 @@ class GlobalHostOracleLibrariesFoundCheck < ConfigureValidationCheck
       }
       
       if ojdbc == nil
-        error("Unable to find an OJDBC Jar file for the deployment to #{key}")
+        error("Unable to find an OJDBC Jar file for the deployment to #{key}. The OJDBC JAR file was not located in <ORACLE_HOME>/jdbc/lib. Update the --oracle-home setting or copy the appropriate file into tungten-replicator/lib before proceeding.")
       end
     }
   end

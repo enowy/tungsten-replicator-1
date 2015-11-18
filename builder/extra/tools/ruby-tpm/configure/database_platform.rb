@@ -189,6 +189,10 @@ class ConfigureDatabasePlatform
     nil
   end
   
+  def missingExternalLibrariesErrorMessage
+    "Unable to find necessary libraries for #{get_connection_summary()}"
+  end
+  
   def get_default_master_log_directory
     raise "Undefined function: #{self.class.name}.get_default_master_log_directory"
   end
@@ -431,9 +435,12 @@ class ConfigureDatabasePlatform
       command.close()
       
       libraries = sql_libraries()
-      if libraries.is_a?(Array)
+      if libraries.is_a?(Array) && libraries.size() > 0
         set_classpath = "CP=#{libraries.join(':')}"
       else
+        if needsExternalLibraries() == true
+          raise MessageError.new(missingExternalLibrariesErrorMessage())
+        end
         set_classpath = ""
       end
       
@@ -441,7 +448,7 @@ class ConfigureDatabasePlatform
       output = cmd_result("#{set_classpath} #{base_path}/tungsten-replicator/bin/query -conf #{cfg.path} -file #{command.path}")
     rescue CommandError => ce
       Configurator.instance.debug(ce)
-      raise "There was an error processing the query: #{ce.result}"
+      raise MessageError.new("There was an error processing the query: #{ce.result}")
     ensure
       if cfg != nil
         cfg.close()
@@ -454,17 +461,22 @@ class ConfigureDatabasePlatform
       end
     end
     
-    results = JSON.parse(output)
-    results.each {
-      |result|
-      if result["rc"] == 0
-        result["error"] = nil
-      else
-        obj = CommandError.new(result["statement"], result["rc"], result["results"], result["error"])
-        result["error"] = obj
-      end
-    }
-    results
+    begin
+      results = JSON.parse(output)
+      results.each {
+        |result|
+        if result["rc"] == 0
+          result["error"] = nil
+        else
+          obj = CommandError.new(result["statement"], result["rc"], result["results"], result["error"])
+          result["error"] = obj
+        end
+      }
+      results
+    rescue JSON::ParserError => pe
+      Configurator.instance.debug("Unable to parse SQL results: #{output}")
+      raise MessageError.new("There was an error processing the query: #{output}")
+    end
   end
   
   def sql_result(sql)
@@ -495,8 +507,12 @@ class ConfigureDatabasePlatform
   end
   
   def return_first_result(results)
+    unless results.is_a?(Array)
+      raise "No results were returned"
+    end
+    
     if results.size() == 0
-      raise "No results were returned by #{sql}"
+      raise "No results were returned"
     end
     
     if results[0]["error"] == nil
