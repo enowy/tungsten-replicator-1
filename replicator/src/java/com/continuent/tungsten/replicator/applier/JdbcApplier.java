@@ -86,67 +86,81 @@ import com.continuent.tungsten.replicator.thl.THLManagerCtrl;
  */
 public class JdbcApplier implements RawApplier
 {
-    static Logger                     logger                     = Logger.getLogger(JdbcApplier.class);
+    static Logger logger = Logger.getLogger(JdbcApplier.class);
 
-    protected int                     taskId                     = 0;
-    protected ReplicatorRuntime       runtime                    = null;
-    protected String                  dataSource                 = null;
-    protected String                  ignoreSessionVars          = null;
+    protected int               taskId            = 0;
+    protected ReplicatorRuntime runtime           = null;
+    protected String            dataSource        = null;
+    protected String            ignoreSessionVars = null;
 
-    protected String                  metadataSchema             = null;
-    protected String                  consistencyTable           = null;
-    protected String                  consistencySelect          = null;
-    protected Statement               statement                  = null;
-    protected Pattern                 ignoreSessionPattern       = null;
+    protected String    metadataSchema       = null;
+    protected String    consistencyTable     = null;
+    protected String    consistencySelect    = null;
+    protected Statement statement            = null;
+    protected Pattern   ignoreSessionPattern = null;
 
-    protected Database                conn                       = null;
-    protected CommitSeqno             commitSeqno                = null;
-    protected CommitSeqnoAccessor     commitSeqnoAccessor        = null;
-    protected HeartbeatTable          heartbeatTable             = null;
+    protected Database            conn                = null;
+    protected CommitSeqno         commitSeqno         = null;
+    protected CommitSeqnoAccessor commitSeqnoAccessor = null;
+    protected HeartbeatTable      heartbeatTable      = null;
 
-    protected String                  lastSessionId              = "";
+    // Indicates whether ROW events should be optimized by grouping inserts,
+    // updates, or deletes if supported by the target DBMS.
+    protected boolean optimizeRowEvents = false;
+    protected int     maxRowBatchSize   = 20;
+
+    // Pending prepared statement is used to accumulate row updates using JDBC
+    // batching. This information is not used in the default implementation but
+    // can be used for subclasses that support batching.
+    class RowReference
+    {
+        OneRowChange rowChanges;
+        int          row;
+    }
+
+    protected String             pendingSqlStatement      = null;
+    protected PreparedStatement  pendingPreparedStatement = null;
+    protected List<RowReference> pendingRowChanges        = null;
+
+    protected String lastSessionId = "";
 
     // Values of schema and timestamp which are buffered to avoid
     // unnecessary commands on the SQL connection.
-    protected String                  currentSchema              = null;
-    protected long                    currentTimestamp           = -1;
-    private long                      currentMicroseconds        = -1;
+    protected String currentSchema       = null;
+    protected long   currentTimestamp    = -1;
+    private long     currentMicroseconds = -1;
 
     // Statistics.
-    protected long                    eventCount                 = 0;
-    protected long                    commitCount                = 0;
+    protected long eventCount  = 0;
+    protected long commitCount = 0;
 
     /**
      * Maximum length of SQL string to log in case of an error. This is needed
      * because some statements may be very large.
      */
-    protected int                     maxSQLLogLength            = 5000;
+    protected int maxSQLLogLength = 5000;
 
-    private TableMetadataCache        tableMetadataCache;
+    private TableMetadataCache tableMetadataCache;
 
-    private boolean                   transactionStarted         = false;
+    private boolean transactionStarted = false;
 
-    private ReplDBMSHeader            lastProcessedEvent         = null;
+    private ReplDBMSHeader lastProcessedEvent = null;
 
-    private Hashtable<Integer, File>  fileTable;
+    private Hashtable<Integer, File> fileTable;
 
     protected HashMap<String, String> currentOptions;
 
     // SQL parser.
-    SqlOperationMatcher               sqlMatcher                 = new MySQLOperationMatcher();
-    private boolean                   getColumnInformationFromDB = true;
-
-    // Indicates whether ROW events should be optimized (grouping inserts or
-    // deletes) -- only supported by MySQL appliers for now
-    protected boolean                 optimizeRowEvents          = false;
+    SqlOperationMatcher sqlMatcher                 = new MySQLOperationMatcher();
+    private boolean     getColumnInformationFromDB = true;
 
     // Generic formatter for date-time values. This can safely be set without a
     // time zone, as it will pick up the default replicator time zone.
-    protected final SimpleDateFormat  dateTimeFormatter          = new SimpleDateFormat(
-                                                                         "yyyy-MM-dd HH:mm:ss");
+    protected final SimpleDateFormat dateTimeFormatter = new SimpleDateFormat(
+            "yyyy-MM-dd HH:mm:ss");
 
-    private String                    setTimestampQuery          = "";
-    private boolean                   applyTS                    = false;
+    private String  setTimestampQuery = "";
+    private boolean applyTS           = false;
 
     /**
      * Sets the optimizeRowEvents value.
@@ -156,6 +170,15 @@ public class JdbcApplier implements RawApplier
     public void setOptimizeRowEvents(boolean optimizeRowEvents)
     {
         this.optimizeRowEvents = optimizeRowEvents;
+    }
+
+    /**
+     * Sets the maximum number of rows to put in a batch. Only takes effect if
+     * optimizeRowEvents is true.
+     */
+    public void setMaxRowBatchSize(int maxRowBatchSize)
+    {
+        this.maxRowBatchSize = maxRowBatchSize;
     }
 
     /**
@@ -209,8 +232,8 @@ public class JdbcApplier implements RawApplier
      * @throws SQLException
      * @throws ConsistencyException
      */
-    private void consistencyCheck(String where) throws SQLException,
-            ConsistencyException
+    private void consistencyCheck(String where)
+            throws SQLException, ConsistencyException
     {
         String schemaName = null;
         String tableName = null;
@@ -239,8 +262,8 @@ public class JdbcApplier implements RawApplier
                 id = res.getInt(ConsistencyTable.idColumnName);
                 master_cnt = res.getInt(ConsistencyTable.masterCntColumnName);
                 // logger.info("master_cnt: " + master_cnt);
-                master_crc = trim(res
-                        .getString(ConsistencyTable.masterCrcColumnName));
+                master_crc = trim(
+                        res.getString(ConsistencyTable.masterCrcColumnName));
                 // logger.info("master_crc: " + master_crc);
                 rowOffset = res.getInt(ConsistencyTable.offsetColumnName);
                 rowLimit = res.getInt(ConsistencyTable.limitColumnName);
@@ -250,14 +273,13 @@ public class JdbcApplier implements RawApplier
                 Table table = conn.findTable(schemaName, tableName, false);
 
                 if (table == null)
-                    throw new ConsistencyException("Table not found: "
-                            + schemaName + "." + tableName);
+                    throw new ConsistencyException(
+                            "Table not found: " + schemaName + "." + tableName);
 
                 // re-create consistency check
                 ConsistencyCheck cc = ConsistencyCheckFactory
                         .createConsistencyCheck(id, table, rowOffset, rowLimit,
-                                method,
-                                runtime.isConsistencyCheckColumnNames(),
+                                method, runtime.isConsistencyCheckColumnNames(),
                                 runtime.isConsistencyCheckColumnTypes());
                 if (logger.isDebugEnabled())
                     logger.debug("Got consistency check: " + cc.toString());
@@ -270,7 +292,7 @@ public class JdbcApplier implements RawApplier
                     // logger.info("this_cnt : " + this_cnt);
                     this_crc = trim(ccres
                             .getString(ConsistencyTable.thisCrcColumnName));
-                    // logger.info("this_crc : " + this_crc);
+                            // logger.info("this_crc : " + this_crc);
 
                     // record local values in the consistency table
                     StringBuffer update = new StringBuffer(256);
@@ -387,20 +409,22 @@ public class JdbcApplier implements RawApplier
                     {
                         stmt.append(conn.getDatabaseObjectName(col.getName())
                                 + " = "
-                                + conn.getPlaceHolder(col, keyValues.get(i)
-                                        .getValue(), col.getTypeDescription()));
+                                + conn.getPlaceHolder(col,
+                                        keyValues.get(i).getValue(),
+                                        col.getTypeDescription()));
                     }
                 }
                 else
-                    stmt.append(conn.getDatabaseObjectName(col.getName())
-                            + " = "
-                            + conn.getPlaceHolder(col, colValues.get(i)
-                                    .getValue(), col.getTypeDescription()));
+                    stmt.append(
+                            conn.getDatabaseObjectName(col.getName()) + " = "
+                                    + conn.getPlaceHolder(col,
+                                            colValues.get(i).getValue(),
+                                            col.getTypeDescription()));
             }
             else if (mode == PrintMode.PLACE_HOLDER)
             {
-                stmt.append(conn.getPlaceHolder(col, colValues.get(i)
-                        .getValue(), col.getTypeDescription()));
+                stmt.append(conn.getPlaceHolder(col,
+                        colValues.get(i).getValue(), col.getTypeDescription()));
             }
             else if (mode == PrintMode.NAMES_ONLY)
             {
@@ -420,8 +444,8 @@ public class JdbcApplier implements RawApplier
      * @throws SQLException
      * @throws ApplierException
      */
-    protected int fillColumnNames(OneRowChange data) throws SQLException,
-            ApplierException
+    protected int fillColumnNames(OneRowChange data)
+            throws SQLException, ApplierException
     {
         Table t;
 
@@ -492,8 +516,8 @@ public class JdbcApplier implements RawApplier
      * @throws SQLException
      * @throws ApplierException
      */
-    protected Table getTableMetadata(OneRowChange data) throws SQLException,
-            ApplierException
+    protected Table getTableMetadata(OneRowChange data)
+            throws SQLException, ApplierException
     {
         Table t;
         t = tableMetadataCache.retrieve(data.getSchemaName(),
@@ -504,18 +528,16 @@ public class JdbcApplier implements RawApplier
                 logger.debug("Table " + data.getSchemaName() + " "
                         + data.getTableName() + " not found in cache");
             // Not yet in cache
-            t = conn.findTable(data.getSchemaName(), data.getTableName(), false);
+            t = conn.findTable(data.getSchemaName(), data.getTableName(),
+                    false);
 
             if (t == null)
                 // Empty resultset, i.e. table not found in database : it
                 // won't be possible to generate a correct statement for
                 // this row update
-                throw new ApplierException(
-                        "Table "
-                                + data.getSchemaName()
-                                + "."
-                                + data.getTableName()
-                                + " not found in database. Unable to generate a valid statement.");
+                throw new ApplierException("Table " + data.getSchemaName() + "."
+                        + data.getTableName()
+                        + " not found in database. Unable to generate a valid statement.");
 
             tableMetadataCache.store(t);
         }
@@ -525,7 +547,7 @@ public class JdbcApplier implements RawApplier
     protected int bindColumnValues(PreparedStatement prepStatement,
             ArrayList<OneRowChange.ColumnVal> values, int startBindLoc,
             ArrayList<OneRowChange.ColumnSpec> specs, boolean skipNulls)
-            throws SQLException
+                    throws SQLException
     {
         int bindLoc = startBindLoc; /*
                                      * prepared stmt variable index starts from
@@ -551,7 +573,7 @@ public class JdbcApplier implements RawApplier
 
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
             OneRowChange.ColumnVal value, ColumnSpec columnSpec)
-            throws SQLException
+                    throws SQLException
     {
         // By default, type is not used. If specific operations have to be done,
         // this should happen in specific classes (e.g. OracleApplier).
@@ -733,15 +755,14 @@ public class JdbcApplier implements RawApplier
                     {
                         // This is only useful for statement base replication
                         // (i.e. batchOptions != null)
-                        if (applyTS
-                                || currentMicroseconds != Long
-                                        .valueOf(optionValue))
+                        if (applyTS || currentMicroseconds != Long
+                                .valueOf(optionValue))
                         {
                             // Save current microseconds value
                             currentMicroseconds = Long.valueOf(optionValue);
                             // Add microseconds to timestamp
-                            setTimestampQuery += "."
-                                    + String.format("%06d", currentMicroseconds);
+                            setTimestampQuery += "." + String.format("%06d",
+                                    currentMicroseconds);
                             applyTS = true;
                         }
                     }
@@ -754,8 +775,8 @@ public class JdbcApplier implements RawApplier
                     if (ignoreSessionPattern.matcher(optionName).matches())
                     {
                         if (logger.isDebugEnabled())
-                            logger.debug("Ignoring session variable: "
-                                    + optionName);
+                            logger.debug(
+                                    "Ignoring session variable: " + optionName);
                         continue;
                     }
                 }
@@ -772,8 +793,8 @@ public class JdbcApplier implements RawApplier
                 if (currentOptionValue == null
                         || !currentOptionValue.equalsIgnoreCase(optionValue))
                 {
-                    String optionSetStatement = conn.prepareOptionSetStatement(
-                            optionName, optionValue);
+                    String optionSetStatement = conn
+                            .prepareOptionSetStatement(optionName, optionValue);
                     if (optionSetStatement != null)
                     {
                         if (logger.isDebugEnabled())
@@ -849,7 +870,7 @@ public class JdbcApplier implements RawApplier
      *            used.
      * @return Constructed SQL statement with "?" instead of real values.
      */
-    private StringBuffer constructStatement(RowChangeData.ActionType action,
+    protected StringBuffer constructStatement(RowChangeData.ActionType action,
             String schemaName, String tableName,
             ArrayList<OneRowChange.ColumnSpec> columns,
             ArrayList<OneRowChange.ColumnSpec> keys,
@@ -914,8 +935,8 @@ public class JdbcApplier implements RawApplier
         {
             if (previousKeyValues.get(i).getValue() == null
                     || currentKeyValues.get(i).getValue() == null)
-                if (!(previousKeyValues.get(i).getValue() == null && currentKeyValues
-                        .get(i).getValue() == null))
+                if (!(previousKeyValues.get(i).getValue() == null
+                        && currentKeyValues.get(i).getValue() == null))
                     return true;
         }
         return false;
@@ -955,12 +976,11 @@ public class JdbcApplier implements RawApplier
             ArrayList<ArrayList<OneRowChange.ColumnVal>> colValues,
             ArrayList<OneRowChange.ColumnSpec> colSpecs)
     {
-        if (keyValues.size() > row
-                && didNullKeysChange(keyValues.get(row), keyValues.get(row - 1)))
+        if (keyValues.size() > row && didNullKeysChange(keyValues.get(row),
+                keyValues.get(row - 1)))
             return true;
-        if (colValues.size() > row
-                && didNullColsChange(colSpecs, colValues.get(row),
-                        colValues.get(row - 1)))
+        if (colValues.size() > row && didNullColsChange(colSpecs,
+                colValues.get(row), colValues.get(row - 1)))
             return true;
         return false;
     }
@@ -970,7 +990,7 @@ public class JdbcApplier implements RawApplier
     {
         PreparedStatement prepStatement = null;
 
-        getColumnInfomation(oneRowChange);
+        getColumnInformation(oneRowChange);
 
         StringBuffer stmt = null;
 
@@ -987,11 +1007,11 @@ public class JdbcApplier implements RawApplier
             int updateCount = 0;
 
             int row = 0;
-            for (row = 0; row < columnValues.size() || row < keyValues.size(); row++)
+            for (row = 0; row < columnValues.size()
+                    || row < keyValues.size(); row++)
             {
-                if (row == 0
-                        || needNewSQLStatement(row, keyValues, key,
-                                columnValues, columns))
+                if (row == 0 || needNewSQLStatement(row, keyValues, key,
+                        columnValues, columns))
                 {
                     ArrayList<OneRowChange.ColumnVal> keyValuesOfThisRow = null;
                     if (keyValues.size() > 0)
@@ -1009,7 +1029,6 @@ public class JdbcApplier implements RawApplier
                             oneRowChange.getTableName(), columns, key,
                             keyValuesOfThisRow, colValuesOfThisRow);
 
-                    runtime.getMonitor().incrementEvents(columnValues.size());
                     prepStatement = conn.prepareStatement(stmt.toString());
                 }
 
@@ -1037,16 +1056,21 @@ public class JdbcApplier implements RawApplier
                     int oneChangeCount = prepStatement.executeUpdate();
                     if (oneChangeCount == 0)
                     {
-                        if (runtime.getApplierFailurePolicyOn0RowUpdates() == FailurePolicy.WARN)
-                            logger.warn("UPDATE or DELETE statement did not process any row"
-                                    + logFailedRowChangeSQL(stmt, oneRowChange,
-                                            row));
-                        else if (runtime.getApplierFailurePolicyOn0RowUpdates() == FailurePolicy.STOP)
+                        if (runtime
+                                .getApplierFailurePolicyOn0RowUpdates() == FailurePolicy.WARN)
+                            logger.warn(
+                                    "UPDATE or DELETE statement did not process any row"
+                                            + logFailedRowChangeSQL(
+                                                    stmt.toString(),
+                                                    oneRowChange, row));
+                        else
+                            if (runtime
+                                    .getApplierFailurePolicyOn0RowUpdates() == FailurePolicy.STOP)
                         {
                             ReplicatorException replicatorException = new ReplicatorException(
                                     "UPDATE or DELETE statement did not process any row");
-                            replicatorException
-                                    .setExtraData(logFailedRowChangeSQL(stmt,
+                            replicatorException.setExtraData(
+                                    logFailedRowChangeSQL(stmt.toString(),
                                             oneRowChange, row));
                             throw replicatorException;
                         }
@@ -1056,8 +1080,8 @@ public class JdbcApplier implements RawApplier
                 }
                 catch (SQLWarning e)
                 {
-                    String msg = "While applying SQL event:\n"
-                            + stmt.toString() + "\nWarning: " + e.getMessage();
+                    String msg = "While applying SQL event:\n" + stmt.toString()
+                            + "\nWarning: " + e.getMessage();
                     logger.warn(msg);
                 }
             }
@@ -1071,8 +1095,8 @@ public class JdbcApplier implements RawApplier
         catch (SQLException e)
         {
             ApplierException applierException = new ApplierException(e);
-            applierException.setExtraData(logFailedRowChangeSQL(stmt,
-                    oneRowChange));
+            applierException
+                    .setExtraData(logFailedRowChangeSQL(stmt, oneRowChange));
             throw applierException;
         }
         finally
@@ -1090,6 +1114,37 @@ public class JdbcApplier implements RawApplier
         }
     }
 
+    /** Prepare for a new SQL batch. */
+    protected void prepareNewBatch(String stmt) throws SQLException
+    {
+        // This is a no-no for non-batched JDBC operations.
+        throw new UnsupportedOperationException(
+                "Attempt to add to non-existent batch");
+    }
+
+    /**
+     * Add a new batch to the current pending batch.
+     */
+    protected void addToPendingBatch(OneRowChange oneRowChange, int row)
+            throws ReplicatorException
+    {
+        // This is a no-no for non-batched JDBC operations.
+        throw new UnsupportedOperationException(
+                "Attempt to add to non-existent batch");
+    }
+
+    /** Execute the current batch. */
+    protected void executePendingBatch() throws ReplicatorException
+    {
+        // This is a no-op for non-batched JDBC.
+    }
+
+    /** Release pending batch JDBC resources. */
+    protected void releasePendingBatch()
+    {
+        // This is a no-op for non-batched JDBC.
+    }
+
     /**
      * Gets column information (name, etc) from database depending on the
      * getColumnMetadataFromDB setting
@@ -1097,7 +1152,7 @@ public class JdbcApplier implements RawApplier
      * @param oneRowChange
      * @throws ApplierException
      */
-    protected void getColumnInfomation(OneRowChange oneRowChange)
+    protected void getColumnInformation(OneRowChange oneRowChange)
             throws ApplierException
     {
         try
@@ -1106,10 +1161,10 @@ public class JdbcApplier implements RawApplier
             {
                 int colCount = fillColumnNames(oneRowChange);
                 if (colCount <= 0)
-                    logger.warn("No column information found for table (perhaps table is missing?): "
-                            + oneRowChange.getSchemaName()
-                            + "."
-                            + oneRowChange.getTableName());
+                    logger.warn(
+                            "No column information found for table (perhaps table is missing?): "
+                                    + oneRowChange.getSchemaName() + "."
+                                    + oneRowChange.getTableName());
             }
         }
         catch (SQLException e1)
@@ -1118,7 +1173,7 @@ public class JdbcApplier implements RawApplier
         }
     }
 
-    private String logFailedRowChangeSQL(StringBuffer stmt,
+    protected String logFailedRowChangeSQL(String stmt,
             OneRowChange oneRowChange, int row)
     {
         try
@@ -1130,8 +1185,7 @@ public class JdbcApplier implements RawApplier
                     .getKeyValues();
             ArrayList<ArrayList<OneRowChange.ColumnVal>> columnValues = oneRowChange
                     .getColumnValues();
-            String log = "Failing statement: " + stmt.toString()
-                    + "\nArguments:";
+            String log = "Failing statement: " + stmt + "\nArguments:";
             log += logFailedRowChangeValues(keys, columns, keyValues,
                     columnValues, row);
             // Output the error message, truncate it if too large.
@@ -1228,6 +1282,12 @@ public class JdbcApplier implements RawApplier
         return log.toString();
     }
 
+    /**
+     * Apply one or more row changes.
+     * 
+     * @param data Row change data, containing changes on one or more tables
+     * @param options Metadata options for this transaction fragment
+     */
     protected void applyRowChangeData(RowChangeData data,
             List<ReplOption> options) throws ReplicatorException
     {
@@ -1239,6 +1299,11 @@ public class JdbcApplier implements RawApplier
                 {
                     // Apply session variables to the connection only if
                     // something changed
+                    if (logger.isDebugEnabled())
+                    {
+                        logger.debug("Applying changed session variables");
+                    }
+                    executePendingBatch();
                     statement.executeBatch();
                     statement.clearBatch();
                 }
@@ -1259,6 +1324,11 @@ public class JdbcApplier implements RawApplier
                 {
                     // Apply session variables to the connection only if
                     // something changed
+                    if (logger.isDebugEnabled())
+                    {
+                        logger.debug("Applying changed row option variables");
+                    }
+                    executePendingBatch();
                     statement.executeBatch();
                     statement.clearBatch();
                 }
@@ -1285,14 +1355,14 @@ public class JdbcApplier implements RawApplier
      */
     public void apply(DBMSEvent event, ReplDBMSHeader header, boolean doCommit,
             boolean doRollback) throws ReplicatorException,
-            ConsistencyException, InterruptedException
+                    ConsistencyException, InterruptedException
     {
         boolean transactionCommitted = false;
         boolean consistencyCheckFailure = false;
         boolean heartbeatFailure = false;
         boolean emptyEvent = false;
-        long appliedLatency = (System.currentTimeMillis() - event
-                .getSourceTstamp().getTime()) / 1000;
+        long appliedLatency = (System.currentTimeMillis()
+                - event.getSourceTstamp().getTime()) / 1000;
 
         // Ensure we are not trying to apply a previously applied event. This
         // case can arise during restart.
@@ -1337,7 +1407,8 @@ public class JdbcApplier implements RawApplier
             {
                 if (doCommit)
                 {
-                    updateCommitSeqno(header, appliedLatency);
+                    http : // arstechnica.com/science/2015/11/coffee-drinking-linked-to-lower-mortality-risk-again/
+                           // updateCommitSeqno(header, appliedLatency);
                     lastProcessedEvent = header;
                     commitTransaction();
                     transactionCommitted = true;
@@ -1353,6 +1424,7 @@ public class JdbcApplier implements RawApplier
             {
                 // This is a range of filtered events
                 // Update the position and commit if desired.
+                executePendingBatch();
                 ((ReplDBMSFilteredEvent) header).updateCommitSeqno();
                 updateCommitSeqno(header, appliedLatency);
                 if (doCommit)
@@ -1371,8 +1443,18 @@ public class JdbcApplier implements RawApplier
                     {
                         applyRowChangeData((RowChangeData) dataElem,
                                 event.getOptions());
+                        continue;
                     }
-                    else if (dataElem instanceof LoadDataFileFragment)
+
+                    // Clear any pending batched statements.
+                    if (logger.isDebugEnabled())
+                    {
+                        logger.debug(
+                                "Clearing pending batches prior to processing non-row changes");
+                    }
+                    executePendingBatch();
+
+                    if (dataElem instanceof LoadDataFileFragment)
                     {
                         LoadDataFileFragment fileFrag = (LoadDataFileFragment) dataElem;
                         applyFileFragment(fileFrag);
@@ -1384,8 +1466,8 @@ public class JdbcApplier implements RawApplier
                     }
                     else if (dataElem instanceof LoadDataFileDelete)
                     {
-                        applyDeleteFile(((LoadDataFileDelete) dataElem)
-                                .getFileID());
+                        applyDeleteFile(
+                                ((LoadDataFileDelete) dataElem).getFileID());
                     }
                     else if (dataElem instanceof StatementData)
                     {
@@ -1403,8 +1485,10 @@ public class JdbcApplier implements RawApplier
                         if (invalidated > 0)
                         {
                             if (logger.isDebugEnabled())
-                                logger.debug("Table metadata invalidation: stmt="
-                                        + query + " invalidated=" + invalidated);
+                                logger.debug(
+                                        "Table metadata invalidation: stmt="
+                                                + query + " invalidated="
+                                                + invalidated);
                         }
                     }
                     else if (dataElem instanceof RowIdData)
@@ -1416,8 +1500,11 @@ public class JdbcApplier implements RawApplier
 
             if (doCommit)
             {
+                // Clear a final pending prepared statement.
+                executePendingBatch();
                 updateCommitSeqno(header, appliedLatency);
             }
+
             // Update the last processed even when it was committed, otherwise,
             // we can commit an older seqno
             lastProcessedEvent = header;
@@ -1428,17 +1515,18 @@ public class JdbcApplier implements RawApplier
             // Process consistency check/heartbeat event.
             try
             {
-                if (event
-                        .getMetadataOptionValue(ReplOptionParams.CONSISTENCY_WHERE) != null)
+                if (event.getMetadataOptionValue(
+                        ReplOptionParams.CONSISTENCY_WHERE) != null)
                 {
                     consistencyCheckFailure = true;
-                    String whereClause = event
-                            .getMetadataOptionValue(ReplOptionParams.CONSISTENCY_WHERE);
+                    String whereClause = event.getMetadataOptionValue(
+                            ReplOptionParams.CONSISTENCY_WHERE);
                     consistencyCheck(whereClause);
                     consistencyCheckFailure = false;
                 }
-                else if (event
-                        .getMetadataOptionValue(ReplOptionParams.HEARTBEAT) != null)
+                else
+                    if (event.getMetadataOptionValue(
+                            ReplOptionParams.HEARTBEAT) != null)
                 {
                     heartbeatTable.completeHeartbeat(conn, header.getSeqno(),
                             event.getEventId());
@@ -1465,6 +1553,7 @@ public class JdbcApplier implements RawApplier
                     // even if consistencyCheck() or heartbeat failed.
                     if (doRollback)
                     {
+                        executePendingBatch();
                         rollbackTransaction();
                         updateCommitSeqno(lastProcessedEvent, appliedLatency);
                         // And commit
@@ -1473,12 +1562,14 @@ public class JdbcApplier implements RawApplier
                     }
                     else if (doCommit)
                     {
+                        executePendingBatch();
                         commitTransaction();
                         transactionCommitted = true;
                     }
                     else if (consistencyCheckFailure || heartbeatFailure)
                     {
                         // Update commitSeqnoTable
+                        executePendingBatch();
                         updateCommitSeqno(lastProcessedEvent, appliedLatency);
                         // And commit
                         commitTransaction();
@@ -1523,14 +1614,19 @@ public class JdbcApplier implements RawApplier
         if (this.lastProcessedEvent == null || !this.transactionStarted)
             return;
 
+        // Clear any pending transaction.
+        executePendingBatch();
+
         try
         {
             // Add applied latency so that we can easily track how far back each
             // partition is. If we don't have data we just put in zero.
             long appliedLatency;
             if (lastProcessedEvent instanceof ReplDBMSEvent)
-                appliedLatency = (System.currentTimeMillis() - ((ReplDBMSEvent) lastProcessedEvent)
-                        .getExtractedTstamp().getTime()) / 1000;
+                appliedLatency = (System.currentTimeMillis()
+                        - ((ReplDBMSEvent) lastProcessedEvent)
+                                .getExtractedTstamp().getTime())
+                        / 1000;
             else
                 appliedLatency = 0;
 
@@ -1540,8 +1636,8 @@ public class JdbcApplier implements RawApplier
         }
         catch (SQLException e)
         {
-            throw new ApplierException("Unable to commit transaction: "
-                    + e.getMessage(), e);
+            throw new ApplierException(
+                    "Unable to commit transaction: " + e.getMessage(), e);
         }
     }
 
@@ -1554,6 +1650,7 @@ public class JdbcApplier implements RawApplier
     {
         try
         {
+            releasePendingBatch();
             rollbackTransaction();
         }
         catch (SQLException e)
@@ -1635,8 +1732,8 @@ public class JdbcApplier implements RawApplier
      * @param temporaryFile The file containing data to be loaded
      * @throws ReplicatorException if an error occurs
      */
-    protected void applyLoadDataLocal(LoadDataFileQuery data, File temporaryFile)
-            throws ReplicatorException
+    protected void applyLoadDataLocal(LoadDataFileQuery data,
+            File temporaryFile) throws ReplicatorException
     {
         data.setLocalFile(temporaryFile);
         applyStatementData(data);
@@ -1651,15 +1748,16 @@ public class JdbcApplier implements RawApplier
         {
             try
             {
-                temporaryFile = File.createTempFile("SQL_LOAD_MB-" + fileId
-                        + "-", ".tmp");
+                temporaryFile = File
+                        .createTempFile("SQL_LOAD_MB-" + fileId + "-", ".tmp");
                 if (logger.isDebugEnabled())
                     logger.debug("Opening temporary file: fileId=" + fileId
                             + " path=" + temporaryFile);
             }
             catch (IOException e)
             {
-                throw new ApplierException("Unable to create temporary file", e);
+                throw new ApplierException("Unable to create temporary file",
+                        e);
             }
             fileTable.put(fileId, temporaryFile);
         }
@@ -1677,8 +1775,8 @@ public class JdbcApplier implements RawApplier
         }
         catch (IOException e)
         {
-            throw new ApplierException("Unable to write into file "
-                    + temporaryFile.getPath(), e);
+            throw new ApplierException(
+                    "Unable to write into file " + temporaryFile.getPath(), e);
         }
     }
 
@@ -1700,8 +1798,8 @@ public class JdbcApplier implements RawApplier
      * 
      * @see com.continuent.tungsten.replicator.applier.RawApplier#getLastEvent()
      */
-    public ReplDBMSHeader getLastEvent() throws ReplicatorException,
-            InterruptedException
+    public ReplDBMSHeader getLastEvent()
+            throws ReplicatorException, InterruptedException
     {
         if (commitSeqnoAccessor == null)
             return null;
@@ -1773,8 +1871,8 @@ public class JdbcApplier implements RawApplier
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#prepare(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void prepare(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void prepare(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         try
         {
@@ -1841,9 +1939,8 @@ public class JdbcApplier implements RawApplier
         }
         catch (SQLException e)
         {
-            String message = String
-                    .format("Unable to initialize applier: data source="
-                            + dataSource);
+            String message = String.format(
+                    "Unable to initialize applier: data source=" + dataSource);
             throw new ReplicatorException(message, e);
         }
     }
@@ -1871,9 +1968,11 @@ public class JdbcApplier implements RawApplier
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#release(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void release(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void release(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
+        releasePendingBatch();
+
         if (commitSeqno != null)
         {
             commitSeqno.release();
