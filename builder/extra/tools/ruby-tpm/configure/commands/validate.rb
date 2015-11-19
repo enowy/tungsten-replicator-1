@@ -36,6 +36,10 @@ class ValidateCommand
     true
   end
   
+  def enable_release_notes_check?
+    true
+  end
+  
   def self.get_command_name
     'validate'
   end

@@ -1132,17 +1132,18 @@ class Configurator
       begin
         File.open(get_manifest_json_file_path(), 'r') do |file|
           begin
+            @release_details = {}
             parsed = JSON.parse(file.readlines().join())
             
             version = "#{parsed['version']['major']}.#{parsed['version']['minor']}.#{parsed['version']['revision']}"
+            @release_details[:simple_version] = version
+            
             if parsed['hudson']['buildNumber'].to_s() != ""
               version = version + "-#{parsed['hudson']['buildNumber']}"
             end
-            @release_details = {
-              "version" => version,
-              "product" => parsed['product']
-            }
+            @release_details["version"] = version
             
+            @release_details["product"] = parsed['product']
             @release_details[:is_enterprise_package] = false
             @release_details[:licensed_products] = []
             
@@ -1191,6 +1192,11 @@ class Configurator
   def get_release_version
     release_details = get_release_details()
     release_details["version"]
+  end
+  
+  def get_simple_version
+    release_details = get_release_details()
+    release_details[:simple_version]
   end
   
   def get_svc_path(svc_name, tungsten_base_path = nil)

@@ -395,6 +395,9 @@ module ConfigureCommand
   end
   
   def run
+    # Make sure they've read the release notes for this version
+    check_accepted_release_notes()
+    
     write_header("#{Configurator.instance.product_name()} Configuration Procedure")
     write_from_file(File.dirname(__FILE__) + "/interface_text/configure_run")
     check_current_version()
@@ -1363,6 +1366,40 @@ module ConfigureCommand
         return @temp_directory
       end
     end
+  end
+  
+  def enable_release_notes_check?
+    false
+  end
+  
+  def check_accepted_release_notes
+    if enable_release_notes_check?() == false
+      return
+    end
+    
+    if Configurator.instance.is_locked?() == true
+      return
+    end
+    
+    basepath = Configurator.instance.get_base_path()
+    cmd = "#{basepath}/tools/accept_release_notes"
+    begin
+      cmd_result("#{cmd} -test")
+      accepted = true
+    rescue CommandError
+      accepted = false
+    end
+    
+    if accepted == false
+      version = Configurator.instance.get_simple_version()
+      warning("The release notes for #{version} have not been accepted. These list important changes to the new release and let you know how to avoid them or upgrade smoothly. Run `tools/accept_release_notes` to review and accept them.")
+      
+      unless forced?()
+        #raise IgnoreError.new()
+      end
+    end
+    
+    reset_errors()
   end
   
   def self.included(subclass)
