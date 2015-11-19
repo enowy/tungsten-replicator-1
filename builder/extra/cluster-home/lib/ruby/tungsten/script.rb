@@ -728,16 +728,35 @@ module OfflineServicesScript
           end
         end
       end
+      
+      begin
+        clear_logs = opt(:clear_logs)
+        if clear_logs_during_prepare() == false
+          clear_logs = false
+        end
+        
+        if clear_logs == true
+          cleanup_services(false, clear_logs)
+        end
+      rescue => e
+        TU.exception(e)
+        code = 1
+      end
     end
   end
   
   def cleanup(code = 0)
     if initialized?() == true && TI != nil && code == 0
       begin
+        clear_logs = opt(:clear_logs)
+        if clear_logs_during_prepare() == true
+          clear_logs = false
+        end
+        
         if allow_service_state_change?() == true && @options[:online] == true
-          cleanup_services(true, @options[:clear_logs])
-        elsif @options[:clear_logs] == true
-          cleanup_services(false, @options[:clear_logs])
+          cleanup_services(true, clear_logs)
+        elsif clear_logs == true
+          cleanup_services(false, clear_logs)
         end
       rescue => e
         TU.exception(e)
@@ -856,6 +875,10 @@ module OfflineServicesScript
     end
     
     @api
+  end
+  
+  def clear_logs_during_prepare
+    false
   end
 end
 

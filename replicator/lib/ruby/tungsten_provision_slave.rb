@@ -205,7 +205,7 @@ class TungstenReplicatorProvisionSlave
       script.puts("#{mysqldump} | tee >(egrep \"^-- CHANGE MASTER\" > #{opt(:change_master_file)}) | #{get_mysql_command()}")
       script.close()
       File.chmod(0755, script.path())
-      Configurator.instance.limit_file_permissions(script.path())
+      TU.limit_file_permissions(script.path())
       TU.cmd_result("#{script.path()}")
     rescue CommandError => ce
       TU.debug(ce)
