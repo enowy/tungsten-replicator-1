@@ -477,7 +477,13 @@ class PlogTransaction implements Comparable<PlogTransaction>
         ArrayList<ArrayList<OneRowChange.ColumnVal>> valValuesArray = oneRowChange
                 .getColumnValues();
         ArrayList<OneRowChange.ColumnVal> valValues = new ArrayList<ColumnVal>();
-        valValuesArray.add(valValues);
+        if (oneRowChange.getAction() != ActionType.DELETE)
+        {
+            // Do not add values list for a DELETE operation. This breaks
+            // downstream processors that do not expect to see a value in this
+            // array.
+            valValuesArray.add(valValues);
+        }
 
         if (logger.isDebugEnabled())
             logger.debug("Row Change: " + oneRowChange.getAction().toString()
