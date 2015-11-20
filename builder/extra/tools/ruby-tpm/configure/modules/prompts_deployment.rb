@@ -1531,12 +1531,20 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   end
   
   def load_default_value
-    if get_member_property(HOST_ENABLE_MANAGER) == "false"
-      @default = "false"
-    elsif get_member_property(DISABLE_SECURITY_CONTROLS) == "true"
+    if get_member_property(DISABLE_SECURITY_CONTROLS) == "true"
       @default = "false"
     else
       @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    if is_manager == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
     end
   end
 end
@@ -1651,6 +1659,17 @@ class HostEnableRMIAuthentication < ConfigurePrompt
       @default = "true"
     end
   end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    is_replicator = get_member_property(HOST_ENABLE_REPLICATOR)
+    if is_manager == "false" && is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
+    end
+  end
 end
 
 class HostEnableRMISSL < ConfigurePrompt
@@ -1666,6 +1685,17 @@ class HostEnableRMISSL < ConfigurePrompt
       @default = "false"
     else
       @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    is_replicator = get_member_property(HOST_ENABLE_REPLICATOR)
+    if is_manager == "false" && is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
     end
   end
 end

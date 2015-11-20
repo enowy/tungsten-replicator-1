@@ -414,7 +414,7 @@ EOF
           end
           
           connector_user_map = current_release_target_dir + '/tungsten-connector/conf/user.map'
-          if File.exists?(connector_user_map) && @config.getProperty(CONN_DELETE_USER_MAP) == "false"
+          if File.exists?(connector_user_map) && @config.getProperty(CONN_DELETE_USER_MAP) == "false" && @config.getProperty(ENABLE_CONNECTOR_BRIDGE_MODE) == "false"
             info("Copy the previous connector user map")
             FileUtils.cp(connector_user_map, prepare_dir + '/tungsten-connector/conf')
           end

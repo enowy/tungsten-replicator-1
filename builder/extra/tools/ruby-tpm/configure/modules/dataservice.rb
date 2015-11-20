@@ -48,6 +48,10 @@ module ReplicationServicePrompt
     [HOSTS, get_host_alias(), key]
   end
   
+  def get_host_property(key)
+    @config.getProperty(get_host_key(key))
+  end
+  
   def get_dataservice_key(key)
     [DATASERVICES, @config.getProperty(get_member_key(DEPLOYMENT_DATASERVICE)), key]
   end
@@ -1033,6 +1037,16 @@ class THLSSL < ConfigurePrompt
       @default = "false"
     else
       @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_replicator = get_host_property(HOST_ENABLE_REPLICATOR)
+    if is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
     end
   end
 end

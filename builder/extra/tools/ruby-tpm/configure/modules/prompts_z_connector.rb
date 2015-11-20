@@ -112,6 +112,10 @@ module ConnectorPrompt
     [HOSTS, @config.getProperty(get_member_key(DEPLOYMENT_HOST)), key]
   end
   
+  def get_host_property(key)
+    @config.getProperty(get_host_key(key))
+  end
+  
   def get_hash_prompt_key
     return [DATASERVICE_CONNECTOR_OPTIONS, get_dataservice(), @name]
   end
@@ -912,7 +916,7 @@ class ConnectorEnableBridgeMode < ConfigurePrompt
   include ConnectorPrompt
   
   def initialize
-    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN, "true")
+    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN)
     override_command_line_argument("connector-bridge-mode")
   end
   
@@ -925,6 +929,55 @@ class ConnectorEnableBridgeMode < ConfigurePrompt
       end
     else
       "OFF"
+    end
+  end
+  
+  def load_default_value
+    # If --enable-connector-bridge-mode is in the config, this entire
+    # section will be skipped. If it isn't, the default is true but we
+    # check for a bunch of values to see if it should be turned off
+    @default = "true"
+    
+    # Check if SmartScale is enabled
+    if get_member_property(CONN_SMARTSCALE) == "true"
+      @default = "false"
+    else
+      # Check if Selective R/W Splitting is enabled
+      property_strings = get_host_property(FIXED_PROPERTY_STRINGS)
+      if property_strings.include?("selective.rwsplitting=true")
+        @default = "false"
+      end
+      
+      user_map = "#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-connector/conf/user.map"
+      # If user.map exists, check it for R/W splitting features
+      # If not, check the configured settings
+      if File.exists?(user_map) && File.readable?(user_map)
+        begin
+          direct_count = cmd_result("egrep \"^@direct\" #{user_map} | wc -l").to_i()
+        rescue CommandError => ce
+          debug(ce)
+          direct_count = 0
+        end
+        
+        begin
+          hostoption_count = cmd_result("egrep \"^@hostoption\" #{user_map} | wc -l").to_i()
+        rescue CommandError => ce
+          debug(ce)
+          hostoption_count = 0
+        end
+      
+        if direct_count > 0 || hostoption_count > 0
+          @default = "false"
+        end
+      else
+        if get_member_property(CONN_RWSPLITTING) == "true"
+          @default = "false"
+        elsif get_member_property(CONN_RW_ADDRESSES).to_s() != ""
+          @default = "false"
+        elsif get_member_property(CONN_RO_ADDRESSES).to_s() != ""
+          @default = "false"
+        end
+      end
     end
   end
 end
