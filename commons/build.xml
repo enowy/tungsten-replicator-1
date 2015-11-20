@@ -96,11 +96,11 @@
 	</target>
 
 	<target name="compile">
-        <echo message="Using Java version ${ant.java.version}."/>
         <mkdir dir="${classes.dir}"/>
         <javac srcdir="${java.src.dir}"
                destdir="${classes.dir}"
                classpathref="compile.classpath"
+               fork="true"
                source="${javac.source}"
                target="${javac.target}"
                encoding="${javac.encoding}"
