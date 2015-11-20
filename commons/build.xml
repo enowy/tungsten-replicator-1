@@ -102,7 +102,6 @@
                classpathref="compile.classpath"
                source="${javac.source}"
                target="${javac.target}"
-               compiler="javac1.7"
                encoding="${javac.encoding}"
                debug="${javac.debug}"
                deprecation="${javac.deprecation}"
