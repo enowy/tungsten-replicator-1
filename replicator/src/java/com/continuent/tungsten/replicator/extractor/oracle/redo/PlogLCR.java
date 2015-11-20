@@ -291,13 +291,15 @@ class PlogLCR implements Serializable
                                     ((int) barr[dataoff + o] & 0xff) - 1));
                     }
                     BigDecimal bd = new BigDecimal(rtval.toString());
-                    /*
-                     * +2 because we put . before all digits; but Oracle format
-                     * puts if after first pair. +2 in scale offsets this
-                     */
+                    // +2 because we put . before all digits; but Oracle format
+                    // puts if after first pair. +2 in scale offsets this. Also
+                    // we recreate the big decimal to avoid triggering
+                    // scientific notation on printing.
                     bd = bd.scaleByPowerOfTen(shift * 2 + 2);
-                    columnVal.setValue(bd);
-                    columnSpec.setLength(bd.toPlainString().length());
+                    String bdPlainString = bd.toPlainString();
+                    BigDecimal bd2Rescaled = new BigDecimal(bdPlainString);
+                    columnVal.setValue(bd2Rescaled);
+                    columnSpec.setLength(bdPlainString.length());
                 }
             }
             else
