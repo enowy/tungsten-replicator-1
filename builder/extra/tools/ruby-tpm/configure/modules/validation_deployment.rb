@@ -438,9 +438,9 @@ class JavaVersionCheck < ConfigureValidationCheck
       if java_out =~ /Java|JDK/
         debug "Supported Java found"
         
-        java_version = java_out.scan(/(?:java|openjdk) version \"1.(?:6|7|8)./)
+        java_version = java_out.scan(/(?:java|openjdk) version \"1.(?:7|8)./)
         unless java_version.length == 1
-          error "Java 1.6 or greater is required to run Tungsten"
+          error "Java 1.7 or greater is required to run Tungsten"
         end
       else
         error "Unknown Java version"
