@@ -66,7 +66,17 @@ function apply(csvinfo)
   base_columns = escape_column_list(csvinfo.getBaseColumnList());
   pkey_columns = csvinfo.getPKColumnList();
 
+  if ((pkey_columns == null) || (pkey_columns.length == 0) || (pkey_columns == ''))
+      {
+    throw new com.continuent.tungsten.replicator.ReplicatorException("Incoming table data has no primary keys: " + schema + '.' + table);
+      }
+
   where_clause = csvinfo.getPKColumnJoinList(stage_table_fqn, base_table_fqn);
+
+  if ((where_clause == null) || (where_clause.length == 0) || (where_clause == ''))
+      {
+    throw new com.continuent.tungsten.replicator.ReplicatorException("Incoming table data has no primary keys: " + schema + '.' + table);
+      }
 
   // Clear the staging table.
   clear_sql = runtime.sprintf("DELETE FROM %s", stage_table_fqn);
@@ -88,7 +98,7 @@ function apply(csvinfo)
     message = "LOAD DATA ROW count does not match: sql=" + copy_sql
               + " expected_copy_rows=" + expected_copy_rows
               + " rows=" + rows
-              + "; exceptions are in " + csv_file + ".exceptions";
+              + "; exceptions are in " + exc_file;
 
     logger.error(message);
     throw new com.continuent.tungsten.replicator.ReplicatorException(message);
