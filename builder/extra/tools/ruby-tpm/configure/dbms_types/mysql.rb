@@ -2030,7 +2030,11 @@ module ConfigureDeploymentStepMySQL
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-replicator/lib/")
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-connector/lib/")
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-manager/lib/")
-      FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/bristlecone/lib-ext/")
+      
+      bristlecone_lib = "#{get_deployment_basedir()}/bristlecone/lib-ext/"
+      if File.exist?(bristlecone_lib)
+        FileUtils.ln_sf(connector_path, bristlecone_lib)
+      end
 		end
 	end
 end
