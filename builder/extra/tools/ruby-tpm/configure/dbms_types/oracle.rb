@@ -517,34 +517,6 @@ module OracleRedoReaderCheck
   end
 end
 
-class OracleLoginCheck < ConfigureValidationCheck
-  include ReplicationServiceValidationCheck
-  include OracleCheck
-
-  def set_vars
-    @title = "Oracle replication credentials login check"
-    @fatal_on_error = true
-  end
-  
-  def validate
-    results = get_applier_datasource.sql_result("SELECT 1 FROM ALL_USERS WHERE ROWNUM = 1")
-    login_output = nil
-    if results.size() > 0 && results[0].is_a?(Hash)
-      login_output = results[0]["1"]
-    end
-    
-    if login_output == 1
-      info("Oracle server and login is OK for #{get_applier_datasource.get_connection_summary()}")
-    else
-      error("Unable to connect to the Oracle server using #{get_applier_datasource.get_connection_summary()}")
-      
-      if get_applier_datasource().password.to_s() == ""
-        help("Try specifying a password for #{get_applier_datasource.get_connection_summary()}")
-      end
-    end
-  end
-end
-
 class OracleVersionCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
   include OracleCheck
@@ -587,11 +559,39 @@ class OracleVersionCheck < ConfigureValidationCheck
       else
         debug("The Oracle server at #{get_applier_datasource.get_connection_summary()} is running version #{match[1]}")
         unless supported_versions.include?(match[1].to_i())
-          warning("The Oracle #{extractor_method} extractor does not support version #{match[1]}")
+          error("The Oracle #{extractor_method} extractor does not support version #{match[1]}")
         end
       end
     else
       warning("Unable to check the version for #{get_applier_datasource.get_connection_summary()}")
+    end
+  end
+end
+
+class OracleLoginCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include OracleCheck
+
+  def set_vars
+    @title = "Oracle replication credentials login check"
+    @fatal_on_error = true
+  end
+  
+  def validate
+    results = get_applier_datasource.sql_result("SELECT 1 FROM ALL_USERS WHERE ROWNUM = 1")
+    login_output = nil
+    if results.size() > 0 && results[0].is_a?(Hash)
+      login_output = results[0]["1"]
+    end
+    
+    if login_output == 1
+      info("Oracle server and login is OK for #{get_applier_datasource.get_connection_summary()}")
+    else
+      error("Unable to connect to the Oracle server using #{get_applier_datasource.get_connection_summary()}")
+      
+      if get_applier_datasource().password.to_s() == ""
+        help("Try specifying a password for #{get_applier_datasource.get_connection_summary()}")
+      end
     end
   end
 end
