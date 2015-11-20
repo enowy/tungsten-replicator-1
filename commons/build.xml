@@ -100,8 +100,6 @@
         <javac srcdir="${java.src.dir}"
                destdir="${classes.dir}"
                classpathref="compile.classpath"
-               source="${javac.source}"
-               target="${javac.target}"
                encoding="${javac.encoding}"
                debug="${javac.debug}"
                deprecation="${javac.deprecation}"
