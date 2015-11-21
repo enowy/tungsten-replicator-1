@@ -34,6 +34,7 @@ import org.apache.log4j.Logger;
 import com.continuent.tungsten.common.cache.LargeObjectArray;
 import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
+import com.continuent.tungsten.fsm.core.Action;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.dbms.DBMSData;
@@ -473,13 +474,17 @@ class PlogTransaction implements Comparable<PlogTransaction>
         ArrayList<ArrayList<OneRowChange.ColumnVal>> keyValuesArray = oneRowChange
                 .getKeyValues();
         ArrayList<OneRowChange.ColumnVal> keyValues = new ArrayList<ColumnVal>();
-        keyValuesArray.add(keyValues);
+        if (oneRowChange.getAction() != ActionType.INSERT)
+        {
+            // Do not add key values list for a delete operation.
+            keyValuesArray.add(keyValues);
+        }
         ArrayList<ArrayList<OneRowChange.ColumnVal>> valValuesArray = oneRowChange
                 .getColumnValues();
         ArrayList<OneRowChange.ColumnVal> valValues = new ArrayList<ColumnVal>();
         if (oneRowChange.getAction() != ActionType.DELETE)
         {
-            // Do not add values list for a DELETE operation. This breaks
+            // Do not add column values list for a DELETE operation. This breaks
             // downstream processors that do not expect to see a value in this
             // array.
             valValuesArray.add(valValues);
