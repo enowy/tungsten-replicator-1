@@ -110,6 +110,7 @@
         <javac srcdir="${java.src.dir}"
                destdir="${classes.dir}"
                classpathref="compile.classpath"
+               fork="true"
                executable="${javac.executable}"
                source="${javac.source}"
                target="${javac.target}"
