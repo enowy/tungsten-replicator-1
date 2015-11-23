@@ -2075,7 +2075,7 @@ class HostFileProtectionLevel < ConfigurePrompt
     when "user"
       return "0077"
     when "group"
-      return "0037"
+      return "0027"
     else
       return nil
     end
