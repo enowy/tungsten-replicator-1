@@ -8,3 +8,7 @@ replicator.applier.dbms.getColumnMetadataFromDB=true
 # size. 
 replicator.applier.dbms.optimizeRowEvents=@{REPL_SVC_APPLIER_OPTIMIZE_ROW_EVENTS}
 replicator.applier.dbms.maxRowBatchSize=20
+
+# Required to enable tests to work. (Do not remove.)
+replicator.applier.oracle.service=@{APPLIER.REPL_ORACLE_SERVICE}
+replicator.applier.oracle.sid=@{APPLIER.REPL_ORACLE_SID}
