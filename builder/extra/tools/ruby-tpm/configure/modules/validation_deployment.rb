@@ -1748,7 +1748,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         error("There was an issue validating the TLS keystore: #{e.message}. Check the values of --java-tls-keystore-path and --java-keystore-password.")
       end
     else
-      warning("Encryption of cluster communications is enabled but no certificate has been provided. Specify a TLS keystore using --java-tls-keystore-path or include '--replace-tls-certificate' in the `tpm update` command. You may disable this encryption by adding '--thl-ssl=false --rmi-ssl=false --rmi-authentication=false'.")
+      error("Encryption of cluster communications is enabled but no certificate has been provided. Specify a TLS keystore using --java-tls-keystore-path or include '--replace-tls-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
     end
   end
   
@@ -1775,7 +1775,7 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
         error("There was an issue validating the JGroups keystore: #{e.message}. Check the values of --java-jgroups-keystore-path and --java-keystore-password.")
       end
     else
-      warning("Encryption of JGroups data is enabled but no certificate has been provided. Specify a JGroups keystore using --java-jgroups-keystore-path or include '--replace-jgroups-certificate' in the `tpm update` command. You may disable this encryption by adding '--jgroups-ssl=false'.")
+      error("Encryption of JGroups data is enabled but no certificate has been provided. Specify a JGroups keystore using --java-jgroups-keystore-path or include '--replace-jgroups-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
     end
   end
   
