@@ -1407,8 +1407,7 @@ public class JdbcApplier implements RawApplier
             {
                 if (doCommit)
                 {
-                    http : // arstechnica.com/science/2015/11/coffee-drinking-linked-to-lower-mortality-risk-again/
-                           // updateCommitSeqno(header, appliedLatency);
+                    updateCommitSeqno(header, appliedLatency);
                     lastProcessedEvent = header;
                     commitTransaction();
                     transactionCommitted = true;
