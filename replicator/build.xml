@@ -107,10 +107,22 @@
     </target>
 
     <target name="compile">
+        <exec executable="which" outputproperty="javac.executable" searchpath="true">
+          <arg value="javac" />
+        </exec>
+        <fail message="Unable to find javac in the current $PATH">
+          <condition>
+            <equals arg1="${javac.executable}" arg2="" trim="true"/>
+          </condition>
+        </fail>
+        <echo message="Using javac ${javac.executable}."/>
+        
         <mkdir dir="${classes.dir}"/>
         <javac srcdir="${java.src.dir}"
                destdir="${classes.dir}"
                classpathref="compile.classpath"
+               fork="true"
+               executable="${javac.executable}"
                source="${javac.source}"
                target="${javac.target}"
                encoding="${javac.encoding}"
