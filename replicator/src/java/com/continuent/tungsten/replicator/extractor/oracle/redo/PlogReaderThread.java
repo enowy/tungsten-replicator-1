@@ -41,7 +41,6 @@ import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
-import com.continuent.tungsten.common.exec.ProcessExecutor;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -62,14 +61,13 @@ public class PlogReaderThread extends Thread
 
     private BlockingQueue<DBMSEvent> queue;
 
-    private String       plogDirectory;
-    private int          sleepSizeInMilliseconds;
-    private int          transactionFragSize = 0;
-    private String       replicateConsoleScript;
-    private String       replicateApplyName;
-    private String       tungstenSchema;
-    private RawByteCache cache;
-    private int          lcrBufferLimit;
+    private String            plogDirectory;
+    private int               sleepSizeInMilliseconds;
+    private int               transactionFragSize = 0;
+    private String            tungstenSchema;
+    private RedoReaderManager vmrrMgr;
+    private RawByteCache      cache;
+    private int               lcrBufferLimit;
 
     /*
      * dict cache enabled / disabled for current plog
@@ -692,71 +690,6 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * Ask mine to register our extractor, so it can then set last obsolete. We
-     * call this on every start of extractor, as it is harmless to do it
-     * repeatedly.
-     * 
-     * @throws IOException
-     */
-    private void registerThisExtractorAtMine() throws ReplicatorException
-    {
-        String command = replicateConsoleScript
-                + " PROCESS DISCONNECTED_APPLY REGISTER "
-                + this.replicateApplyName;
-        logger.info("Registering with mine process: " + command);
-        exec(command);
-    }
-
-    /**
-     * Signal mine our last obsolete plog.
-     * 
-     * @param newObsolete last obsolete plog sequence to set
-     */
-    private void reportLastObsoletePlog(int newObsolete)
-            throws ReplicatorException
-    {
-        String command = replicateConsoleScript
-                + " PROCESS DISCONNECTED_APPLY SET_OBSOLETE "
-                + this.replicateApplyName + " " + newObsolete;
-        logger.info("Signaling last obsolete plog file: " + command);
-        exec(command);
-    }
-
-    /**
-     * Execute an OS command and return the result of stdout.
-     * 
-     * @param command Command to run
-     * @return Returns output of the command in a string
-     * @throws ReplicatorException Thrown if command execution fails
-     */
-    private String exec(String command) throws ReplicatorException
-    {
-        String[] osArray = {"sh", "-c", command};
-        ProcessExecutor pe = new ProcessExecutor();
-        pe.setCommands(osArray);
-        if (logger.isDebugEnabled())
-        {
-            logger.debug("Executing OS command: " + command);
-        }
-        pe.run();
-        if (logger.isDebugEnabled())
-        {
-            logger.debug("OS command stdout: " + pe.getStdout());
-            logger.debug("OS command stderr: " + pe.getStderr());
-            logger.debug("OS command exit value: " + pe.getExitValue());
-        }
-        if (!pe.isSuccessful())
-        {
-            String msg = "OS command failed: command=" + command + " rc="
-                    + pe.getExitValue() + " stdout=" + pe.getStdout()
-                    + " stderr=" + pe.getStderr();
-            logger.error(msg);
-            throw new ReplicatorException(msg);
-        }
-        return pe.getStdout();
-    }
-
-    /**
      * Main loop of plog reader
      * 
      * @param context Tungsten pluging context
@@ -775,10 +708,9 @@ public class PlogReaderThread extends Thread
     public PlogReaderThread(PluginContext context,
             BlockingQueue<DBMSEvent> queue, String plogDirectory,
             int sleepSizeInMilliseconds, int transactionFragSize,
-            String replicateConsoleScript, String replicateApplyName,
-            RawByteCache cache, int lcrBufferLimit) throws ReplicatorException
+            RedoReaderManager vmrrMgr, RawByteCache cache, int lcrBufferLimit)
+                    throws ReplicatorException
     {
-
         logger.info("PlogReaderThread: " + plogDirectory + "/"
                 + sleepSizeInMilliseconds + "/" + transactionFragSize);
 
@@ -786,13 +718,10 @@ public class PlogReaderThread extends Thread
         this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
         this.queue = queue;
         this.transactionFragSize = transactionFragSize;
-        this.replicateConsoleScript = replicateConsoleScript;
-        this.replicateApplyName = replicateApplyName;
+        this.vmrrMgr = vmrrMgr;
         this.tungstenSchema = context.getReplicatorSchemaName().toLowerCase();
         this.cache = cache;
         this.lcrBufferLimit = lcrBufferLimit;
-
-        this.registerThisExtractorAtMine();
     }
 
     /** Returns the last processed event ID. */
@@ -811,6 +740,7 @@ public class PlogReaderThread extends Thread
     {
         try
         {
+            // Run the task loop.
             runTask();
         }
         catch (InterruptedException e)
@@ -851,6 +781,9 @@ public class PlogReaderThread extends Thread
     private void runTask() throws InterruptedException, IOException,
             SerialException, ReplicatorException, SQLException
     {
+        // Ensure the replicator is registered with the redo reader.
+        vmrrMgr.registerExtractor();
+
         int firstSequence = Integer.MAX_VALUE;
         // LinkedList<PLogLCR> listOfLCR = new LinkedList<PlogLCR>();
         ArrayList<PlogTransaction> tranAtSameSCN = new ArrayList<PlogTransaction>();
@@ -864,6 +797,8 @@ public class PlogReaderThread extends Thread
         {
             while (firstSequence == Integer.MAX_VALUE)
             {
+                int retries = 0;
+
                 // Find oldest plog; check for interrupt on thread
                 // thereafter.
                 firstSequence = findOldestPlogSequence(plogDirectory);
@@ -881,7 +816,20 @@ public class PlogReaderThread extends Thread
 
                 // Bide a wee. If interrupted we just throw the exception
                 // and exit routine.
+                retries++;
                 Thread.sleep(sleepSizeInMilliseconds);
+
+                // Check for a dead redo reader every 20 retries.
+                if ((retries % 20) == 0)
+                {
+                    if (!vmrrMgr.isRunning())
+                    {
+                        logger.warn(
+                                "Redo reader process appears to have failed; attempting restart");
+                        vmrrMgr.start();
+                    }
+                }
+
             }
         }
 
@@ -899,7 +847,7 @@ public class PlogReaderThread extends Thread
             if (lastReportedObsolePlogSeq != lastObsolePlog
                     && lastObsolePlog > 0)
             {
-                reportLastObsoletePlog(lastObsolePlog);
+                vmrrMgr.reportLastObsoletePlog(lastObsolePlog);
                 lastReportedObsolePlogSeq = lastObsolePlog;
             }
             openFile(plogFilename);
@@ -946,6 +894,8 @@ public class PlogReaderThread extends Thread
                                     currentIncludePlog.plogFilename
                                             + " ended prematurely, file is corrupted.");
                         }
+
+                        // Check for a newer plog file every 5 retries.
                         if ((retryCount % 5) == 0)
                         {
                             String latestPlogFilename = findMostRecentPlogFile(
@@ -964,6 +914,19 @@ public class PlogReaderThread extends Thread
                                 readHeader();
                             }
                         }
+
+                        // Check for a dead redo reader every 20 retries.
+                        if (retryCount > 0 && (retryCount % 20) == 0)
+                        {
+                            if (!vmrrMgr.isRunning())
+                            {
+                                logger.warn(
+                                        "Redo reader process appears to have failed; attempting restart");
+                                vmrrMgr.start();
+                            }
+                        }
+
+                        // Update retries and sleep.
                         retryCount++;
                         Thread.sleep(sleepSizeInMilliseconds);
                         if (logger.isDebugEnabled())

@@ -34,7 +34,6 @@ import org.apache.log4j.Logger;
 import com.continuent.tungsten.common.cache.LargeObjectArray;
 import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
-import com.continuent.tungsten.fsm.core.Action;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.dbms.DBMSData;

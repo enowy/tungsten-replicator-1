@@ -39,6 +39,7 @@ import org.apache.log4j.Logger;
 import com.continuent.tungsten.common.cluster.resource.ResourceState;
 import com.continuent.tungsten.common.cluster.resource.physical.Replicator;
 import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.DynamicMBeanHelper;
 import com.continuent.tungsten.common.jmx.JmxManager;
@@ -54,6 +55,7 @@ import com.continuent.tungsten.replicator.conf.PropertiesManager;
 import com.continuent.tungsten.replicator.conf.ReplicatorConf;
 import com.continuent.tungsten.replicator.conf.ReplicatorRuntimeConf;
 import com.continuent.tungsten.replicator.datasource.DataSourceAdministrator;
+import com.continuent.tungsten.replicator.extractor.oracle.redo.RedoReaderManager;
 
 /**
  * This class implements the main() method for launching replicator process and
@@ -81,8 +83,8 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
     private int      managerRMIPort     = -1;
     private TimeZone hostTimeZone       = null;
     private TimeZone replicatorTimeZone = null;
-    
-    private AuthenticationInfo                          securityInfo          = null;
+
+    private AuthenticationInfo securityInfo = null;
 
     /**
      * Creates a new <code>ReplicatorManager</code> object
@@ -109,12 +111,15 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
         // parameters required for secure operation.
         try
         {
-            // Load security information and set critical properties as system properties   
+            // Load security information and set critical properties as system
+            // properties
             logger.info("Loading security information");
             AuthenticationInfo authenticationInfo = SecurityHelper
-                    .loadAuthenticationInformation(TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+                    .loadAuthenticationInformation(
+                            TUNGSTEN_APPLICATION_NAME.REPLICATOR);
             this.securityInfo = authenticationInfo;
-            logger.info(SecurityHelper.printSecuritySummary(authenticationInfo));            
+            logger.info(
+                    SecurityHelper.printSecuritySummary(authenticationInfo));
         }
         catch (ConfigurationException ce)
         {
@@ -476,6 +481,8 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
             resetTHL(serviceProps, progress);
 
             resetRelay(serviceProps, progress);
+
+            resetRedo(name, serviceProps, progress);
         }
         else if (option.equalsIgnoreCase("-thl"))
         {
@@ -492,6 +499,11 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
         {
             logger.info("Resetting database for service " + name);
             resetDatabase(serviceProps, progress);
+        }
+        else if (option.equalsIgnoreCase("-redo"))
+        {
+            logger.info("Resetting Oracle redo reader for service " + name);
+            this.resetRedo(name, serviceProps, progress);
         }
         else
         {
@@ -584,6 +596,54 @@ public class ReplicationServiceManager implements ReplicationServiceManagerMBean
         {
             logger.error(String.format("Could not remove the log directory %s",
                     logDirName));
+        }
+    }
+
+    /**
+     * Resets the redo reader if it exists. This only exists for Oracle
+     * replication.
+     */
+    private void resetRedo(String name, TungstenProperties serviceProps,
+            Map<String, String> progress)
+    {
+        // See if there is a vmrr control script and use this to configure the
+        // redo reader manager.
+        String clusterHome;
+        try
+        {
+            clusterHome = ClusterConfiguration.getClusterHome();
+        }
+        catch (ConfigurationException e)
+        {
+            logger.error(
+                    "Unable to locate cluster-home directory; ensure replicator is properly installed",
+                    e);
+            return;
+        }
+        String vmrrControlScriptName = "bin/vmrrd_" + name;
+        File vmrrControlScript = new File(clusterHome, vmrrControlScriptName);
+
+        // Only execute if the script exists.
+        if (vmrrControlScript.canExecute())
+        {
+            logger.info(
+                    "Found vmrr control script, trying to reset Oracle redo reader: "
+                            + vmrrControlScript.getAbsolutePath());
+            try
+            {
+                RedoReaderManager vmrrMgr = new RedoReaderManager();
+                vmrrMgr.setVmrrControlScript(
+                        vmrrControlScript.getAbsolutePath());
+                vmrrMgr.setReplicateApplyName(name);
+                vmrrMgr.initialize();
+                vmrrMgr.reset("NOW");
+            }
+            catch (ReplicatorException e)
+            {
+                logger.error(
+                        "Unable to configure redo reader: " + e.getMessage(),
+                        e);
+            }
         }
     }
 

@@ -9,10 +9,6 @@ replicator.extractor.dbms.plogDirectory=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/mine
 # changes to include in a single transaction. 
 replicator.extractor.dbms.transactionFragSize=@{REPL_ORACLE_REDO_MINER_TRANSACTION_FRAGMENT_SIZE}
 
-# Location of the vmrr start-console.sh script, which delivers commands to the 
-# redo reader. 
-replicator.extractor.dbms.replicateConsoleScript=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/start-console.sh
-
 # Number of row changes per transaction to hold as Java objects.  Above this
 # number transactions spill to byte array cache in storage.  The value should
 # be large enough to ensure that all normally occurring OLTP transactions

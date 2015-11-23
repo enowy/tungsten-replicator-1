@@ -168,7 +168,7 @@ public class OpenReplicatorManagerCtrl
         println("  properties [-filter name]    - Print all in-memory properties and their current values");
         println("             [-values]         - Print only the values in plain text");
         println("  purge [-y] [-limit s]        - Purge non-Tungsten logins on DBMS, waiting up to s seconds");
-        println("  reset [-y] {-all | -thl | -relay | -db}");
+        println("  reset [-y] {-all | -thl | -relay | -db | -redo}");
         println("                               - Deletes the replicator service (-all or empty), thl directory,");
         println("                                 relay logs directory or tungsten database for the service");
         println("  restore [-uri u] [-limit s]  - Restore database");
@@ -852,6 +852,15 @@ public class OpenReplicatorManagerCtrl
                 {
                     yes = confirm(String
                             .format("Do you really want to delete database for replication service %s completely?",
+                                    service));
+                    options.put("option", curOption);
+                    // For now, take only first option into account
+                    break;
+                }
+                else if ("-redo".equalsIgnoreCase(curOption))
+                {
+                    yes = confirm(String
+                            .format("Do you really want to delete Oracle redo reader state for replication service %s and reset to current SCN?",
                                     service));
                     options.put("option", curOption);
                     // For now, take only first option into account

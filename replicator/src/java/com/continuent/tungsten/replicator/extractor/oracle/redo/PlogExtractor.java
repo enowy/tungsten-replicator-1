@@ -29,6 +29,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cache.RawByteCache;
+import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.ReplicatorRuntimeConf;
 import com.continuent.tungsten.replicator.database.Database;
@@ -86,6 +88,7 @@ public class PlogExtractor implements RawExtractor
 
     private PlogReaderThread              readerThread;
     private ArrayBlockingQueue<DBMSEvent> queue;
+    private String                        lastEventId;
 
     private boolean cancelled = false;
 
@@ -94,8 +97,10 @@ public class PlogExtractor implements RawExtractor
     private int queueSize = 100;
 
     private int    sleepSizeInMilliseconds = 1000;
-    private String replicateConsoleScript;
-    private String replicateApplyName      = "TungstenApply";
+    private String replicateApplyName;
+
+    // Manager for vmrr process.
+    private RedoReaderManager vmrrMgr;
 
     // Cache used for storing byte vectors. For now the cache does not
     // use object serialization to memory, hence the 0 defaults.
@@ -120,6 +125,10 @@ public class PlogExtractor implements RawExtractor
     public void configure(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        if (this.replicateApplyName == null)
+        {
+            replicateApplyName = context.getServiceName();
+        }
         if (cacheDir == null)
         {
             File home = ReplicatorRuntimeConf.locateReplicatorHomeDir();
@@ -136,20 +145,27 @@ public class PlogExtractor implements RawExtractor
     public void prepare(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
-        // Make sure we can find the console script used to communicate with the
-        // mine process.
-        if (this.replicateConsoleScript == null)
+        // Locate the vmrr control script and use this to configure the redo
+        // reader manager.
+        String clusterHome;
+        try
+        {
+            clusterHome = ClusterConfiguration.getClusterHome();
+        }
+        catch (ConfigurationException e)
         {
             throw new ReplicatorException(
-                    "Replicate console script is not set (property replicateConsoleScript)");
+                    "Unable to locate cluster-home directory; ensure replicator is properly installed",
+                    e);
         }
-        File consoleScript = new File(replicateConsoleScript);
-        if (!consoleScript.canExecute())
-        {
-            throw new ReplicatorException(
-                    "Replicate console script is missing or not executable: script="
-                            + consoleScript.getAbsolutePath());
-        }
+        String vmrrControlScriptName = "bin/vmrrd_" + context.getServiceName();
+        String vmrrControlScript = new File(clusterHome, vmrrControlScriptName)
+                .getAbsolutePath();
+
+        vmrrMgr = new RedoReaderManager();
+        vmrrMgr.setVmrrControlScript(vmrrControlScript);
+        vmrrMgr.setReplicateApplyName(replicateApplyName);
+        vmrrMgr.initialize();
 
         // Set up the byte cache for large objects.
         byteCache = new RawByteCache(cacheDir, cacheMaxTotalBytes,
@@ -173,12 +189,11 @@ public class PlogExtractor implements RawExtractor
                     "Unable to locate data source: name=" + dataSource);
         }
 
-        // Set up the reader thread.
+        // Set up the queue for reading.
         queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
         readerThread = new PlogReaderThread(context, queue, plogDirectory,
-                sleepSizeInMilliseconds, transactionFragSize,
-                replicateConsoleScript, replicateApplyName, byteCache,
-                lcrBufferLimit);
+                sleepSizeInMilliseconds, transactionFragSize, vmrrMgr,
+                byteCache, lcrBufferLimit);
         readerThread.setName("plog-reader-task");
 
         readerThread.prepare();
@@ -194,10 +209,29 @@ public class PlogExtractor implements RawExtractor
             throws ReplicatorException, InterruptedException
     {
         cancelled = true;
+
+        // Stop the reader thread.
         if (readerThread != null)
         {
             readerThread.cancel();
             readerThread = null;
+        }
+
+        // Make a best effort to stop the redo reader process.
+        if (vmrrMgr != null)
+        {
+            try
+            {
+                vmrrMgr.stop();
+            }
+            catch (ReplicatorException e)
+            {
+                logger.warn("Unable to stop vmrr process", e);
+            }
+            finally
+            {
+                vmrrMgr = null;
+            }
         }
     }
 
@@ -209,14 +243,11 @@ public class PlogExtractor implements RawExtractor
     @Override
     public void setLastEventId(String eventId) throws ReplicatorException
     {
+        // Store for use when we start extraction.
         if (eventId != null)
         {
-            logger.info("Starting from eventId " + eventId);
-            readerThread.setLastEventId(eventId);
-        }
-        else
-        {
-            logger.info("Starting from fresh, no eventId set.");
+            lastEventId = eventId.trim();
+            logger.info("Last event ID received: " + eventId);
         }
     }
 
@@ -263,17 +294,6 @@ public class PlogExtractor implements RawExtractor
     public void setSleepSizeInMilliseconds(int sleepSizeInMilliseconds)
     {
         this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
-    }
-
-    /**
-     * Sets the replicateConsoleScript value - start-console.sh used to update
-     * last obsole plog for mine
-     * 
-     * @param replicateConsoleScript The complete pah+name of the script.
-     */
-    public void setReplicateConsoleScript(String replicateConsoleScript)
-    {
-        this.replicateConsoleScript = replicateConsoleScript;
     }
 
     /**
@@ -337,8 +357,46 @@ public class PlogExtractor implements RawExtractor
     @Override
     public DBMSEvent extract() throws ReplicatorException, InterruptedException
     {
+        // Perform first time initialization.
         if (!readerThread.isAlive())
+        {
+            // See if we need to position the redo reader to read a different
+            // SCN.
+            if (this.lastEventId != null)
+            {
+                // Check to see the kind of last event ID.
+                if (lastEventId.equalsIgnoreCase("NOW"))
+                {
+                    // Position to current SCN, whatever that may be.
+                    logger.info(
+                            "Positioning redo reader to start from current SCN");
+                    vmrrMgr.reset("NOW");
+                }
+                else if (lastEventId.matches("^[0-9]+$"))
+                {
+                    // Position to an explicit SCN.
+                    logger.info(
+                            "Positioning redo reader to start from explicit SCN: "
+                                    + lastEventId);
+                    vmrrMgr.reset(lastEventId);
+                }
+                else
+                {
+                    logger.info("Starting from eventId: " + lastEventId);
+                }
+            }
+            else
+            {
+                logger.info(
+                        "Starting from current redo reader position, no eventId set.");
+            }
+
+            // Ensure the redo reader is started.
+            vmrrMgr.start();
+
+            // Start the thread.
             readerThread.start();
+        }
 
         if (logger.isDebugEnabled())
         {
