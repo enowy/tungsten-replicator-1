@@ -140,6 +140,22 @@ module GroupValidationCheckMember
     [@parent_group.name, get_member(), name]
   end
   
+  def get_member_configured_value(key)
+    [
+      get_member_key(key),
+      get_group_option_key(key),
+      [@parent_group.name, DEFAULTS, key]
+    ].each{
+      |k|
+      v = @config.getNestedProperty(k)
+      if v != nil
+        return v
+      end
+    }
+    
+    return nil
+  end
+  
   def get_member_value(key)
     @config.getProperty(get_member_key(key))
   end

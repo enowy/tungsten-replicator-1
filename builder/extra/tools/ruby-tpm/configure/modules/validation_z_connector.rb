@@ -29,6 +29,10 @@ module ConnectorCheck
     return [DATASERVICES, ds_aliases.at(0), key]
   end
   
+  def get_group_option_key(key)
+    [DATASERVICE_CONNECTOR_OPTIONS, get_dataservice_alias(), key]
+  end
+  
   def get_dataservice_alias
     if self.is_a?(HashPromptMemberModule)
       get_member()
@@ -206,5 +210,51 @@ class RouterAffinityCheck < ConfigureValidationCheck
         end
       end
     end
+  end
+end
+
+class RouterBridgeModeDefaultCheck < ConfigureValidationCheck
+  include ConnectorCheck
+
+  def set_vars
+    @title = "Check if we are upgrading the user to bridge-mode by default"
+  end
+
+  def validate
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    connector_props = "#{current_release_directory}/tungsten-connector/conf/connector.properties"
+    if File.exist?(connector_props) != true
+      return
+    end
+    
+    begin
+      current_setting = cmd_result("egrep \"^bridgeMode=\" #{connector_props}")
+      if current_setting == "bridgeMode=OFF"
+        current_setting = "false"
+      else
+        # Bridge Mode was already enabled so we don't need to check anymore
+        return
+      end
+    rescue CommandError => ce
+      debug(ce)
+      warning("Unable to check for bridge-mode in #{connector_props}")
+    end
+    
+    chosen_setting = get_member_configured_value(ENABLE_CONNECTOR_BRIDGE_MODE)
+    new_setting = get_member_value(ENABLE_CONNECTOR_BRIDGE_MODE)
+    if chosen_setting == nil && new_setting == "true"
+      warning("Due to updated recomendations, the connector bridge mode will be enabled on this server by default. Update the configuration with --connector-bridge-mode=false to disable this behavior.")
+    end
+  end
+  
+  def enabled?
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    if current_release_directory.to_s() != ""
+      if File.exist?(current_release_directory) != true
+        return false
+      end
+    end
+    
+    return super()
   end
 end
