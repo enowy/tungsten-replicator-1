@@ -117,14 +117,18 @@ fi
 
 ### check for whiptail interactive GUI tools
 WT=`which whiptail`
+### disabling whiptail use until 5.1.0
+WT=""
 if [ -x "$WT" ]; then
 
 	#BUTTON="Proceed to Acceptance Question"
 	BUTTON="NEXT >>";
 
-	whiptail --title "RELEASE NOTES" --scrolltext --fb --ok-button "$BUTTON" --textbox $RELEASE_NOTES 40 80
+	LINES=`tput lines`
+	COLS=`tput cols`
+	whiptail --title "RELEASE NOTES" --scrolltext --fb --ok-button "$BUTTON" --textbox $RELEASE_NOTES $LINES $COLS
 
-	if (whiptail --title "RELEASE ACCEPTANCE" --defaultno --fb --yesno "Do you accept the $VERSION release as presented?" 10 60) then
+	if (whiptail --title "RELEASE ACCEPTANCE" --defaultno --fb --yesno "Do you accept the $VERSION release as presented?" 10 $COLS) then
 		#echo "You chose Yes - Exit status was $?."
 		ANSWER="yes"
 	else
