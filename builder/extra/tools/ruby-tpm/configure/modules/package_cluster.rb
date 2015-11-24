@@ -919,6 +919,14 @@ module ClusterCommandModule
       end
       topology = Topology.build(ds_alias, @config)
       
+      relay_source = @config.getNestedProperty([DATASERVICES, ds_alias, DATASERVICE_RELAY_SOURCE])
+      if relay_source != nil
+        ds_name = @config.getNestedProperty([DATASERVICES, ds_alias, DATASERVICENAME])
+        if ds_name == relay_source
+          @config.setNestedProperty(ds_alias, [DATASERVICES, ds_alias, DATASERVICENAME])
+        end
+      end
+      
       option_groups = {
         DATASERVICE_REPLICATION_OPTIONS => REPL_SERVICES,
         DATASERVICE_CONNECTOR_OPTIONS => CONNECTORS,
