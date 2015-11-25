@@ -59,6 +59,14 @@ public class EventGenerationHelper
         return replDbmsEvent;
     }
 
+    public void addStatementToEvent(ReplDBMSEvent event, String defaultSchema,
+            String query)
+    {
+        Timestamp ts = new Timestamp(System.currentTimeMillis());
+        event.getDBMSEvent().getData()
+                .add(new StatementData(query, ts.getTime(), defaultSchema));
+    }
+    
     /**
      * Creates an event from a query.
      * 
