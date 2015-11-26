@@ -221,6 +221,19 @@ public class OracleDatabase extends AbstractDatabase
         column.setBlob(type == Types.BLOB || type == Types.BINARY
                 || type == Types.VARBINARY || type == Types.LONGVARBINARY);
 
+        // Add precision and scale to the NUMBER description, i.e.
+        // "NUMBER(p,s)", when both of them are specified. This is a dirty
+        // work-around until we have a proper way to get the scale parameter.
+        // TODO: we really need a separate column.getScale() method (THL?).
+        long precision = column.getLength();
+        int scale = rs.getInt("decimal_digits");
+        if (type == Types.DECIMAL && precision > 0 && scale > 0)
+        {
+            String typeDesc = column.getTypeDescription();
+            typeDesc = typeDesc + "(" + precision + "," + scale + ")";
+            column.setTypeDescription(typeDesc);
+        }
+
         return column;
     }
 
