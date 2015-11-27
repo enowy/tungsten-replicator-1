@@ -69,6 +69,7 @@ public class OracleApplier extends JdbcApplier
         if (!optimizeRowEvents)
         {
             super.applyOneRowChangePrepared(oneRowChange);
+            return;
         }
 
         getColumnInformation(oneRowChange);
