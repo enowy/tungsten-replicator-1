@@ -4,6 +4,10 @@ replicator.extractor.dbms=com.continuent.tungsten.replicator.extractor.oracle.re
 # Location of directory containing plog files. 
 replicator.extractor.dbms.plogDirectory=@{REPL_ORACLE_REDO_MINER_DIRECTORY}/mine
 
+# The number of plog files to retain. This affects how far back you can 
+# extract if the replicator restarts or you purge the end of the THL. 
+replicator.extractor.dbms.retainedPlogs=20
+
 # The fragment size for transactions. A value of 0 means that transactions
 # will not be fragmented.  A positive integer indicates the number of row 
 # changes to include in a single transaction. 

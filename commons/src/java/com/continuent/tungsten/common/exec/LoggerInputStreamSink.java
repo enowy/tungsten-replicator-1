@@ -34,13 +34,13 @@ import org.apache.log4j.Logger;
  */
 public class LoggerInputStreamSink implements InputStreamSink
 {
-    private static final Logger logger    = Logger
-                                                  .getLogger(LoggerInputStreamSink.class);
+    private static final Logger logger = Logger
+            .getLogger(LoggerInputStreamSink.class);
     private final InputStream   inputStream;
     private final Logger        outLogger;
     private final String        tag;
     private final boolean       info;
-    private final StringBuffer  output    = new StringBuffer();
+    private final StringBuffer  output = new StringBuffer();
 
     /**
      * Creates a new instance.
@@ -54,7 +54,7 @@ public class LoggerInputStreamSink implements InputStreamSink
     public LoggerInputStreamSink(String tag, InputStream in, Logger outLogger)
     {
         this.tag = tag;
-        if(tag.compareTo("stderr")==0)
+        if (tag.compareTo("stderr") == 0)
             this.info = false;
         else
             this.info = true;
@@ -77,6 +77,7 @@ public class LoggerInputStreamSink implements InputStreamSink
             String s;
             while ((s = bufferedReader.readLine()) != null)
             {
+                output.append(s).append("\n");
                 if (info)
                     outLogger.info(s);
                 else

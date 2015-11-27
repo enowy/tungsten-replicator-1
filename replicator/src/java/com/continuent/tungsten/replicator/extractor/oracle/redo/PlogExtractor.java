@@ -84,6 +84,7 @@ public class PlogExtractor implements RawExtractor
 
     // Properties.
     private String plogDirectory = null;
+    private int    retainedPlogs = 20;
     private String dataSource    = "extractor";
 
     private PlogReaderThread              readerThread;
@@ -115,6 +116,10 @@ public class PlogExtractor implements RawExtractor
 
     // Data source used to get DBMS connections.
     private SqlDataSource dataSourceImpl;
+
+    // Flag so that we log information on first transaction to ensure good
+    // diagnostics for restart issues.
+    private boolean firstXactLatch = true;
 
     /**
      * {@inheritDoc}
@@ -189,13 +194,17 @@ public class PlogExtractor implements RawExtractor
                     "Unable to locate data source: name=" + dataSource);
         }
 
+        // Note number of retained plogs.
+        logger.info("Maximum number of plogs to retain before compressing: "
+                + retainedPlogs);
+
         // Set up the queue for reading.
         queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
         readerThread = new PlogReaderThread(context, queue, plogDirectory,
                 sleepSizeInMilliseconds, transactionFragSize, vmrrMgr,
                 byteCache, lcrBufferLimit);
         readerThread.setName("plog-reader-task");
-
+        readerThread.setRetainedPlogs(retainedPlogs);
         readerThread.prepare();
     }
 
@@ -260,6 +269,12 @@ public class PlogExtractor implements RawExtractor
     {
         logger.info("setPlogDirectory: set to [" + plogDirectory + "]");
         this.plogDirectory = plogDirectory;
+    }
+
+    /** Sets the number of plogs to retain uncompressed. */
+    public void setRetainedPlogs(int retainedPlogs)
+    {
+        this.retainedPlogs = retainedPlogs;
     }
 
     /**
@@ -364,7 +379,7 @@ public class PlogExtractor implements RawExtractor
             // SCN.
             if (this.lastEventId != null)
             {
-                // Check to see the kind of last event ID.
+                // Check to see the kind of last event ID and position redo
                 if (lastEventId.equalsIgnoreCase("NOW"))
                 {
                     // Position to current SCN, whatever that may be.
@@ -382,8 +397,12 @@ public class PlogExtractor implements RawExtractor
                 }
                 else
                 {
-                    logger.info("Starting from eventId: " + lastEventId);
+                    logger.info(
+                            "Starting from previous eventId: " + lastEventId);
                 }
+
+                // Set the redo reader thread restart position.
+                readerThread.setLastEventId(lastEventId);
             }
             else
             {
@@ -417,6 +436,14 @@ public class PlogExtractor implements RawExtractor
                 {
                     logger.debug("Extractor returns DBMSEvent "
                             + dbmsMsg.getEventId());
+                }
+                if (firstXactLatch)
+                {
+                    String eventId = dbmsMsg.getEventId();
+                    logger.info(
+                            "First event ID extracted from log after start: "
+                                    + eventId);
+                    firstXactLatch = false;
                 }
                 return dbmsMsg; /*
                                  * ReaderThread already fragmented as necessary,

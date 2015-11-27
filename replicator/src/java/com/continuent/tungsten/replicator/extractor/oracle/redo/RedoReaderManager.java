@@ -99,7 +99,12 @@ public class RedoReaderManager
     {
         String command = vmrrControlScript + " start";
         logger.info("Starting vmrr process: " + command);
-        execAndReturnStdout(command);
+        execAndReturnStdout(command, true);
+
+        if (!isRunning())
+        {
+            throw new ReplicatorException("Unable to start vmrr process");
+        }
     }
 
     /**
@@ -114,7 +119,7 @@ public class RedoReaderManager
     {
         String command = vmrrControlScript + " stop";
         logger.info("Stopping vmrr process: " + command);
-        execAndReturnStdout(command);
+        execAndReturnStdout(command, true);
     }
 
     /**
@@ -132,17 +137,22 @@ public class RedoReaderManager
     }
 
     /**
-     * Runs a health check on the vmrr process and returns true if it passes.
+     * Runs a health check on the vmrr process, throwing an exception if it
+     * fails.
      */
-    public boolean isHealthy()
+    public void healthCheck() throws ReplicatorException
     {
-        // TODO: Add health check.
-        return false;
+        String command = vmrrControlScript + " command healthcheck";
+        if (logger.isDebugEnabled())
+        {
+            logger.debug("Running vmrr process healthcheck: " + command);
+        }
+        this.execAndReturnStdout(command, false);
     }
 
     /**
      * Redoes configuration on the vmrr process. This removes all state and
-     * reruns installation. 
+     * reruns installation.
      * 
      * @param startScn Optional start SCN. If null the vmrr process will be
      *            configured to start at the currently configured SCN
@@ -159,7 +169,7 @@ public class RedoReaderManager
         {
             logger.debug("Resetting vmrr process: " + command);
         }
-        String stdout = execAndReturnStdout(command);
+        String stdout = execAndReturnStdout(command, true);
         logger.info(stdout);
     }
 
@@ -176,7 +186,7 @@ public class RedoReaderManager
                 + " command PROCESS DISCONNECTED_APPLY REGISTER "
                 + this.replicateApplyName;
         logger.info("Registering with mine process: " + command);
-        execAndReturnStdout(command);
+        execAndReturnStdout(command, false);
     }
 
     /**
@@ -191,17 +201,18 @@ public class RedoReaderManager
                 + " command PROCESS DISCONNECTED_APPLY SET_OBSOLETE "
                 + this.replicateApplyName + " " + newObsolete;
         logger.info("Signaling last obsolete plog file: " + command);
-        execAndReturnStdout(command);
+        execAndReturnStdout(command, false);
     }
 
     /**
      * Execute an OS command and return the result of stdout.
      * 
      * @param command Command to run
+     * @param directLogging If true write stdtout and stderr directly to the log
      * @return Returns output of the command in a string
      * @throws ReplicatorException Thrown if command execution fails
      */
-    private String execAndReturnStdout(String command)
+    private String execAndReturnStdout(String command, boolean directLogging)
             throws ReplicatorException
     {
         String[] osArray = {"sh", "-c", command};
@@ -210,6 +221,11 @@ public class RedoReaderManager
         if (logger.isDebugEnabled())
         {
             logger.debug("Executing OS command: " + command);
+        }
+        if (directLogging)
+        {
+            pe.setStdOut(logger);
+            pe.setStdErr(logger);
         }
         pe.run();
         if (logger.isDebugEnabled())
@@ -220,9 +236,18 @@ public class RedoReaderManager
         }
         if (!pe.isSuccessful())
         {
-            String msg = "OS command failed: command=" + command + " rc="
-                    + pe.getExitValue() + " stdout=" + pe.getStdout()
-                    + " stderr=" + pe.getStderr();
+            String msg;
+            if (directLogging)
+            {
+                msg = "OS command failed: command=" + command + " rc="
+                        + pe.getExitValue();
+            }
+            else
+            {
+                msg = "OS command failed: command=" + command + " rc="
+                        + pe.getExitValue() + " stdout=" + pe.getStdout()
+                        + " stderr=" + pe.getStderr();
+            }
             logger.error(msg);
             throw new ReplicatorException(msg);
         }

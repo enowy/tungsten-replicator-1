@@ -41,6 +41,7 @@ import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
+import com.continuent.tungsten.replicator.ErrorNotification;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -61,7 +62,9 @@ public class PlogReaderThread extends Thread
 
     private BlockingQueue<DBMSEvent> queue;
 
+    private PluginContext     context;
     private String            plogDirectory;
+    private int               retainedPlogs       = 20;
     private int               sleepSizeInMilliseconds;
     private int               transactionFragSize = 0;
     private String            tungstenSchema;
@@ -269,8 +272,11 @@ public class PlogReaderThread extends Thread
         plogStream = new DataInputStream(new BufferedInputStream(
                 new FileInputStream(new File(filename))));
         logger.info("File " + filename + " opened.");
+        if (logger.isDebugEnabled())
+        {
+            logger.info("Last processed event ID=" + this.lastProcessedEventId);
+        }
         logger.info("Open transactions=" + openTransactions.size());
-        logger.info("Last processed event ID=" + this.lastProcessedEventId);
         logger.info("Transaction cache statistics: " + cache.toString());
         if (logger.isDebugEnabled())
         {
@@ -603,6 +609,8 @@ public class PlogReaderThread extends Thread
      */
     public void setLastEventId(String restartEventId) throws ReplicatorException
     {
+        logger.info("Assigning the last processed event ID for restart: "
+                + restartEventId);
         lastProcessedEventId = restartEventId;
         setInternalLastEventId(restartEventId);
     }
@@ -618,32 +626,13 @@ public class PlogReaderThread extends Thread
             throws ReplicatorException
     {
         int firstSequence = 0;
-
-        if (restartEventId != null)
-        {
-            try
-            {
-                String[] eventItems = restartEventId.split("#");
-                restartEventCommitSCN = Long.parseLong(eventItems[0]);
-                restartEventXID = eventItems[1];
-                restartEventChangeSeq = eventItems[2];
-                restartEventStartSCN = Long.parseLong(eventItems[3]);
-                restartEventStartPlog = Integer.parseInt(eventItems[4]);
-                firstSequence = restartEventStartPlog;
-            }
-            catch (ArrayIndexOutOfBoundsException e)
-            {
-                throw new ReplicatorException(
-                        "Malformed eventId " + restartEventId
-                                + " - must be 5 values delimited by # signs.");
-            }
-            catch (NumberFormatException e)
-            {
-                throw new ReplicatorException(
-                        "Malformed eventId " + restartEventId
-                                + " - must be 5 values delimited by # signs.");
-            }
-        }
+        PlogEventId plogEventId = new PlogEventId(restartEventId);
+        restartEventCommitSCN = plogEventId.getCommitSCN();
+        restartEventXID = plogEventId.getXid();
+        restartEventChangeSeq = plogEventId.getChangeSeq();
+        restartEventStartSCN = plogEventId.getStartSCN();
+        restartEventStartPlog = plogEventId.getStartPlog();
+        firstSequence = restartEventStartPlog;
 
         return firstSequence;
     }
@@ -651,42 +640,21 @@ public class PlogReaderThread extends Thread
     /**
      * Get last obsolete plog, so we can signal mine. To prevent accidents we
      * subtract one so that we do not log the current file as obsolete.
-     * <p/>
-     * FIXME It should do it from last applied, not last processed event id. We
-     * are waiting to get API for that.
-     * 
-     * @throws IOException
      */
     private int getLastObsoletePlog() throws ReplicatorException
     {
-        /*
-         * FIXME this is supposed to call Tungsten internal API to get last
-         * eventId actually applied
-         */
-        String lastAppliedEventId = this.lastProcessedEventId;
-        int obsSequence = 0;
-
-        if (lastAppliedEventId != null)
+        // This should call the PluginContext to get the last committed process
+        // id.
+        if (lastProcessedEventId == null)
         {
-            try
-            {
-                String[] eventItems = lastAppliedEventId.split("#");
-                obsSequence = Integer.parseInt(eventItems[4]);
-            }
-            catch (ArrayIndexOutOfBoundsException e)
-            {
-                throw new ReplicatorException(
-                        "Malformed eventId " + lastAppliedEventId
-                                + " - must be 5 values delimited by # signs.");
-            }
-            catch (NumberFormatException e)
-            {
-                throw new ReplicatorException(
-                        "Malformed eventId " + lastAppliedEventId
-                                + " - must be 5 values delimited by # signs.");
-            }
+            return 0;
         }
-        return obsSequence - 1;
+        else
+        {
+            PlogEventId plogEventId = new PlogEventId(lastProcessedEventId);
+            int obsSequence = plogEventId.getStartPlog();
+            return Math.max(obsSequence - retainedPlogs, 0);
+        }
     }
 
     /**
@@ -714,6 +682,7 @@ public class PlogReaderThread extends Thread
         logger.info("PlogReaderThread: " + plogDirectory + "/"
                 + sleepSizeInMilliseconds + "/" + transactionFragSize);
 
+        this.context = context;
         this.plogDirectory = plogDirectory;
         this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
         this.queue = queue;
@@ -722,6 +691,16 @@ public class PlogReaderThread extends Thread
         this.tungstenSchema = context.getReplicatorSchemaName().toLowerCase();
         this.cache = cache;
         this.lcrBufferLimit = lcrBufferLimit;
+    }
+
+    public int getRetainedPlogs()
+    {
+        return retainedPlogs;
+    }
+
+    public void setRetainedPlogs(int retainedPlogs)
+    {
+        this.retainedPlogs = retainedPlogs;
     }
 
     /** Returns the last processed event ID. */
@@ -751,13 +730,28 @@ public class PlogReaderThread extends Thread
                 logger.warn(
                         "Oracle reader thread was interrupted without cancellation request; exiting");
         }
+        catch (ReplicatorException e)
+        {
+            logger.error("Oracle reader thread failed: " + e.getMessage());
+            try
+            {
+                context.getEventDispatcher()
+                        .put(new ErrorNotification(e.getMessage(), e));
+            }
+            catch (InterruptedException e1)
+            {
+                // If this happens it's because we should be quitting anyway.
+                logger.warn(
+                        "Oracle reader thread cancelled while signalling error");
+            }
+        }
         catch (Throwable e)
         {
             logger.error("Oracle reader thread failed: " + e.getMessage(), e);
             try
             {
-                queue.put(new PlogDBMSErrorMessage(
-                        "Oracle Reader thread failed", e));
+                context.getEventDispatcher().put(new ErrorNotification(
+                        "Oracle reader thread failed: " + e.getMessage(), e));
             }
             catch (InterruptedException e1)
             {
@@ -792,9 +786,20 @@ public class PlogReaderThread extends Thread
         if (lastProcessedEventId != null)
         {
             firstSequence = setInternalLastEventId(lastProcessedEventId);
+            if (logger.isDebugEnabled())
+            {
+                logger.debug(String.format(
+                        "Starting from an existing event ID: lastProcessedEventId=%s firstSequence=%d",
+                        lastProcessedEventId, firstSequence));
+            }
         }
         else
         {
+            if (logger.isDebugEnabled())
+            {
+                logger.debug(
+                        "Restart position not set, searching for oldest available plog");
+            }
             while (firstSequence == Integer.MAX_VALUE)
             {
                 int retries = 0;
@@ -819,17 +824,22 @@ public class PlogReaderThread extends Thread
                 retries++;
                 Thread.sleep(sleepSizeInMilliseconds);
 
-                // Check for a dead redo reader every 20 retries.
-                if ((retries % 20) == 0)
+                // Check for a dead redo reader every 30 retries.
+                if ((retries % 30) == 0)
                 {
-                    if (!vmrrMgr.isRunning())
+                    if (vmrrMgr.isRunning())
                     {
+                        // If it is running, do a health check.
+                        vmrrMgr.healthCheck();
+                    }
+                    else
+                    {
+                        // If it is not running, try to restart.
                         logger.warn(
                                 "Redo reader process appears to have failed; attempting restart");
                         vmrrMgr.start();
                     }
                 }
-
             }
         }
 
@@ -915,11 +925,17 @@ public class PlogReaderThread extends Thread
                             }
                         }
 
-                        // Check for a dead redo reader every 20 retries.
-                        if (retryCount > 0 && (retryCount % 20) == 0)
+                        // Check for a dead redo reader every 30 retries.
+                        if (retryCount > 0 && (retryCount % 30) == 0)
                         {
-                            if (!vmrrMgr.isRunning())
+                            if (vmrrMgr.isRunning())
                             {
+                                // If it is running, do a health check.
+                                vmrrMgr.healthCheck();
+                            }
+                            else
+                            {
+                                // If it is not running, try to restart.
                                 logger.warn(
                                         "Redo reader process appears to have failed; attempting restart");
                                 vmrrMgr.start();
