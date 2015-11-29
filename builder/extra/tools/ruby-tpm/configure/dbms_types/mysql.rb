@@ -305,19 +305,7 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
   end
   
   def get_default_systemctl_service
-    ["/etc/systemd/system/mysql.service", "/etc/systemd/system/mysqld.service"].each{|service|
-      Timeout.timeout(30){
-        begin
-          exists = cmd_result("if [ -f #{service} ]; then echo 0; else echo 1; fi")
-          if exists.to_i == 0
-             return File.basename(service)
-          end
-        rescue CommandError
-        end
-      }
-    }
-    
-    return nil
+    return find_systemctl_service(["mysqld", "mysql", "mariadb"])
   end
   
   def getJdbcUrl()

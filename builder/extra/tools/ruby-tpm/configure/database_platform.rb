@@ -213,6 +213,37 @@ class ConfigureDatabasePlatform
     raise "Undefined function: #{self.class.name}.get_default_systemctl_service"
   end
   
+  def find_systemctl_service(options)
+    unless options.is_a?(Array)
+      raise "find_systemctl_service requires a single Array argument"
+    end
+    
+    cmd = which("systemctl")
+    if cmd == nil
+      if File.exist?("/bin/systemctl")
+        cmd = "/bin/systemctl"
+      else
+        Configurator.instance.debug("Unable to search using systemctl because it is not in the $PATH")
+        return nil
+      end
+    end
+    
+    options.each{
+      |o|
+      begin
+        service = cmd_result("#{cmd} list-units | grep #{o} | awk -F' ' '{print $1}'")
+        if service.to_s() != ""
+          return service
+        end
+      rescue CommandError => ce  
+        debug("Unable to search systemctl for #{o}")
+        debug(ce)
+      end
+    }
+    
+    return nil
+  end
+  
   def create_tungsten_schema(schema_name = nil)
     raise "Undefined function: #{self.class.name}.create_tungsten_schema"
   end
