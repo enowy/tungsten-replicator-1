@@ -66,6 +66,7 @@ public class PlogReaderThread extends Thread
     private String            plogDirectory;
     private int               retainedPlogs       = 20;
     private int               sleepSizeInMilliseconds;
+    private int               healthCheckInterval = 30;
     private int               transactionFragSize = 0;
     private String            tungstenSchema;
     private RedoReaderManager vmrrMgr;
@@ -638,8 +639,8 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * Get last obsolete plog, so we can signal mine. To prevent accidents we
-     * subtract one so that we do not log the current file as obsolete.
+     * Get last obsolete plog, so we can signal mine. This accounts for the
+     * number of retained plogs.
      */
     private int getLastObsoletePlog() throws ReplicatorException
     {
@@ -653,44 +654,40 @@ public class PlogReaderThread extends Thread
         {
             PlogEventId plogEventId = new PlogEventId(lastProcessedEventId);
             int obsSequence = plogEventId.getStartPlog();
-            return Math.max(obsSequence - retainedPlogs, 0);
+            if (obsSequence == Integer.MAX_VALUE)
+            {
+                // Can happen if we are still seeking a specific SCN position.
+                return 0;
+            }
+            else
+            {
+                // This is a normal plog number. Subtract the retained plogs so
+                // we don't delete prematurely and return.
+                return Math.max(obsSequence - retainedPlogs, 0);
+            }
         }
     }
 
     /**
      * Main loop of plog reader
      * 
-     * @param context Tungsten pluging context
-     * @param queue queue we use to return DBMS Events
-     * @param plogDirectory Location of plog files (directory)
-     * @param sleepSizeInMilliseconds property set by user (how much to sleep
-     *            waiting for data)
-     * @param transactionFragSize property set by user (how to fragment large
-     *            transactions)
-     * @param replicateConsoleScript property set by user (start-console.sh)
-     * @param replicateApplyName property set by user (name of apply)
+     * @param context Tungsten plugin context
+     * @param queue queue we use to return DBMS events
+     * @param vmrrMgr Coordinator object for vmrr process
      * @param cache Vector cache to hold pending transactions
-     * @throws ReplicatorException We can fail trying to contact the mine
-     * @throws IOException We can fail on disk open or charset conversion
      */
     public PlogReaderThread(PluginContext context,
-            BlockingQueue<DBMSEvent> queue, String plogDirectory,
-            int sleepSizeInMilliseconds, int transactionFragSize,
-            RedoReaderManager vmrrMgr, RawByteCache cache, int lcrBufferLimit)
-                    throws ReplicatorException
+            BlockingQueue<DBMSEvent> queue, RedoReaderManager vmrrMgr,
+            RawByteCache cache)
     {
         logger.info("PlogReaderThread: " + plogDirectory + "/"
                 + sleepSizeInMilliseconds + "/" + transactionFragSize);
 
         this.context = context;
-        this.plogDirectory = plogDirectory;
-        this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
         this.queue = queue;
-        this.transactionFragSize = transactionFragSize;
         this.vmrrMgr = vmrrMgr;
         this.tungstenSchema = context.getReplicatorSchemaName().toLowerCase();
         this.cache = cache;
-        this.lcrBufferLimit = lcrBufferLimit;
     }
 
     public int getRetainedPlogs()
@@ -698,9 +695,68 @@ public class PlogReaderThread extends Thread
         return retainedPlogs;
     }
 
+    /** Sets the number of plogs to retain. */
     public void setRetainedPlogs(int retainedPlogs)
     {
         this.retainedPlogs = retainedPlogs;
+    }
+
+    public String getPlogDirectory()
+    {
+        return plogDirectory;
+    }
+
+    /** Sets the directory name where plog files are located. */
+    public void setPlogDirectory(String plogDirectory)
+    {
+        this.plogDirectory = plogDirectory;
+    }
+
+    public int getSleepSizeInMilliseconds()
+    {
+        return sleepSizeInMilliseconds;
+    }
+
+    /** Sets the number of milliseconds to sleep when waiting for more data. */
+    public void setSleepSizeInMilliseconds(int sleepSizeInMilliseconds)
+    {
+        this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
+    }
+
+    public int getHealthCheckInterval()
+    {
+        return healthCheckInterval;
+    }
+
+    /**
+     * Sets the number of sleep cycles to wait before doing a replicator health
+     * check.
+     */
+    public void setHealthCheckInterval(int healthCheckInterval)
+    {
+        this.healthCheckInterval = healthCheckInterval;
+    }
+
+    public int getTransactionFragSize()
+    {
+        return transactionFragSize;
+    }
+
+    /** Sets the number of LCRs per transaction fragment. */
+    public void setTransactionFragSize(int transactionFragSize)
+    {
+        this.transactionFragSize = transactionFragSize;
+    }
+
+    /** Sets the number of LCRs to buffer per transaction. */
+    public int getLcrBufferLimit()
+    {
+        return lcrBufferLimit;
+    }
+
+    public void setLcrBufferLimit(int lcrBufferLimit)
+    {
+        this.lcrBufferLimit = lcrBufferLimit;
     }
 
     /** Returns the last processed event ID. */
@@ -783,6 +839,7 @@ public class PlogReaderThread extends Thread
         ArrayList<PlogTransaction> tranAtSameSCN = new ArrayList<PlogTransaction>();
         long SCNAtSameSCN = 0;
 
+        // See if we can find a restart position.
         if (lastProcessedEventId != null)
         {
             firstSequence = setInternalLastEventId(lastProcessedEventId);
@@ -800,45 +857,49 @@ public class PlogReaderThread extends Thread
                 logger.debug(
                         "Restart position not set, searching for oldest available plog");
             }
-            while (firstSequence == Integer.MAX_VALUE)
+        }
+
+        // If we don't have a plog ID we need to find one.
+        while (firstSequence == Integer.MAX_VALUE)
+        {
+            int retries = 0;
+
+            // Find oldest plog; check for interrupt on thread
+            // thereafter.
+            logger.info("Seeking oldest plog file to commence extraction");
+            firstSequence = findOldestPlogSequence(plogDirectory);
+            if (Thread.currentThread().isInterrupted())
             {
-                int retries = 0;
+                throw new InterruptedException();
+            }
 
-                // Find oldest plog; check for interrupt on thread
-                // thereafter.
-                firstSequence = findOldestPlogSequence(plogDirectory);
-                if (Thread.currentThread().isInterrupted())
+            if (firstSequence < Integer.MAX_VALUE)
+            {
+                logger.info("Oldest plog found on disk: " + firstSequence);
+                break;
+            }
+            // Bide a wee. If interrupted we just throw the exception
+            // and exit routine.
+            retries++;
+            Thread.sleep(sleepSizeInMilliseconds);
+
+            // Check for a dead redo reader at each health check interval.
+            if ((retries % healthCheckInterval) == 0)
+            {
+                logger.info(
+                        "No plog found, checking redo reader status: retries="
+                                + retries);
+                if (vmrrMgr.isRunning())
                 {
-                    throw new InterruptedException();
+                    // If it is running, do a health check.
+                    vmrrMgr.healthCheck();
                 }
-
-                if (firstSequence < Integer.MAX_VALUE)
+                else
                 {
-                    logger.info("Oldest plog found on disk: " + firstSequence);
-                    break;
-                }
-                logger.info("No plog found on disk, sleep and retry.");
-
-                // Bide a wee. If interrupted we just throw the exception
-                // and exit routine.
-                retries++;
-                Thread.sleep(sleepSizeInMilliseconds);
-
-                // Check for a dead redo reader every 30 retries.
-                if ((retries % 30) == 0)
-                {
-                    if (vmrrMgr.isRunning())
-                    {
-                        // If it is running, do a health check.
-                        vmrrMgr.healthCheck();
-                    }
-                    else
-                    {
-                        // If it is not running, try to restart.
-                        logger.warn(
-                                "Redo reader process appears to have failed; attempting restart");
-                        vmrrMgr.start();
-                    }
+                    // If it is not running, try to restart.
+                    logger.warn(
+                            "Redo reader process appears to have failed; attempting restart");
+                    vmrrMgr.start();
                 }
             }
         }
@@ -925,9 +986,14 @@ public class PlogReaderThread extends Thread
                             }
                         }
 
-                        // Check for a dead redo reader every 30 retries.
-                        if (retryCount > 0 && (retryCount % 30) == 0)
+                        // Check for a dead redo reader at each health check
+                        // interval.
+                        if (retryCount > 0
+                                && (retryCount % healthCheckInterval) == 0)
                         {
+                            logger.info(
+                                    "No new plog data found, checking redo reader status: retryCount="
+                                            + retryCount);
                             if (vmrrMgr.isRunning())
                             {
                                 // If it is running, do a health check.

@@ -95,7 +95,7 @@ public class RedoReaderManager
      * 
      * @throws ReplicatorException Thrown if the process cannot be started
      */
-    public void start() throws ReplicatorException
+    public synchronized void start() throws ReplicatorException
     {
         String command = vmrrControlScript + " start";
         logger.info("Starting vmrr process: " + command);
@@ -115,7 +115,7 @@ public class RedoReaderManager
      * @throws ReplicatorException Thrown if the process stop operation fails,
      *             for example due to a missing control script.
      */
-    public void stop() throws ReplicatorException
+    public synchronized void stop() throws ReplicatorException
     {
         String command = vmrrControlScript + " stop";
         logger.info("Stopping vmrr process: " + command);
@@ -125,7 +125,7 @@ public class RedoReaderManager
     /**
      * Checks the status of the vmrr process and returns true if it is running.
      */
-    public boolean isRunning() throws ReplicatorException
+    public synchronized boolean isRunning() throws ReplicatorException
     {
         String command = vmrrControlScript + " status";
         if (logger.isDebugEnabled())
@@ -140,7 +140,7 @@ public class RedoReaderManager
      * Runs a health check on the vmrr process, throwing an exception if it
      * fails.
      */
-    public void healthCheck() throws ReplicatorException
+    public synchronized void healthCheck() throws ReplicatorException
     {
         String command = vmrrControlScript + " command healthcheck";
         if (logger.isDebugEnabled())
@@ -157,7 +157,7 @@ public class RedoReaderManager
      * @param startScn Optional start SCN. If null the vmrr process will be
      *            configured to start at the currently configured SCN
      */
-    public void reset(String startScn) throws ReplicatorException
+    public synchronized void reset(String startScn) throws ReplicatorException
     {
         String command;
         if (startScn == null)
@@ -180,7 +180,7 @@ public class RedoReaderManager
      * 
      * @throws IOException
      */
-    public void registerExtractor() throws ReplicatorException
+    public synchronized void registerExtractor() throws ReplicatorException
     {
         String command = vmrrControlScript
                 + " command PROCESS DISCONNECTED_APPLY REGISTER "
@@ -194,7 +194,7 @@ public class RedoReaderManager
      * 
      * @param newObsolete last obsolete plog sequence to set
      */
-    public void reportLastObsoletePlog(int newObsolete)
+    public synchronized void reportLastObsoletePlog(int newObsolete)
             throws ReplicatorException
     {
         String command = vmrrControlScript

@@ -35,7 +35,9 @@ import com.continuent.tungsten.replicator.ReplicatorException;
  * <li>startScn - the starting SCN, assigned by Oracle when the transaction
  * starts.</li>
  * <li>startPlog - the oldest active plog at the time this transaction commits
- * and determines where we begin to scan on restart</li>
+ * and determines where we begin to scan on restart. This is set to
+ * Integer.MAX_VALUE when processing a restart SCN value, which forces a search
+ * of plog files for the earliest one</li>
  * </ul>
  * XIDs are specially formatted to deal with the case where a single
  * "transaction" within Oracle combines both schema (DDL) and data (DML)
@@ -66,8 +68,10 @@ public class PlogEventId extends Thread
         String[] eventItems = eventId.split("#");
         if (eventItems.length == 1)
         {
-            // Restart SCN. Fill in dummy values for xid and later values.
+            // Restart SCN. Fill in dummy values for xid and later values. Plog
+            // is set to max integer value which forces a search.
             this.commitSCN = parseLong(eventItems[0]);
+            this.startPlog = Integer.MAX_VALUE;
         }
         else if (eventItems.length == 5)
         {

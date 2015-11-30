@@ -28,6 +28,12 @@ replicator.extractor.dbms.cacheDir=@{HOME_DIRECTORY}/tmp/@{SERVICE.DEPLOYMENT_SE
 # plog extraction can enqueue before pausing to wait for processing. 
 replicator.extractor.dbms.queueSize=100
 
-# The number of milliseconds to pause if no new data is in the current plog
+# The number of milliseconds to sleep if no new data is in the current plog
 # file. 
 replicator.extractor.dbms.sleepSizeInMilliseconds=500
+
+# The number of sleep intervals to wait before doing a health check on the 
+# vmrr process to make sure it is healthy. This also detects Oracle DBMS 
+# failures.  It should not be done too often as it prevents the replicator
+# from noticing new data whilst running and delays offline commands.
+replicator.extractor.dbms.healthCheckInterval=60

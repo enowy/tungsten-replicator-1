@@ -93,11 +93,10 @@ public class PlogExtractor implements RawExtractor
 
     private boolean cancelled = false;
 
-    private int transactionFragSize = 10000;
-
-    private int queueSize = 100;
-
+    private int    transactionFragSize     = 10000;
+    private int    queueSize               = 100;
     private int    sleepSizeInMilliseconds = 1000;
+    private int    healthCheckInterval     = 30;
     private String replicateApplyName;
 
     // Manager for vmrr process.
@@ -200,11 +199,14 @@ public class PlogExtractor implements RawExtractor
 
         // Set up the queue for reading.
         queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
-        readerThread = new PlogReaderThread(context, queue, plogDirectory,
-                sleepSizeInMilliseconds, transactionFragSize, vmrrMgr,
-                byteCache, lcrBufferLimit);
+        readerThread = new PlogReaderThread(context, queue, vmrrMgr, byteCache);
         readerThread.setName("plog-reader-task");
         readerThread.setRetainedPlogs(retainedPlogs);
+        readerThread.setPlogDirectory(plogDirectory);
+        readerThread.setSleepSizeInMilliseconds(sleepSizeInMilliseconds);
+        readerThread.setHealthCheckInterval(healthCheckInterval);
+        readerThread.setTransactionFragSize(transactionFragSize);
+        readerThread.setLcrBufferLimit(lcrBufferLimit);
         readerThread.prepare();
     }
 
@@ -309,6 +311,15 @@ public class PlogExtractor implements RawExtractor
     public void setSleepSizeInMilliseconds(int sleepSizeInMilliseconds)
     {
         this.sleepSizeInMilliseconds = sleepSizeInMilliseconds;
+    }
+
+    /**
+     * Sets the number of sleep cycles to wait before doing a replicator health
+     * check.
+     */
+    public void setHealthCheckInterval(int healthCheckInterval)
+    {
+        this.healthCheckInterval = healthCheckInterval;
     }
 
     /**
