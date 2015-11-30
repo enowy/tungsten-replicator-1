@@ -863,10 +863,14 @@ public class PlogReaderThread extends Thread
         while (firstSequence == Integer.MAX_VALUE)
         {
             int retries = 0;
+            if (retries == 0)
+            {
+                // Just print this once.
+                logger.info("Seeking oldest plog file to commence extraction");
+            }
 
             // Find oldest plog; check for interrupt on thread
             // thereafter.
-            logger.info("Seeking oldest plog file to commence extraction");
             firstSequence = findOldestPlogSequence(plogDirectory);
             if (Thread.currentThread().isInterrupted())
             {
