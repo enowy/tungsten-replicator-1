@@ -70,7 +70,18 @@ public class PlogEventId extends Thread
         {
             // Restart SCN. Fill in dummy values for xid and later values. Plog
             // is set to max integer value which forces a search.
-            this.commitSCN = parseLong(eventItems[0]);
+            String scn = eventItems[0];
+            if ("NOW".compareToIgnoreCase(scn) == 0)
+            {
+                // This is the current SCN. Any value will do when reading.
+                this.commitSCN = 0;
+            }
+            else
+            {
+                // This is a real SCN.
+                this.commitSCN = parseLong(eventItems[0]);
+            }
+
             this.startPlog = Integer.MAX_VALUE;
         }
         else if (eventItems.length == 5)
