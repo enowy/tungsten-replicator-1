@@ -305,7 +305,7 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
   end
   
   def get_default_systemctl_service
-    return find_systemctl_service(["mysqld", "mysql", "mariadb"])
+    return find_systemctl_service(["mysqld.service", "mysql.service", "mariadb.service"])
   end
   
   def getJdbcUrl()
