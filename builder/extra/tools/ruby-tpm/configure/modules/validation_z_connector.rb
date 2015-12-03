@@ -243,7 +243,7 @@ class RouterBridgeModeDefaultCheck < ConfigureValidationCheck
     chosen_setting = get_member_configured_value(ENABLE_CONNECTOR_BRIDGE_MODE)
     new_setting = get_member_value(ENABLE_CONNECTOR_BRIDGE_MODE)
     if chosen_setting == nil && new_setting == "true"
-      warning("Due to updated recomendations, the connector bridge mode will be enabled on this server by default. Update the configuration with --connector-bridge-mode=false to disable this behavior.")
+      warning("Due to updated recommendations, the connector bridge mode will be enabled on this server by default. Update the configuration with --connector-bridge-mode=false to disable this behavior.")
     end
   end
   
