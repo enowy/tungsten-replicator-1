@@ -621,7 +621,7 @@ class TungstenReplicatorProvisionTHL
     additional_properties = []
     
     # Options to read from the existing tpm configuration
-    tpm_options = {
+    tpm_host_options = {
       "repl-java-file-encoding" => "repl_java_file_encoding",
       "repl-java-user-timezone" => "repl_java_user_timezone"
     }
@@ -640,10 +640,10 @@ class TungstenReplicatorProvisionTHL
     end    
     
     # Read settings from tpm and include them using the tpm option
-    tpm_options.each{
+    tpm_host_options.each{
       |prop,key|
-      value = TI.setting(TI.setting_key(REPL_SERVICES, opt(:service), key))
-      if value != ""
+      value = TI.setting(key)
+      if value.to_s() != ""
         additional_properties << "#{prop}=#{value}"
       end
     }
