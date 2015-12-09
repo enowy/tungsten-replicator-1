@@ -490,9 +490,11 @@ class PlogTransaction implements Comparable<PlogTransaction>
         }
 
         if (logger.isDebugEnabled())
+        {
             logger.debug("Row Change: " + oneRowChange.getAction().toString()
                     + ":" + oneRowChange.getSchemaName() + "."
                     + oneRowChange.getTableName());
+        }
 
         HashMap<String, Integer> columnsPresentAny = new HashMap<String, Integer>();
         HashMap<Integer, PlogLCR.oneColVal> columnsPresentKey = new HashMap<Integer, PlogLCR.oneColVal>();

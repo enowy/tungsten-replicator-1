@@ -43,6 +43,9 @@ import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATI
  */
 public class SecurityHelperTest extends TestCase
 {
+
+    public static int stopNow = 0;
+
     /**
      * Test we can retrieve passwords from the passwords.store file
      * 
@@ -464,11 +467,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -500,11 +502,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.wrong.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -537,11 +538,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.2.position.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -573,11 +573,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.not.defined.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }

@@ -95,7 +95,6 @@ public class SocketWrapperTest
             server.shutdown();
         }
     }
-   
 
     /**
      * Verify that we can connect using a non-SSL socket and get a value back

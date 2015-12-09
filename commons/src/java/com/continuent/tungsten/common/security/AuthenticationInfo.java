@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 
 import javax.xml.bind.annotation.XmlRootElement;
 
@@ -64,12 +65,12 @@ import com.continuent.tungsten.common.utils.CLUtils;
  */
 @XmlRootElement
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
-public final class AuthenticationInfo
+public final class AuthenticationInfo implements Cloneable
 {
     private static final Logger          logger                                   = Logger
             .getLogger(AuthenticationInfo.class);
     /** Location of the file from which this was built **/
-    private String                  parentPropertiesFileLocation             = null;
+    private String                       parentPropertiesFileLocation             = null;
     /** Properties from the files from which this was built **/
     private TungstenProperties           parentProperties                         = null;
     private TUNGSTEN_APPLICATION_NAME    tungstenApplicationName                  = null;
@@ -84,33 +85,38 @@ public final class AuthenticationInfo
     private boolean                      useTungstenAuthenticationRealm           = true;
     private boolean                      useEncryptedPasswords                    = false;
     /** Set to true if the connector should be using SSL **/
-    private boolean                 connectorUseSSL                          = false;
+    private boolean                      connectorUseSSL                          = false;
 
     // Authentication parameters
-    private String                  username                                 = null;
-    private String                  password                                 = null;
-    private String                  passwordFileLocation                     = null;
-    private String                  accessFileLocation                       = null;
+    private String                       username                                 = null;
+    private String                       password                                 = null;
+    private String                       passwordFileLocation                     = null;
+    private String                       accessFileLocation                       = null;
     // Encryption parameters
-    private String                  keystoreLocation                         = null;
-    private String                  keystorePassword                         = null;
-    private String                  truststoreLocation                       = null;
-    private String                  truststorePassword                       = null;
+    private String                       keystoreLocation                         = null;
+    private String                       keystorePassword                         = null;
+    private String                       clientKeystoreLocation                   = null;
+    private String                       clientKeystorePassword                   = null;
+    private String                       truststoreLocation                       = null;
+    private String                       truststorePassword                       = null;
+    private List<String>                 enabledProtocols                         = null;
+    private List<String>                 enabledCipherSuites                      = null;
+
     // Alias for entries in keystore
     // key=identifier as defined in SecurityConf value=alias for this
     // application
-    private HashMap<String, String> mapKeystoreAliasesForTungstenApplication = new HashMap<String, String>();
+    private HashMap<String, String>      mapKeystoreAliasesForTungstenApplication = new HashMap<String, String>();
 
-    public transient final static String      SECURITY_INFO_PROPERTY             = "securityInfo";
-    public transient final static String      TUNGSTEN_AUTHENTICATION_REALM            = "tungstenAutenthicationRealm";
+    public transient final static String SECURITY_INFO_PROPERTY                   = "securityInfo";
+    public transient final static String TUNGSTEN_AUTHENTICATION_REALM            = "tungstenAutenthicationRealm";
     // Possible command line parameters
-    public transient final static String      USERNAME                                 = "-username";
-    public transient final static String      PASSWORD                                 = "-password";
-    public transient final static String      KEYSTORE_LOCATION                        = "-keystoreLocation";
-    public transient final static String      KEYSTORE_PASSWORD                        = "-keystorePassword";
-    public transient final static String      TRUSTSTORE_LOCATION                      = "-truststoreLocation";
-    public transient final static String      TRUSTSTORE_PASSWORD                      = "-truststorePassword";
-    public transient final static String      SECURITY_CONFIG_FILE_LOCATION            = "-securityProperties";
+    public transient final static String USERNAME                                 = "-username";
+    public transient final static String PASSWORD                                 = "-password";
+    public transient final static String KEYSTORE_LOCATION                        = "-keystoreLocation";
+    public transient final static String KEYSTORE_PASSWORD                        = "-keystorePassword";
+    public transient final static String TRUSTSTORE_LOCATION                      = "-truststoreLocation";
+    public transient final static String TRUSTSTORE_PASSWORD                      = "-truststorePassword";
+    public transient final static String SECURITY_CONFIG_FILE_LOCATION            = "-securityProperties";
 
     /**
      * Creates a new <code>AuthenticationInfo</code> object
@@ -318,9 +324,6 @@ public final class AuthenticationInfo
                 connector_alias_connector_to_db_isFound = (connector_alias_connector_to_db == null)
                         ? true
                         : false;
-                replicator_alias_master_to_slave_isFound = (replicator_alias_master_to_slave == null)
-                        ? true
-                        : false;
 
                 // Load the keystore in the user's home directory
                 // Check only if there are aliases to find
@@ -518,7 +521,9 @@ public final class AuthenticationInfo
         }
 
         // --- Check password file location ---
-        if (this.isAuthenticationNeeded() && this.passwordFileLocation != null)
+        if (this.isAuthenticationNeeded()
+                && !this.isAuthenticationByCertificateNeeded()
+                && this.passwordFileLocation != null)
         {
             File f = new File(this.passwordFileLocation);
             // --- Find absolute path if needed
@@ -740,6 +745,28 @@ public final class AuthenticationInfo
         this.authenticationNeeded = authenticationNeeded;
     }
 
+    /**
+     * Returns the authenticationByCertificateNeeded value.
+     * 
+     * @return Returns the authenticationByCertificateNeeded.
+     */
+    public boolean isAuthenticationByCertificateNeeded()
+    {
+        return authenticationByCertificateNeeded;
+    }
+
+    /**
+     * Sets the authenticationByCertificateNeeded value.
+     * 
+     * @param authenticationByCertificateNeeded The
+     *            authenticationByCertificateNeeded to set.
+     */
+    public void setAuthenticationByCertificateNeeded(
+            boolean authenticationByCertificateNeeded)
+    {
+        this.authenticationByCertificateNeeded = authenticationByCertificateNeeded;
+    }
+
     public boolean isEncryptionNeeded()
     {
         return encryptionNeeded;
@@ -759,6 +786,46 @@ public final class AuthenticationInfo
     public void setKeystoreLocation(String keystoreLocation)
     {
         this.keystoreLocation = keystoreLocation;
+    }
+
+    /**
+     * Returns the clientKeystoreLocation value.
+     * 
+     * @return Returns the clientKeystoreLocation.
+     */
+    public String getClientKeystoreLocation()
+    {
+        return clientKeystoreLocation;
+    }
+
+    /**
+     * Sets the clientKeystoreLocation value.
+     * 
+     * @param clientKeystoreLocation The clientKeystoreLocation to set.
+     */
+    public void setClientKeystoreLocation(String clientKeystoreLocation)
+    {
+        this.clientKeystoreLocation = clientKeystoreLocation;
+    }
+
+    /**
+     * Returns the clientKeystorePassword value.
+     * 
+     * @return Returns the clientKeystorePassword.
+     */
+    public String getClientKeystorePassword()
+    {
+        return clientKeystorePassword;
+    }
+
+    /**
+     * Sets the clientKeystorePassword value.
+     * 
+     * @param clientKeystorePassword The clientKeystorePassword to set.
+     */
+    public void setClientKeystorePassword(String clientKeystorePassword)
+    {
+        this.clientKeystorePassword = clientKeystorePassword;
     }
 
     public String getUsername()
@@ -1193,6 +1260,26 @@ public final class AuthenticationInfo
         {
             // Nothing to do, it's a last chance close
         }
+    }
+
+    /**
+     * {@inheritDoc} This is used in SecurityHelperTest
+     * 
+     * @see java.lang.Object#clone()
+     */
+    public Object clone()
+    {
+        AuthenticationInfo authInfo = null;
+        try
+        {
+            authInfo = (AuthenticationInfo) super.clone();
+        }
+        catch (CloneNotSupportedException cnse)
+        {
+            cnse.printStackTrace(System.err);
+        }
+
+        return authInfo;
     }
 
 }

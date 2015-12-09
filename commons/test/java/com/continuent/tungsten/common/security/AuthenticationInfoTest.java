@@ -21,6 +21,8 @@ package com.continuent.tungsten.common.security;
 
 import junit.framework.TestCase;
 
+import java.util.List;
+
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
 import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
@@ -57,12 +59,12 @@ public class AuthenticationInfoTest extends TestCase
             sreThrown = true;
         }
 
-        assert (sreThrown);
+        assert(sreThrown);
     }
 
-    
     /**
-     * Confirm that the getKeystoreAliasForConnectionType returns an alias name, and null if it cannot be found.
+     * Confirm that the getKeystoreAliasForConnectionType returns an alias name,
+     * and null if it cannot be found.
      * 
      * @throws ConfigurationException
      */
@@ -71,19 +73,24 @@ public class AuthenticationInfoTest extends TestCase
         // Reset info
         SecurityHelperTest.resetSecuritySystemProperties();
 
-        // Confirm that exception is thrown when keystore location is not specified
+        // Confirm that exception is thrown when keystore location is not
+        // specified
         AuthenticationInfo authInfo = null;
         try
         {
-            authInfo = SecurityHelper.loadAuthenticationInformation("test.ssl.alias.security.properties", true, TUNGSTEN_APPLICATION_NAME.CONNECTOR);
-            
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "test.ssl.alias.security.properties", true,
+                    TUNGSTEN_APPLICATION_NAME.CONNECTOR);
+
             // --- Confirm we can retrieve the alias when it exists ---
-            String alias = authInfo.getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR);
+            String alias = authInfo.getKeystoreAliasForConnectionType(
+                    SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR);
             assertNotNull(alias);
             assertEquals("tungsten_data_fabric", alias);
-            
+
             // --- Confirm that we return null when the alias does not exist ---
-            alias = authInfo.getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+            alias = authInfo.getKeystoreAliasForConnectionType(
+                    SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
             assertNull(alias);
         }
         catch (ServerRuntimeException e)
@@ -92,9 +99,11 @@ public class AuthenticationInfoTest extends TestCase
         }
         catch (ConfigurationException e)
         {
-            assertFalse("That should not be this kind of Exception being thrown", true);
+            assertFalse(
+                    "That should not be this kind of Exception being thrown",
+                    true);
         }
-        
+
         // Reset info
         SecurityHelperTest.resetSecuritySystemProperties();
     }
