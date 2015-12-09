@@ -263,7 +263,7 @@ public class SqlCommitSeqno implements CommitSeqno
      */
     private void initTable(Database database) throws SQLException
     {
-        if (database.findTable(commitSeqnoTable.getSchema(),
+        if (database.findTungstenTable(commitSeqnoTable.getSchema(),
                 commitSeqnoTable.getName()) == null)
         {
             if (logger.isDebugEnabled())

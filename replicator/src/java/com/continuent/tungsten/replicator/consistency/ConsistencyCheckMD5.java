@@ -127,10 +127,10 @@ public class ConsistencyCheckMD5 extends ConsistencyCheckAbstract
                 return ConsistencyCheckOracle(conn);
             case POSTGRESQL :
                 return ConsistencyCheckPostgreSQL(conn);
-            case DERBY :
+            case DERBY :                
+            default :
                 throw new UnsupportedOperationException("Not implemented.");
         }
-        return null;
     }
 
     /**
@@ -447,6 +447,31 @@ public class ConsistencyCheckMD5 extends ConsistencyCheckAbstract
     private ResultSet ConsistencyCheckOracle(Database conn)
             throws ConsistencyException
     {
-        throw new UnsupportedOperationException();
+        String schemaName = table.getSchema();
+        String tableName = table.getName();
+        String allColumns = columnsWithSeparator(conn, table.getAllColumns(),
+                " || ");
+        String keyColumns = null;
+        if (table.getPrimaryKey() != null)
+        {
+            keyColumns = columnsMySQL(conn, table.getPrimaryKey().getColumns());
+        }
+
+        String query =
+        "select count(*) AS this_cnt, DBMS_CRYPTO.hash(LISTAGG(DBMS_CRYPTO.hash(utl_raw.cast_to_raw("+ allColumns +"), 2)) WITHIN GROUP (ORDER BY " + (keyColumns!=null?keyColumns:allColumns)
+                + "), 2) AS this_crc FROM " + conn.getDatabaseObjectName(schemaName) + "."+conn.getDatabaseObjectName(tableName);
+        
+        logger.info("Query is " + query);
+        Statement st;
+        try
+        {
+            st = conn.createStatement();
+            return st.executeQuery(query);
+        }
+        catch (SQLException e)
+        {
+            String msg = "Consistency check failed: " + e.getMessage();
+            throw new ConsistencyException(msg, e);
+        }
     }
 }

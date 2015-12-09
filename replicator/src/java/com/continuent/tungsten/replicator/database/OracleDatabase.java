@@ -22,6 +22,7 @@ package com.continuent.tungsten.replicator.database;
 
 import java.io.BufferedWriter;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -220,6 +221,19 @@ public class OracleDatabase extends AbstractDatabase
         column.setBlob(type == Types.BLOB || type == Types.BINARY
                 || type == Types.VARBINARY || type == Types.LONGVARBINARY);
 
+        // Add precision and scale to the NUMBER description, i.e.
+        // "NUMBER(p,s)", when both of them are specified. This is a dirty
+        // work-around until we have a proper way to get the scale parameter.
+        // TODO: we really need a separate column.getScale() method (THL?).
+        long precision = column.getLength();
+        int scale = rs.getInt("decimal_digits");
+        if (type == Types.DECIMAL && precision > 0 && scale > 0)
+        {
+            String typeDesc = column.getTypeDescription();
+            typeDesc = typeDesc + "(" + precision + "," + scale + ")";
+            column.setTypeDescription(typeDesc);
+        }
+
         return column;
     }
 
@@ -340,12 +354,7 @@ public class OracleDatabase extends AbstractDatabase
         }
         catch (SQLException e)
         {
-            /*
-             * 955 = "Error: ORA-00955: name is already used by an existing
-             * object"
-             */
-            if (e.getErrorCode() != 955)
-                throw e;
+            throw e;
         }
 
         if (haveNonUnique)
@@ -569,6 +578,17 @@ public class OracleDatabase extends AbstractDatabase
         updateTableCache(tableID, t);
 
         return t;
+    }
+
+    /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.database.AbstractDatabase#findTungstenTable(java.lang.String, java.lang.String)
+     */
+    @Override
+    public Table findTungstenTable(String schemaName, String tableName)
+            throws SQLException
+    {
+        return super.findTungstenTable(schemaName.toUpperCase(), tableName.toUpperCase());
     }
 
     private void updateTableCache(int tableID, Table t)
@@ -1056,4 +1076,32 @@ public class OracleDatabase extends AbstractDatabase
             return " AS OF SCN " + position;
     }
 
+    /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.database.AbstractDatabase#setColumnValue(java.sql.PreparedStatement, int, com.continuent.tungsten.replicator.database.Column)
+     */
+    @Override
+    protected void setColumnValue(PreparedStatement statement, int bindNo,
+            Column c) throws SQLException
+    {
+        StringBuffer value;
+        switch (c.getType())
+        {
+            case java.sql.Types.CHAR :
+                // Need to right pad the value to compare with
+                if (c.getValue() != null){
+                    value = new StringBuffer((String) c.getValue());
+                    while (value.length() < c.getLength())
+                        value.append(' ');
+                    statement.setString(bindNo, value.toString());
+
+                }
+                else
+                    statement.setNull(bindNo, java.sql.Types.CHAR);
+                break;
+            default :
+                super.setColumnValue(statement, bindNo, c);
+                break;
+        }
+    }
 }

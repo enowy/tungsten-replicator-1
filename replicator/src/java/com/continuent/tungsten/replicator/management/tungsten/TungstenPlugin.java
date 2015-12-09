@@ -294,8 +294,7 @@ public class TungstenPlugin extends NotificationBroadcasterSupport
     {
         try
         {
-            return conn.findTable(replicatorSchema, ConsistencyTable.TABLE_NAME,
-                    false);
+            return conn.findTungstenTable(replicatorSchema, ConsistencyTable.TABLE_NAME);
         }
         catch (Exception e)
         {

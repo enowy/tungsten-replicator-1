@@ -232,7 +232,7 @@ class ConfigureValidationHandler
     configs.each{
       |config|
       
-      @output_properties.setProperty(config.getProperty(DEPLOYMENT_HOST), {})
+      @output_properties.setProperty(config.getProperty(DEPLOYMENT_CONFIGURATION_KEY), {})
     }
     
     if @commit_checks.size() == 0
@@ -367,7 +367,16 @@ class ConfigureValidationHandler
     unless @@host_skip_warnings.has_key?(h_alias)
       @@host_skip_warnings[h_alias]= cfg.getTemplateValue(SKIPPED_VALIDATION_WARNINGS)
     end
-    return get_skipped_validation_warnings().include?(klass) || @@host_skip_warnings[h_alias].include?(klass)
+    
+    skipped_warnings = get_skipped_validation_warnings()
+    unless skipped_warnings.is_a?(Array)
+      skipped_warnings = [skipped_warnings]
+    end
+    host_skipped_warnings = @@host_skip_warnings[h_alias]
+    unless host_skipped_warnings.is_a?(Array)
+      host_skipped_warnings = [host_skipped_warnings]
+    end
+    return skipped_warnings.include?(klass) || host_skipped_warnings.include?(klass)
   end
   
   def self.mark_skipped_validation_warnings(klass)

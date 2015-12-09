@@ -24,7 +24,23 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.security.Key;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
@@ -34,6 +50,8 @@ import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.jmx.ServerRuntimeException;
+import com.continuent.tungsten.common.security.SecurityConf.KEYSTORE_TYPE;
+import com.continuent.tungsten.common.sockets.SSLSocketFactoryGenerator;
 import com.continuent.tungsten.common.utils.CLUtils;
 
 /**
@@ -53,7 +71,7 @@ public class SecurityHelper
     // TUC-1872
     public static enum TUNGSTEN_APPLICATION_NAME
     {
-        CONNECTOR, REPLICATOR, ANY;
+        CONNECTOR, REPLICATOR, REST_API, ANY;
     }
 
     /**
@@ -62,8 +80,7 @@ public class SecurityHelper
      * @param authenticationInfo containing password file location
      */
     public static void saveCredentialsFromAuthenticationInfo(
-            AuthenticationInfo authenticationInfo)
-            throws ServerRuntimeException
+            AuthenticationInfo authenticationInfo) throws ServerRuntimeException
     {
         String passwordFileLocation = authenticationInfo
                 .getPasswordFileLocation();
@@ -84,8 +101,8 @@ public class SecurityHelper
         {
             logger.error("Error while saving properties for file:"
                     + authenticationInfo.getPasswordFileLocation(), ce);
-            throw new ServerRuntimeException("Error while saving Credentials: "
-                    + ce.getMessage());
+            throw new ServerRuntimeException(
+                    "Error while saving Credentials: " + ce.getMessage());
         }
     }
 
@@ -95,8 +112,7 @@ public class SecurityHelper
      * @param authenticationInfo containing password file location
      */
     public static void deleteUserFromAuthenticationInfo(
-            AuthenticationInfo authenticationInfo)
-            throws ServerRuntimeException
+            AuthenticationInfo authenticationInfo) throws ServerRuntimeException
     {
         String username = authenticationInfo.getUsername();
         String passwordFileLocation = authenticationInfo
@@ -111,8 +127,8 @@ public class SecurityHelper
             String usernameInFile = props.getString(username);
             if (usernameInFile == null)
             {
-                throw new ServerRuntimeException(MessageFormat.format(
-                        "Username does not exist: {0}", username));
+                throw new ServerRuntimeException(MessageFormat
+                        .format("Username does not exist: {0}", username));
             }
 
             props.clearProperty(username);
@@ -122,8 +138,8 @@ public class SecurityHelper
         {
             logger.error("Error while saving properties for file:"
                     + authenticationInfo.getPasswordFileLocation(), ce);
-            throw new ServerRuntimeException("Error while saving Credentials: "
-                    + ce.getMessage());
+            throw new ServerRuntimeException(
+                    "Error while saving Credentials: " + ce.getMessage());
         }
     }
 
@@ -134,8 +150,7 @@ public class SecurityHelper
      *         values
      */
     public static TungstenProperties loadPasswordsFromAuthenticationInfo(
-            AuthenticationInfo authenticationInfo)
-            throws ServerRuntimeException
+            AuthenticationInfo authenticationInfo) throws ServerRuntimeException
     {
         try
         {
@@ -208,7 +223,8 @@ public class SecurityHelper
         TungstenProperties securityProperties = null;
         try
         {
-            securityProperties = loadSecurityPropertiesFromFile(propertiesFileLocation);
+            securityProperties = loadSecurityPropertiesFromFile(
+                    propertiesFileLocation);
         }
         catch (ConfigurationException ce)
         {
@@ -223,29 +239,43 @@ public class SecurityHelper
         if (securityProperties != null)
         {
             securityProperties.trim(); // Remove white spaces
-            boolean useAuthentication = securityProperties.getBoolean(
-                    SecurityConf.SECURITY_JMX_USE_AUTHENTICATION,
-                    SecurityConf.SECURITY_USE_AUTHENTICATION_DEFAULT, false);
-            boolean useEncryption = securityProperties.getBoolean(
-                    SecurityConf.SECURITY_JMX_USE_ENCRYPTION,
-                    SecurityConf.SECURITY_USE_ENCRYPTION_DEFAULT, false);
-            boolean useTungstenAuthenticationRealm = securityProperties
-                    .getBoolean(
-                            SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM,
-                            SecurityConf.SECURITY_USE_TUNGSTEN_AUTHENTICATION_REALM_DEFAULT,
+
+            // --- Get common values ---
+            List<String> enabledProtocols = securityProperties.getStringList(
+                    SecurityConf.SECURITY_ENABLED_TRANSPORT_PROTOCOL);
+            List<String> enabledCipherSuites = securityProperties
+                    .getStringList(SecurityConf.SECURITY_ENABLED_CIPHER_SUITES);
+
+            Integer minWaitOnFailedLogin = securityProperties.getInt(
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN_DEFAULT,
+                    false);
+
+            Integer maxWaitOnFailedLogin = securityProperties.getInt(
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX_DEFAULT,
+                    false);
+            Integer incrementStepWaitOnFailedLogin = securityProperties.getInt(
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP_DEFAULT,
                             false);
-            boolean useEncryptedPassword = securityProperties
-                    .getBoolean(
-                            SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD,
-                            SecurityConf.SECURITY_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT,
-                            false);
+
+            // Always use custom Tungsten Authentication Realm
+            // CONT-1348
+            boolean useTungstenAuthenticationRealm = true;
 
             // Define application specific settings
             // Use default values by default
+            String security_use_encryption = SecurityConf.SECURITY_JMX_USE_ENCRYPTION;
+            String security_use_encryption_default = SecurityConf.SECURITY_JMX_USE_ENCRYPTION;
+            String security_use_authentication = SecurityConf.SECURITY_JMX_USE_AUTHENTICATION;
+            String security_use_authentication_default = SecurityConf.SECURITY_USE_AUTHENTICATION_DEFAULT;
             String security_keystore_location = SecurityConf.SECURITY_KEYSTORE_LOCATION;
             String security_keystore_password = SecurityConf.SECURITY_KEYSTORE_PASSWORD;
             String security_truststore_location = SecurityConf.SECURITY_TRUSTSTORE_LOCATION;
             String security_truststore_password = SecurityConf.SECURITY_TRUSTSTORE_PASSWORD;
+            String security_authentication_use_encrypted_password = SecurityConf.SECURITY_JMX_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD;
+            String security_authentication_use_encrypted_password_default = SecurityConf.SECURITY_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT;
             // Use application specific settings if needed
             switch (tungstenApplicationName)
             {
@@ -254,6 +284,25 @@ public class SecurityHelper
                     security_keystore_password = SecurityConf.CONNECTOR_SECURITY_KEYSTORE_PASSWORD;
                     security_truststore_location = SecurityConf.CONNECTOR_SECURITY_TRUSTSTORE_LOCATION;
                     security_truststore_password = SecurityConf.CONNECTOR_SECURITY_TRUSTSTORE_PASSWORD;
+
+                    security_use_encryption = SecurityConf.CONNECTOR_USE_SSL;
+                    security_use_encryption_default = SecurityConf.CONNECTOR_USE_SSL_DEFAULT;
+                    break;
+
+                case REST_API :
+                    security_use_encryption = SecurityConf.HTTP_REST_API_SSL_USESSL;
+                    security_use_encryption_default = SecurityConf.HTTP_REST_API_SSL_USESSL_DEFAULT;
+
+                    security_use_authentication = SecurityConf.HTTP_REST_API_AUTHENTICATION;
+                    security_use_authentication_default = SecurityConf.HTTP_REST_API_AUTHENTICATION_DEFAULT;
+
+                    security_authentication_use_encrypted_password = SecurityConf.HTTP_REST_API_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD;
+                    security_authentication_use_encrypted_password_default = SecurityConf.HTTP_REST_API_USE_TUNGSTEN_AUTHENTICATION_REALM_ENCRYPTED_PASSWORD_DEFAULT;
+
+                    security_keystore_location = SecurityConf.HTTP_REST_API_KEYSTORE_LOCATION;
+                    security_keystore_password = SecurityConf.HTTP_REST_API_KEYSTORE_PASSWORD;
+                    security_truststore_location = SecurityConf.HTTP_REST_API_TRUSTSTORE_LOCATION;
+                    security_truststore_password = SecurityConf.HTTP_REST_API_TRUSTSTORE_PASSWORD;
                     break;
                 default :
                     // Keep default values
@@ -261,31 +310,66 @@ public class SecurityHelper
             }
 
             // --- Retrieve properties ---
-            boolean connectorUseSSL = securityProperties.getBoolean(
-                    SecurityConf.CONNECTOR_USE_SSL, "false", false);
+            boolean connectorUseSSL = securityProperties
+                    .getBoolean(SecurityConf.CONNECTOR_USE_SSL, "false", false);
 
-            String parentFileLocation = securityProperties
-                    .getString(SecurityConf.SECURITY_PROPERTIES_PARENT_FILE_LOCATION);
+            boolean useEncryption = securityProperties.getBoolean(
+                    security_use_encryption, security_use_encryption_default,
+                    false);
+
+            boolean useAuthentication = securityProperties.getBoolean(
+                    security_use_authentication,
+                    security_use_authentication_default, false);
+
+            boolean authenticationByCertificateNeeded = securityProperties
+                    .getBoolean(
+                            SecurityConf.HTTP_REST_API_AUTHENTICATION_USE_CERTIFICATE,
+                            SecurityConf.HTTP_REST_API_AUTHENTICATION_USE_CERTIFICATE_DEFAULT,
+                            false);
+
+            boolean useEncryptedPassword = securityProperties.getBoolean(
+                    security_authentication_use_encrypted_password,
+                    security_authentication_use_encrypted_password_default,
+                    false);
+
+            String parentFileLocation = securityProperties.getString(
+                    SecurityConf.SECURITY_PROPERTIES_PARENT_FILE_LOCATION);
             String passwordFileLocation = securityProperties
                     .getString(SecurityConf.SECURITY_PASSWORD_FILE_LOCATION);
             String accessFileLocation = securityProperties
                     .getString(SecurityConf.SECURITY_ACCESS_FILE_LOCATION);
+
             String keystoreLocation = securityProperties
                     .getString(security_keystore_location);
-            keystoreLocation = (keystoreLocation != null && StringUtils
-                    .isNotBlank(keystoreLocation)) ? keystoreLocation : null;
+            keystoreLocation = (keystoreLocation != null
+                    && StringUtils.isNotBlank(keystoreLocation))
+                            ? keystoreLocation
+                            : null;
             String keystorePassword = securityProperties
                     .getString(security_keystore_password);
             String truststoreLocation = securityProperties
                     .getString(security_truststore_location);
-            truststoreLocation = (truststoreLocation != null && StringUtils
-                    .isNotBlank(truststoreLocation))
+            truststoreLocation = (truststoreLocation != null
+                    && StringUtils.isNotBlank(truststoreLocation))
                     ? truststoreLocation
                     : null;
             String truststorePassword = securityProperties
                     .getString(security_truststore_password);
-            String userName = securityProperties.getString(
-                    SecurityConf.SECURITY_JMX_USERNAME, null, false);
+            String clientKeystoreLocation = securityProperties.getString(
+                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
+            clientKeystoreLocation = (clientKeystoreLocation != null
+                    && StringUtils.isNotBlank(clientKeystoreLocation))
+                    ? clientKeystoreLocation
+                    : null;
+            String clientKeystorePassword = securityProperties.getString(
+                    SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_PASSWORD);
+            clientKeystorePassword = (clientKeystorePassword != null
+                    && StringUtils.isNotBlank(clientKeystorePassword))
+                    ? clientKeystorePassword
+                    : null;
+
+            String userName = securityProperties
+                    .getString(SecurityConf.SECURITY_JMX_USERNAME, null, false);
             // Aliases for keystore
             String connector_alias_client_to_connector = securityProperties
                     .getString(
@@ -304,10 +388,18 @@ public class SecurityHelper
                             false);
 
             // --- Populate return object ---
+            authInfo.setTungstenApplicationName(tungstenApplicationName);
             authInfo.setConnectorUseSSL(connectorUseSSL);
             authInfo.setParentPropertiesFileLocation(parentFileLocation);
             authInfo.setAuthenticationNeeded(useAuthentication);
-            authInfo.setUseTungstenAuthenticationRealm(useTungstenAuthenticationRealm);
+            authInfo.setAuthenticationByCertificateNeeded(
+                    authenticationByCertificateNeeded);
+            authInfo.setMinWaitOnFailedLogin(minWaitOnFailedLogin);
+            authInfo.setMaxWaitOnFailedLogin(maxWaitOnFailedLogin);
+            authInfo.setIncrementStepWaitOnFailedLogin(
+                    incrementStepWaitOnFailedLogin);
+            authInfo.setUseTungstenAuthenticationRealm(
+                    useTungstenAuthenticationRealm);
             authInfo.setUseEncryptedPasswords(useEncryptedPassword);
             authInfo.setEncryptionNeeded(useEncryption);
             authInfo.setPasswordFileLocation(passwordFileLocation);
@@ -316,12 +408,16 @@ public class SecurityHelper
             authInfo.setKeystorePassword(keystorePassword);
             authInfo.setTruststoreLocation(truststoreLocation);
             authInfo.setTruststorePassword(truststorePassword);
+            authInfo.setEnabledProtocols(enabledProtocols);
+            authInfo.setEnabledCipherSuites(enabledCipherSuites);
+            authInfo.setClientKeystoreLocation(clientKeystoreLocation);
+            authInfo.setClientKeystorePassword(clientKeystorePassword);
             authInfo.setUsername(userName);
             authInfo.setParentProperties(securityProperties);
             // aliases
             if (connector_alias_client_to_connector != null)
-                authInfo.getMapKeystoreAliasesForTungstenApplication()
-                        .put(SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
+                authInfo.getMapKeystoreAliasesForTungstenApplication().put(
+                        SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
                                 connector_alias_client_to_connector);
             if (connector_alias_connector_to_db != null)
                 authInfo.getMapKeystoreAliasesForTungstenApplication().put(
@@ -336,7 +432,8 @@ public class SecurityHelper
             // Checks authentication and encryption parameters
             // file exists, aliases exists...
             if (doConsistencyChecks)
-                authInfo.checkAndCleanAuthenticationInfo(tungstenApplicationName);
+                authInfo.checkAndCleanAuthenticationInfo(
+                        tungstenApplicationName);
 
             // --- Set critical properties as System Properties ---
             SecurityHelper.setSecurityProperties(authInfo, false);
@@ -348,16 +445,25 @@ public class SecurityHelper
      * Set system properties required for SSL and password management. Since
      * these settings are critical to correct operation we optionally log them.
      * 
-     * @param authInfo Populated authenticatino information
+     * Configured cipher suites and protocols may only match partially with the
+     * ciphers and protocols supported by the SSL implementation being used.
+     * In system properties we only store ciphers and protocols which are both
+     * configured and supported.
+     * 
+     * @param authInfo Populated authentication information
      * @param verbose If true, log information
+     * @throws ConfigurationException 
+     * @throws GeneralSecurityException 
+     * @throws IOException 
      */
     private static void setSecurityProperties(AuthenticationInfo authInfo,
-            boolean verbose)
+            boolean verbose) throws ConfigurationException
     {
         if (verbose)
         {
             CLUtils.println("Setting security properties!");
         }
+        // Keystore and Truststore
         setSystemProperty("javax.net.ssl.keyStore",
                 authInfo.getKeystoreLocation(), verbose);
         setSystemProperty("javax.net.ssl.keyStorePassword",
@@ -366,6 +472,71 @@ public class SecurityHelper
                 authInfo.getTruststoreLocation(), verbose);
         setSystemProperty("javax.net.ssl.trustStorePassword",
                 authInfo.getTruststorePassword(), verbose);
+
+        if (authInfo.isEncryptionNeeded())
+        {
+            SSLSocketFactory sf;
+            try
+            {
+                sf = (SSLSocketFactory)SSLSocketFactory.getDefault();
+            }
+            catch (Exception e)
+            {
+                throw new ConfigurationException("Failed to create a socket "
+                        + "factory for examining cipher suites supported by "
+                        + "underlying SSL implementation. " + e.getMessage());
+            }
+            /**
+             *  Find out which protocols and cipher suites are both specified in
+             *  cluster configuration and supported by the current, underlying 
+             *  SSL implementation. Set common protocols and cipher suites to
+             *  corresponding System properties which will be the only access
+             *  point to encryption information hereafter. 
+             */
+            setProtocolsToSystemProperties(authInfo, sf, verbose);
+            setCipherSuitesToSystemProperties(authInfo, sf, verbose);
+
+            // There must be at least one protocol and cipher suite if encryption is used
+            if (SecurityHelper.getProtocols() == null)
+            {
+                throw new ConfigurationException("Unable to find suitable "
+                        + "protocols for encrypted messaging.");
+            }
+            if (SecurityHelper.getCiphers() == null)
+            {
+                throw new ConfigurationException("Unable to find suitable "
+                        + "cipher suites for encrypted messaging.");
+            }
+        }
+    }
+
+    /**
+     * Set system properties required for client SSL support and authentication.
+     * The keyStore holds the client's private key to be used for authentication
+     * The trustStore holds the certificates of the trusted servers
+     * 
+     * @param authInfo
+     * @param verbose
+     */
+    public static void setClientSecurityProperties(AuthenticationInfo authInfo,
+            boolean debug)
+    {
+        if (debug)
+        {
+            CLUtils.println("Clearing and Setting Client security properties");
+        }
+
+        System.clearProperty("javax.net.ssl.keyStore");
+        System.clearProperty("javax.net.ssl.trustStore");
+
+        setSystemProperty("javax.net.ssl.keyStore",
+                authInfo.getClientKeystoreLocation(), debug);
+        setSystemProperty("javax.net.ssl.keyStorePassword",
+                authInfo.getClientKeystorePassword(), debug);
+        setSystemProperty("javax.net.ssl.trustStore",
+                authInfo.getTruststoreLocation(), debug);
+        setSystemProperty("javax.net.ssl.trustStorePassword",
+                authInfo.getTruststorePassword(), debug);
     }
 
     /**
@@ -414,9 +585,8 @@ public class SecurityHelper
         if (propertiesFileLocation == null) // Get from default location
         {
             File clusterConfDirectory = ClusterConfiguration
-                    .getDir(ClusterConfiguration
-                            .getGlobalConfigDirName(ClusterConfiguration
-                                    .getClusterHome()));
+                    .getDir(ClusterConfiguration.getGlobalConfigDirName(
+                            ClusterConfiguration.getClusterHome()));
             securityPropertiesFile = new File(clusterConfDirectory.getPath(),
                     SecurityConf.SECURITY_PROPERTIES_FILE_NAME);
         }
@@ -433,7 +603,8 @@ public class SecurityHelper
             securityConfigurationFileInputStream = new FileInputStream(
                     securityPropertiesFile);
             securityProps.load(securityConfigurationFileInputStream, true);
-            closeSecurityConfigurationFileInputStream(securityConfigurationFileInputStream);
+            closeSecurityConfigurationFileInputStream(
+                    securityConfigurationFileInputStream);
         }
         catch (FileNotFoundException e)
         {
@@ -453,7 +624,8 @@ public class SecurityHelper
         }
         finally
         {
-            closeSecurityConfigurationFileInputStream(securityConfigurationFileInputStream);
+            closeSecurityConfigurationFileInputStream(
+                    securityConfigurationFileInputStream);
         }
 
         if (logger.isDebugEnabled())
@@ -463,8 +635,7 @@ public class SecurityHelper
         }
 
         // Update propertiesFileLocation with the location actualy used
-        securityProps.put(
-                SecurityConf.SECURITY_PROPERTIES_PARENT_FILE_LOCATION,
+        securityProps.put(SecurityConf.SECURITY_PROPERTIES_PARENT_FILE_LOCATION,
                 securityPropertiesFile.getAbsolutePath());
 
         return securityProps;
@@ -493,6 +664,80 @@ public class SecurityHelper
     }
 
     /**
+     * Read client's SSL protocols
+     * 
+     * @return first value on the list or null if property doesn't have value.
+     */
+    public static String getProtocol()
+    {
+        if (System.getProperty(
+                SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
+            return System
+                    .getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS)
+                    .split(",")[0];
+        else
+            return null;
+    }
+
+    public static String[] getProtocols()
+    {
+        if (System.getProperty(
+                SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS) != null)
+            return System
+                    .getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS)
+                    .split(",");
+        else
+            return null;
+    }
+
+    /**
+     * Read client's SSL ciphers
+     * 
+     * @return first value on the list or null if property doesn't have value.
+     */
+    public static String getCipher()
+    {
+        if (System.getProperty(
+                SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
+            return System
+                    .getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS)
+                    .split(",")[0];
+        else
+            return null;
+    }
+
+    /** Get client encryption ciphers. */
+    public static String[] getCiphers()
+    {
+        if (System.getProperty(
+                SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS) != null)
+            return System
+                    .getProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS)
+                    .split(",");
+        else
+            return null;
+    }
+
+    /** Return the ciphers available on this JVM. */
+    public static String[] getJvmSupportedCiphers()
+    {
+        String[] supportedCiphers = ((SSLSocketFactory) SSLSocketFactory
+                .getDefault()).getSupportedCipherSuites();
+        return supportedCiphers;
+    }
+
+    /**
+     * Process a list of candidate ciphers for use on the JVM and return those
+     * candidates that are supported and hence usable.
+     */
+    public static String[] getJvmEnabledCiphers(String[] candidateCiphers)
+    {
+        String[] jvmEnabledCiphers = getMatchingStrings(
+                getJvmSupportedCiphers(), candidateCiphers);
+        return jvmEnabledCiphers;
+    }
+
+    /**
      * Get the system keystore location
      * 
      * @return The keyStore location
@@ -511,4 +756,484 @@ public class SecurityHelper
     {
         return System.getProperty("javax.net.ssl.trustStore");
     }
+
+    /**
+     * Get alias in a keystore or truststore
+     * 
+     * @param keystoreLocation
+     * @param keystorePassword
+     * @return
+     * @throws KeyStoreException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws IOException
+     */
+    public static List<String> getAliasesforKeystore(String keystoreLocation,
+            String keystorePassword) throws KeyStoreException,
+            NoSuchAlgorithmException, CertificateException, IOException
+    {
+        Enumeration<String> enumAliases = null;
+
+        FileInputStream inputstreamStore;
+
+        inputstreamStore = new FileInputStream(keystoreLocation);
+        KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keystore.load(inputstreamStore, keystorePassword.toCharArray());
+
+        // List the aliases
+        enumAliases = keystore.aliases();
+
+        List<String> listAliases = Collections.list(enumAliases);
+
+        // while (enumAliases.hasMoreElements())
+        // {
+        // String alias = enumAliases.nextElement();
+        //
+        // // Does alias refer to a private key?
+        // // boolean b = keystore.isKeyEntry(alias);
+        //
+        // // Does alias refer to a trusted certificate?
+        // // b = keystore.isCertificateEntry(alias);
+        // }
+
+        return listAliases;
+    }
+
+    /**
+     * Check that the keystore / trustore can be accessed and has non empty list
+     * of Aliases
+     * 
+     * @param storeLocation
+     * @param storePassword
+     * @param shouldNotBeEmpty true if the store list of aliases should not be
+     *            empty
+     * @throws ConfigurationException
+     */
+    public static void checkAccessAndAliasesForKeystore(String storeLocation,
+            String storePassword, boolean shouldNotBeEmpty)
+            throws ConfigurationException
+    {
+        final String errorMessage = MessageFormat.format(
+                "Could not access or retrieve aliases from {0}", storeLocation);
+        try
+        {
+            List<String> aliasesInKeystore = SecurityHelper
+                    .getAliasesforKeystore(storeLocation, storePassword);
+
+            if (aliasesInKeystore.isEmpty() && shouldNotBeEmpty)
+            {
+                throw new ConfigurationException(MessageFormat.format(
+                        "Keystore / Truststore does not contain any aliases: {0}",
+                                        storeLocation));
+            }
+        }
+        catch (KeyStoreException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+        catch (CertificateException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+        catch (IOException e)
+        {
+            throw new ConfigurationException(
+                    MessageFormat.format(errorMessage, e));
+        }
+    }
+
+    /**
+     * Stores the certificate in the host certificate truststore with the
+     * associated alias. If the certificate is already added, this operation
+     * does nothing. Any other certificate associated with the alias is
+     * replaced.
+     * 
+     * @param certificateAlias Alias of the certificate in the truststore
+     * @param certificateLocation Where to get the certificate from
+     */
+    public static void addCertificateToTruststore(String certificateAlias,
+            String certificateLocation)
+    {
+
+    }
+
+    /**
+     * Compare two String arrays and store matching Strings to result array.
+     * 
+     * @param str1
+     * @param str2
+     * @return String array consisting of all common Strings in str1 and str2.
+     */
+    public static String[] getMatchingStrings(String[] str1, String[] str2)
+    {
+        // Put first string in table and then iterate across it using the
+        // second.
+        HashMap<String, String> map = new HashMap<String, String>();
+        for (String s : str1)
+        {
+            map.put(s, "FOUND");
+        }
+
+        ArrayList<String> resultList = new ArrayList<String>();
+        for (String s : str2)
+        {
+            if (map.get(s) != null)
+                resultList.add(s);
+        }
+
+        return resultList.toArray(new String[0]);
+    }
+
+    public static void setCiphersAndProtocolsToSSLSocket(SSLSocket sslSocket,
+            String[] enabledCiphers, String[] enabledProtocols)
+            throws ConfigurationException
+    {
+        if (enabledCiphers != null && enabledCiphers.length > 0)
+        {
+            if (SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers).length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) cipher suites.");
+            }
+
+            // Enable ciphers which are both supported by socket service and
+            // configured by user
+            sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers));            
+        }
+               
+        if (enabledProtocols != null && enabledProtocols.length > 0)
+        {
+            if (SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedProtocols(), enabledProtocols).length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) protocols.");
+            }
+            // Enable protocols which are both supported by socket and
+            // configured by user.
+            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedProtocols(), enabledProtocols));
+        }
+    }
+
+    public static void setCiphersAndProtocolsToSSLSocket2(SSLSocket sslSocket,
+            String[] enabledCiphers, String[] enabledProtocols)
+            throws ConfigurationException
+    {
+        // Check that ciphers and protocols lists aren't empty
+        if (enabledCiphers == null || enabledCiphers.length == 0)
+        {
+            throw new ConfigurationException(
+                    "No ciphers are enabled in security properties.");
+        }
+        if (enabledProtocols == null || enabledProtocols.length == 0)
+        {
+            throw new ConfigurationException(
+                    "No protocols are enabled in security properties.");
+        }
+
+        // Set cipher suites and protocols
+        if (SecurityHelper.getMatchingStrings(
+            sslSocket.getSupportedCipherSuites(),
+            enabledCiphers).length == 0)
+        {
+            throw new ConfigurationException("SSLSocket doesn't support any "
+                    + "of the enabled (configured) cipher suites.");
+        }
+        // Enable ciphers which are both supported by socket service and
+        // configured by user
+        sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
+                sslSocket.getSupportedCipherSuites(), enabledCiphers));            
+           
+        if (SecurityHelper.getMatchingStrings(sslSocket.getSupportedProtocols(),
+                enabledProtocols).length == 0)
+            {
+                throw new ConfigurationException("SSLSocket doesn't support any "
+                        + "of the enabled (configured) protocols.");
+            }
+
+            // Enable protocols which are both supported by socket and
+            // configured by user.
+            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
+                    sslSocket.getSupportedProtocols(), enabledProtocols));
+        }
+
+    /**
+     *  Find out which protocols are both configured and supported.
+     *  Set common ones to System properties from where 
+     *  (and only there) they are accessed.
+
+     * @param sf
+     * @param verbose
+     */
+    private static void setProtocolsToSystemProperties(
+            AuthenticationInfo authInfo, 
+            SSLSocketFactory sf, 
+            boolean verbose)
+    {
+        String[] supportedProtocolsArray;
+        String [] configuredProtocolsArray;
+        String [] possibleProtocolsArray;
+        SSLSocket ssl;
+        
+        try
+        { 
+            ssl = ((SSLSocket) sf.createSocket());
+        }
+        catch (IOException e)
+        {
+            logger.error("Failed to create SSLSocket. " + e.getMessage());
+            throw new RuntimeException("Unable to find out"
+                    + "the protocols supported by current "
+                    + "underlying SSL implementation.");
+        }
+        supportedProtocolsArray = ssl.getSupportedProtocols();
+        
+        if (supportedProtocolsArray.length == 0)
+        {
+            throw new RuntimeException("Reading supported protocols from "
+                    + "SSLSocket returned empty set. Encryption is not "
+                    + "possible.");
+        }
+
+        if (!authInfo.getEnabledProtocols().isEmpty())
+        {
+            // There are protocols specified in the configuration
+            configuredProtocolsArray = authInfo.getEnabledProtocols().toArray(new String [0]);
+            // Find common protocols from configured and from supported lists
+            possibleProtocolsArray = SecurityHelper
+                    .getMatchingStrings(supportedProtocolsArray, configuredProtocolsArray);
+            
+            if (possibleProtocolsArray.length == 0)
+            {
+                // We don't have any protocols in common. This is not good!
+                String message = "Configured and supported protocol lists "
+                        + "don't have anything in common. Encryption is not "
+                        + "possible.";
+                StringBuffer sb = new StringBuffer(message).append("\n");
+                sb.append(String.format("SSL implementation supports these "
+                        + "cipher suites: %s\n",
+                        StringUtils.join(supportedProtocolsArray, ",")));
+                sb.append(String.format(
+                        "These were the configured protocols : %s\n",
+                                StringUtils.join(configuredProtocolsArray, ",")));
+                logger.error(sb.toString());
+                throw new RuntimeException(message);
+
+            }
+        }
+        else
+        {
+            StringBuffer sb = new StringBuffer("Unable to find protocol(s) "
+                    + "from user-provided configuration. Using all protocols"
+                    + " supported by SSL implementation.\n\tSupported protocols : ");
+            sb.append(StringUtils.join(supportedProtocolsArray, ", "));
+            logger.warn(sb.toString());
+            possibleProtocolsArray = supportedProtocolsArray;
+        }
+        // Set System properties for protocols
+        setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
+                StringUtils.join(possibleProtocolsArray, ","), verbose);
+        setSystemProperty("https.protocols", 
+                StringUtils.join(possibleProtocolsArray, "\n"), verbose);
+    }
+
+    /**
+     *  Find out which cipher suites are both configured and supported.
+     *  Set selected ones to System properties from where 
+     *  (and only there) they are accessed.
+     * 
+     * @param authInfo
+     * @param sf
+     * @param verbose
+     */
+    private static void setCipherSuitesToSystemProperties(
+            AuthenticationInfo authInfo,
+            SSLSocketFactory sf,
+            boolean verbose)
+    {
+        String [] supportedCipherSuitesArray = sf.getDefaultCipherSuites();
+        String [] configuredCipherSuitesArray;
+        String [] possibleCipherSuitesArray;
+
+        if (!authInfo.getEnabledCipherSuites().isEmpty())
+        {
+            // There are cipher suites specified in the configuration
+            supportedCipherSuitesArray = sf.getSupportedCipherSuites();
+            configuredCipherSuitesArray = authInfo.getEnabledCipherSuites()
+                    .toArray(new String[0]);
+            possibleCipherSuitesArray = SecurityHelper.getMatchingStrings(
+                    supportedCipherSuitesArray, configuredCipherSuitesArray);
+            
+            if (possibleCipherSuitesArray.length == 0)
+            {
+                // We don't have any cipher suites in common. This is not good!
+                String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
+                StringBuffer sb = new StringBuffer(message).append("\n");
+                sb.append(String.format("SSL implementation supported cipher suites: %s\n",
+                        StringUtils.join(supportedCipherSuitesArray)));
+                sb.append(String.format(
+                        "Approved cipher suites from security.properties: %s\n",
+                                StringUtils.join(configuredCipherSuitesArray)));
+                logger.error(sb.toString());
+                throw new RuntimeException(message);
+            }
+        }
+        else
+        {
+            /**
+             * Cipher suites aren't specified in configuration. Read 
+             * default cipher suites and use them.
+             */
+            possibleCipherSuitesArray = sf.getDefaultCipherSuites();
+        }
+        // Set System properties for cipher suites
+        setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
+                StringUtils.join(possibleCipherSuitesArray, ","), verbose);
+    }
+    
+    /**
+     * Print whether JMX connections are encrypted and if so, used cipher
+     * suites and protocols
+     * 
+     * @param authInfo
+     * @return
+     */
+    public static String printSecuritySummary(AuthenticationInfo authInfo)
+    {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Security summary :\n");
+
+        if (authInfo.isEncryptionNeeded())
+        {
+            sb.append("JMX connections are encrypted\n");
+            sb.append("Enabled cipher suites : ");
+            for (String s : SecurityHelper.getCiphers())
+                sb.append("\n\t" + s + " ");
+            sb.append("\n");
+            sb.append("Enabled protocols : ");
+            for (String s : SecurityHelper.getProtocols())
+                sb.append("\n\t" + s + " ");
+            sb.append("\n");
+        }
+        else
+        {
+            sb.append("JMX connections are not encrypted\n");
+        }
+
+        if (authInfo.isAuthenticationNeeded())
+        {
+            sb.append("Password authentication is used\n");
+        }
+        else
+        {
+            sb.append("No password authentication\n");                        
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Check that KeyStore and the keys inside have a common password.
+     * 
+     * @param keystoreLocation
+     * @param keystoreType "jks", jceks", or "pkcs"
+     * @param password
+     * @throws ConfigurationException
+     * @throws GeneralSecurityException
+     * @throws IOException
+     */
+    public static void checkKeyStorePasswords(String keystoreLocation,
+            KEYSTORE_TYPE keystoreType, String password,
+            String aliasToFind, String keyPassword) throws ConfigurationException,
+                    GeneralSecurityException, IOException
+    {
+        String ksLocation;
+        // Check that varibale holding key store location gets non-empty value
+        if (keystoreLocation != null && !keystoreLocation.isEmpty())
+        {
+            ksLocation = keystoreLocation;
+        }
+        else if (SecurityHelper.getKeyStoreLocation() != null 
+                        && !SecurityHelper.getKeyStoreLocation().isEmpty())
+        {
+            ksLocation = SecurityHelper.getKeyStoreLocation();
+        }
+        else
+        {
+            throw new ConfigurationException("KeyStore location is not given.");
+        }
+        // Check that key store type is not null
+        if (keystoreType == null)
+        {
+            throw new ConfigurationException(
+                    "Invalid KeyStore type : " + keystoreType);
+        }
+        FileInputStream fis = new FileInputStream(ksLocation);
+        String alg = KeyManagerFactory.getDefaultAlgorithm();
+        KeyManagerFactory kmFact = KeyManagerFactory.getInstance(alg);
+
+        char[] charPassword = password.toCharArray();
+        KeyStore ks = KeyStore.getInstance(keystoreType.name());
+        ks.load(fis, charPassword);
+        fis.close();
+
+        // --- Enumerate keys and try to retrieve then with given password
+        List<String> listKeysWithWrongPassword = new ArrayList<String>();
+        boolean aliasToFindIsFound = false;
+
+        Enumeration<String> enumeration = ks.aliases();
+
+        while (enumeration.hasMoreElements())
+        {
+            String alias = (String) enumeration.nextElement();
+            if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
+                aliasToFindIsFound = true;
+        
+        try
+        {
+                logger.debug(MessageFormat.format("Trying alias:{0}", alias));
+                Key key = ks.getKey(alias, keyPassword.toCharArray());
+        }
+            catch (Exception e)
+        {
+                if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
+                    listKeysWithWrongPassword.add(alias);
+                else if (aliasToFind==null)
+                    listKeysWithWrongPassword.add(alias);
+        }
+
+        }
+
+        // Throw exception if aliasToFind was not inside keystore
+        if (aliasToFind != null && !aliasToFindIsFound)
+            throw new ConfigurationException(MessageFormat.format(
+                    "Keystore does not contain alias={0}", aliasToFind));
+        // Throw exception if wrong password found
+        if (!listKeysWithWrongPassword.isEmpty())
+        {
+            String strListKeysWithWrongPassword = StringUtils
+                    .join(listKeysWithWrongPassword, ",");
+            throw new UnrecoverableKeyException(MessageFormat.format(
+                    "Incorrect password for following keys:{0}",
+                    strListKeysWithWrongPassword));
+        }
+
+    }
+
+    public static void testSetSecurityProperties(AuthenticationInfo authInfo,
+            boolean verbose) throws ConfigurationException
+    {
+        setSecurityProperties(authInfo, verbose);
+    }
+
 }

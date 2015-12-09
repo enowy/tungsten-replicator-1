@@ -722,7 +722,12 @@ class HostDefaultDataserviceName < ConfigurePrompt
       if @config.getNestedProperty([REPL_SERVICES, rs_alias, DEPLOYMENT_HOST]) == get_member()
         ds_alias = @config.getNestedProperty([REPL_SERVICES, rs_alias, DEPLOYMENT_DATASERVICE])
         if ds_alias != ""
-          if Topology.build(ds_alias, @config).use_management?()
+          topology = Topology.build(ds_alias, @config)
+          unless topology.enabled?()
+            next
+          end
+          
+          if topology.use_management?()
             @default = ds_alias
             return
           else
@@ -732,38 +737,40 @@ class HostDefaultDataserviceName < ConfigurePrompt
       end
     }
     
-    @config.getNestedPropertyOr([MANAGERS], {}).each_key{
-      |m_alias|
-      if m_alias == DEFAULTS
-        next
-      end
-      
-      if @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_HOST]) == get_member()
-        ds_alias = @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_DATASERVICE])
-        if ds_alias != ""
-          @default = ds_alias
-          return
+    if Configurator.instance.is_enterprise?()
+      @config.getNestedPropertyOr([MANAGERS], {}).each_key{
+        |m_alias|
+        if m_alias == DEFAULTS
+          next
         end
-      end
-    }
+      
+        if @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_HOST]) == get_member()
+          ds_alias = @config.getNestedProperty([MANAGERS, m_alias, DEPLOYMENT_DATASERVICE])
+          if ds_alias != ""
+            @default = ds_alias
+            return
+          end
+        end
+      }
     
-    @config.getNestedPropertyOr([CONNECTORS], {}).each_key{
-      |h_alias|
-      if h_alias == DEFAULTS
-        next
-      end
+      @config.getNestedPropertyOr([CONNECTORS], {}).each_key{
+        |h_alias|
+        if h_alias == DEFAULTS
+          next
+        end
       
-      if @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_HOST]) == get_member()
-        ds_aliases = @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_DATASERVICE])
-        if ! ds_aliases.kind_of?(Array)
-           ds_aliases=Array(ds_aliases);
+        if @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_HOST]) == get_member()
+          ds_aliases = @config.getNestedProperty([CONNECTORS, h_alias, DEPLOYMENT_DATASERVICE])
+          if ! ds_aliases.kind_of?(Array)
+             ds_aliases=Array(ds_aliases);
+          end
+          if ds_aliases.size() > 0
+            @default = ds_aliases.at(0)
+            return
+          end
         end
-        if ds_aliases.size() > 0
-          @default = ds_aliases.at(0)
-          return
-        end
-      end
-    }
+      }
+    end
     
     if non_cluster_ds_alias != nil
       @default = non_cluster_ds_alias
@@ -925,11 +932,44 @@ class JavaExternalLibDir < ConfigurePrompt
   include ClusterHostPrompt
   include AdvancedPromptModule
   include MigrateFromReplicationServices
+  include OptionalPromptModule
 
   def initialize
     super(REPL_JAVA_EXTERNAL_LIB_DIR, 
       "Directory for 3rd party Jar files required by replicator",
-      PV_FILENAME, "")
+      PV_FILENAME)
+  end
+  
+  def load_default_value
+    lib_directories = []
+    @config.getPropertyOr([REPL_SERVICES], {}).keys().each{
+      |rs_alias|
+      if rs_alias == DEFAULTS
+        next
+      end
+      
+      config_prefix = [REPL_SERVICES, rs_alias]
+      ds = ConfigureDatabasePlatform.build(config_prefix, @config)
+      lib = ds.getExternalLibraryDirectory()
+      if lib.to_s() != ""
+        lib_directories << lib
+      end
+      
+      ds = ConfigureDatabasePlatform.build(config_prefix, @config, true)
+      lib = ds.getExternalLibraryDirectory()
+      if lib.to_s() != ""
+        lib_directories << lib
+      end
+    }
+    
+    lib_directories.uniq!()
+    if lib_directories.size() > 1
+      raise MessageError.new("Multiple replication services require an external library. This is not supported.")
+    elsif lib_directories.size() == 1
+      @default = lib_directories[0]
+    else
+      @default = nil
+    end
   end
 end
 
@@ -1443,6 +1483,22 @@ class HostDataServiceName < ConfigurePrompt
   end
 end
 
+class HostDisableSecurityControls < ConfigurePrompt
+  include ClusterHostPrompt
+  
+  def initialize
+    super(DISABLE_SECURITY_CONTROLS, "Disable all security controls and file protection.", PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if Configurator.instance.default_security?() == true
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+end
+
 class HostSecurityDirectory < ConfigurePrompt
   include ClusterHostPrompt
   
@@ -1459,12 +1515,7 @@ class HostEnableJgroupsSSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN, default)
+    super(ENABLE_JGROUPS_SSL, "Enable SSL encryption of JGroups communication on this host", PV_BOOLEAN)
     add_command_line_alias("jgroups-ssl")
   end
   
@@ -1476,6 +1527,24 @@ class HostEnableJgroupsSSL < ConfigurePrompt
       return "<ENCRYPT key_store_name=\"#{keystore}\"  store_password=\"#{ks_pass}\" key_password=\"#{ks_pass}\" alias=\"#{key_alias}\" />"
     else
       return ""
+    end
+  end
+  
+  def load_default_value
+    if get_member_property(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    if is_manager == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
     end
   end
 end
@@ -1505,10 +1574,20 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
     false
   end
   
+  def accept?(raw_value)
+    if raw_value == AUTOGENERATE
+      raw_value
+    else
+      super(raw_value)
+    end
+  end
+  
   def validate_value(value)
     super(value)
-    if is_valid?() && value != ""
-      unless File.exists?(value)
+    if is_valid?() && value != "" && value != AUTOGENERATE
+      if value == get_template_value()
+        error("The provided JGroups keystore may not be placed at #{get_template_value()} as it will conflict with installation. Move the file to another location and update --java-jgroups-keystore-path.")
+      elsif File.exists?(value) != true
         error("The file #{value} does not exist")
       end
     end
@@ -1518,7 +1597,7 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
   
   DeploymentFiles.register(JAVA_JGROUPS_KEYSTORE_PATH, GLOBAL_JAVA_JGROUPS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, storepass, first_time_warning = nil)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1530,16 +1609,22 @@ class HostJavaJgroupsKeystorePath < ConfigurePrompt
         return @keystores[keyalias]
       end
       
+      keytool = which("keytool")
+      if keytool == nil
+        raise "Unable to generate a file for --java-jgroups-keystore-path because the keytool command is not available. Install keytool or disable the feature with '--jgroups-ssl=false'."
+      end
+      
+      if first_time_warning != nil
+        Configurator.instance.warning(first_time_warning)
+      end
+      
       ks = Tempfile.new("jgroupssec")
       ks.close()
       File.unlink(ks.path())
       path = "#{dest}/#{File.basename(ks.path())}"
       
-      cmd = ["keytool -genseckey -alias #{keyalias}",
-        "-keypass #{keypass}",
-        "-storepass #{storepass} -keyalg Blowfish -keysize 56",
-        "-keystore #{path} -storetype JCEKS"]
-      cmd_result(cmd.join(" "))
+      keystore = JavaKeytool.new(path, JavaKeytool::TYPE_JCEKS)
+      keystore.genseckey(keyalias, storepass)
       
       @keystores[keyalias] = path
       
@@ -1563,13 +1648,27 @@ class HostEnableRMIAuthentication < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN, default)
+    super(ENABLE_RMI_AUTHENTICATION, "Enable RMI authentication for the services running on this host", PV_BOOLEAN)
     add_command_line_alias("rmi-authentication")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    is_replicator = get_member_property(HOST_ENABLE_REPLICATOR)
+    if is_manager == "false" && is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
+    end
   end
 end
 
@@ -1577,13 +1676,27 @@ class HostEnableRMISSL < ConfigurePrompt
   include ClusterHostPrompt
   
   def initialize
-    if Configurator.instance.default_security?() == true
-      default = "true"
-    else
-      default = "false"
-    end
-    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN, default)
+    super(ENABLE_RMI_SSL, "Enable SSL encryption of RMI communication on this host", PV_BOOLEAN)
     add_command_line_alias("rmi-ssl")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_manager = get_member_property(HOST_ENABLE_MANAGER)
+    is_replicator = get_member_property(HOST_ENABLE_REPLICATOR)
+    if is_manager == "false" && is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
+    end
   end
 end
 
@@ -1777,6 +1890,15 @@ class GlobalHostJavaPasswordStorePath < ConfigurePrompt
   end
 end
 
+class HostTLSKeyLifetime < ConfigurePrompt
+  include ClusterHostPrompt
+  include PrivateArgumentModule
+  
+  def initialize
+    super(JAVA_TLS_KEY_LIFETIME, "Lifetime for the Java TLS key", PV_INTEGER, 365)
+  end
+end
+
 class HostTLSAlias < ConfigurePrompt
   include ClusterHostPrompt
   include PrivateArgumentModule
@@ -1789,6 +1911,7 @@ end
 class HostJavaTLSKeystorePath < ConfigurePrompt
   include ClusterHostPrompt
   include OptionalPromptModule
+  include NoStoredServerConfigValue
   
   def initialize
     super(JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
@@ -1798,9 +1921,30 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
     @config.getProperty(get_member_key(SECURITY_DIRECTORY)) + "/tungsten_tls_keystore.jks"
   end
   
+  def accept?(raw_value)
+    if raw_value == AUTOGENERATE
+      raw_value
+    else
+      super(raw_value)
+    end
+  end
+  
+  def validate_value(value)
+    super(value)
+    if is_valid?() && value != "" && value != AUTOGENERATE
+      if value == get_template_value()
+        error("The provided TLS keystore may not be placed at #{get_template_value()} as it will conflict with installation. Move the file to another location and update --java-tls-keystore-path.")
+      elsif File.exists?(value) != true
+        error("The file #{value} does not exist")
+      end
+    end
+    
+    is_valid?()
+  end
+  
   DeploymentFiles.register(JAVA_TLS_KEYSTORE_PATH, GLOBAL_JAVA_TLS_KEYSTORE_PATH)
   
-  def self.build_keystore(dest, keyalias, keypass, storepass)
+  def self.build_keystore(dest, keyalias, storepass, lifetime, first_time_warning = nil)
     Configurator.instance.synchronize() {
       @mutex ||= Mutex.new
     }
@@ -1812,16 +1956,22 @@ class HostJavaTLSKeystorePath < ConfigurePrompt
         return @keystores[keyalias]
       end
       
+      keytool = which("keytool")
+      if keytool == nil
+        raise "Unable to generate a file for --java-tls-keystore-path because the keytool command is not available. Install keytool or disable the feature with '--rmi-ssl=false --rmi-authentication=false --thl-ssl=false'."
+      end
+      
+      if first_time_warning != nil
+        Configurator.instance.warning(first_time_warning)
+      end
+      
       ks = Tempfile.new("tlssec")
       ks.close()
       File.unlink(ks.path())
       path = "#{dest}/#{File.basename(ks.path())}"
       
-      cmd = ["keytool -genkey -alias #{keyalias}",
-        "-keyalg RSA -keystore #{path}",
-        "-dname \"cn=Continuent, ou=IT, o=VMware, c=US\"",
-        "-storepass #{storepass} -keypass #{keypass}"]
-      cmd_result(cmd.join(" "))
+      keystore = JavaKeytool.new(path)
+      keystore.genkey(keyalias, storepass, lifetime)
       
       @keystores[keyalias] = path
       
@@ -1832,7 +1982,8 @@ end
 
 class GlobalHostTLSCertificate < ConfigurePrompt
   include ClusterHostPrompt
-  include OptionalPromptModule
+  include ConstantValueModule
+  include NoStoredServerConfigValue
   
   def initialize
     super(GLOBAL_JAVA_TLS_KEYSTORE_PATH, "The keystore holding a certificate to use for all Continuent TLS encryption.", PV_FILENAME)
@@ -1889,16 +2040,17 @@ class HostProtectConfigurationFiles < ConfigurePrompt
   end
   
   def load_default_value
-    if Configurator.instance.default_security?() == true
-      @default = "true"
-    else
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
       @default = "false"
+    else
+      @default = "true"
     end
   end
 end
 
 class HostFileProtectionLevel < ConfigurePrompt
   include ClusterHostPrompt
+  include NewDirectoryUpdate
   
   def initialize
     validator = PropertyValidator.new("^user|group|none$", 
@@ -1910,10 +2062,10 @@ class HostFileProtectionLevel < ConfigurePrompt
     if @config.getProperty(get_member_key(PROTECT_CONFIGURATION_FILES)) == "false"
       @default = "none"
     else
-      if Configurator.instance.default_security?() == true
-        @default = "user"
-      else
+      if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
         @default = "none"
+      else
+        @default = "group"
       end
     end
   end
@@ -1921,12 +2073,25 @@ class HostFileProtectionLevel < ConfigurePrompt
   def get_template_value
     case get_value()
     when "user"
-      return 0077
+      return "0077"
     when "group"
-      return 0007
+      return "0027"
     else
       return nil
     end
+  end
+end
+
+class HostFileProtectionUmask < ConfigurePrompt
+  include ClusterHostPrompt
+  include OptionalPromptModule
+  
+  def initialize
+    super(FILE_PROTECTION_UMASK, "Protection umask for Continuent files", PV_ANY)
+  end
+  
+  def load_default_value
+    @default = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
   end
 end
 
@@ -2142,5 +2307,75 @@ class HostPortsForReplicators < ConfigurePrompt
     }
     
     @default = @default.uniq().sort()
+  end
+end
+
+class HostTrialModeLicense < ConfigurePrompt
+  include ClusterHostPrompt
+  include HiddenValueModule
+  include NoSystemDefault
+  
+  def initialize
+    super(ENABLE_TRIAL_MODE, "Use trial-mode for this host", PV_BOOLEAN, "false")
+  end
+end
+
+class HostLicensesPaths < ConfigurePrompt
+  include ClusterHostPrompt
+  include DefaultValueOnlyModule
+  
+  def initialize
+    super(HOST_LICENSE_PATHS, "List of paths to search for licenses assigned to this host")
+  end
+  
+  def load_default_value
+    @default = [
+      "#{@config.getProperty(HOME_DIRECTORY)}/share/continuent.license",
+      "#{@config.getProperty(HOME_DIRECTORY)}/share/continuent.licenses",
+      "/etc/tungsten/continuent.license",
+      "/etc/tungsten/continuent.licenses"
+    ]
+  end
+end
+
+class HostLicenses < ConfigurePrompt
+  include ClusterHostPrompt
+  include DefaultValueOnlyModule
+  
+  def initialize
+    super(HOST_LICENSES, "List of licenses assigned to this host", PV_ANY)
+  end
+  
+  def load_default_value
+    @default = nil
+    
+    # Allow for the --enable-trial-mode setting to override the default
+    # Any continuent.licenses files will override this setting
+    if @config.getProperty(ENABLE_TRIAL_MODE) == "true"
+      @default = [LICENSE_TRIAL]
+    end
+    
+    search_paths = @config.getPropertyOr(HOST_LICENSE_PATHS, [])
+    unless search_paths.is_a?(Array)
+      return
+    end
+    
+    search_paths.each{
+      |path|
+      if ! File.exist?(path)
+        next
+      end
+      
+      if ! File.readable?(path)
+        warning("Unable to read #{path}")
+        next
+      end
+      
+      File.open(path, "r") {
+        |f|
+        @default = f.readlines().join().strip().split("\n")
+        return
+      }
+    }
   end
 end

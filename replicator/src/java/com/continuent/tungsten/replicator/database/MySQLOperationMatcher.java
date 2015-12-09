@@ -37,7 +37,7 @@ public class MySQLOperationMatcher implements SqlOperationMatcher
     private static Logger               logger          = Logger.getLogger(MySQLOperationMatcher.class);
 
     // Maximum length to search down large strings.
-    private static int                  PREFIX_LENGTH   = 150;
+    private static int                  PREFIX_LENGTH   = 200;
 
     private MySQLOperationStringBuilder prefixBuilder;
 

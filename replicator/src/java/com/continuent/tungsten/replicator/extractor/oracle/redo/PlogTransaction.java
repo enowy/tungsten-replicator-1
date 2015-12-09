@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Stephane Giron, Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -57,18 +57,39 @@ class PlogTransaction implements Comparable<PlogTransaction>
     private static Logger logger = Logger.getLogger(PlogTransaction.class);
 
     private final LargeObjectArray<PlogLCR> LCRList;
-    final String                            XID;
-    boolean                                 committed = false;
-    boolean                                 empty     = true;
-    java.sql.Timestamp                      commitTime;
 
-    public long startSCN  = 0;
+    /**
+     * XID is a unique ID for this transaction. Oracle assigns a different XID
+     * to each transaction, unlike start or commit SCNs, which can be associated
+     * with more than one transactions.
+     */
+    final String       XID;
+    boolean            committed = false;
+    boolean            empty     = true;
+    java.sql.Timestamp commitTime;
+
+    /**
+     * SCN at which this transaction began. Value is taken from the first LCR
+     * added to the transaction. More than one transaction can begin at this
+     * SCN.
+     */
+    public long startSCN = 0;
+
+    /**
+     * SCN at which this transaction committed. Value is taken from the last
+     * LCR. More than one transaction can have the same commit SCN.
+     */
     public long commitSCN = 0;
 
     private int skipSeq = 0;
 
-    public boolean transactionIsDML = true; // false=DDL, true=DML
+    public boolean transactionIsDML = true; // false=DDL,
+                                            // true=DML
 
+    /**
+     * ID of the plog from where we read the first LCR. On restart we must open
+     * this file to read the entire transaction.
+     */
     public long startPlogId = 0;
 
     /**
@@ -76,10 +97,10 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param XID = transaction id
      */
-    public PlogTransaction(RawByteCache cache, String XID)
+    public PlogTransaction(RawByteCache cache, String XID, int lcrBufferLimit)
     {
         this.XID = XID;
-        this.LCRList = new LargeObjectArray<PlogLCR>(cache);
+        this.LCRList = new LargeObjectArray<PlogLCR>(cache, lcrBufferLimit);
     }
 
     /**
@@ -165,6 +186,15 @@ class PlogTransaction implements Comparable<PlogTransaction>
     }
 
     /**
+     * Return current LCR list. Beware of any operation that would alter the
+     * list as it may corrupt the transaction.
+     */
+    public LargeObjectArray<PlogLCR> getLCRList()
+    {
+        return this.LCRList;
+    }
+
+    /**
      * is this transaction committed?
      * 
      * @return boolean flag
@@ -205,12 +235,11 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * @param lastObsoletePlogSeq Last obsolete plog sequence (min() over all
      *            open transactions - 1)
      * @return lastProcessedEventId
-     * @throws UnsupportedEncodingException
      */
     public String pushContentsToQueue(BlockingQueue<DBMSEvent> q, long minSCN,
             int transactionFragSize, long lastObsoletePlogSeq)
                     throws UnsupportedEncodingException, ReplicatorException,
-                    SerialException, SQLException, InterruptedException
+                    SerialException, InterruptedException, SQLException
     {
         if (logger.isDebugEnabled())
         {
@@ -246,19 +275,19 @@ class PlogTransaction implements Comparable<PlogTransaction>
                             DBMSEvent event = new DBMSEvent(lastLCR.eventId,
                                     data, false, commitTime);
 
+                            // Set metadata for the transaction. Source is
+                            // Oracle, we normalize time data to GMT, and
+                            // strings are in UTF8.
                             event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                                     Database.ORACLE);
-                            // Strings are converted to UTF8 rather than using
-                            // bytes
-                            // for this extractor.
+                            event.setMetaDataOption(
+                                    ReplOptionParams.TIME_ZONE_AWARE, "true");
                             event.setMetaDataOption(ReplOptionParams.STRINGS,
                                     "utf8");
                             q.put(event);
 
-                            data = new ArrayList<DBMSData>(); /*
-                                                               * clear array for
-                                                               * next fragment
-                                                               */
+                            // Clear array for next fragment.
+                            data = new ArrayList<DBMSData>();
                             fragSize = 0;
                         }
 
@@ -311,13 +340,11 @@ class PlogTransaction implements Comparable<PlogTransaction>
                     scanner.close();
             }
             if (lastLCR != null)
-            { /* last LCR set = transaction is not empty */
+            {
+                // Last LCR set = transaction is not empty
+                // Mark last LCR as "LAST", so we know transaction is complete
                 lastLCR.eventId = "" + commitSCN + "#" + XID + "#" + "LAST"
-                        + "#" + minSCN + "#"
-                        + lastObsoletePlogSeq; /*
-                                                * mark last LCR as "LAST", so we
-                                                * know transaction is complete
-                                                */
+                        + "#" + minSCN + "#" + lastObsoletePlogSeq;
                 if (logger.isDebugEnabled())
                 {
                     logger.debug("EventId#2 set to " + lastLCR.eventId);
@@ -325,10 +352,13 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
                 DBMSEvent event = new DBMSEvent(lastLCR.eventId, data, true,
                         commitTime);
+
+                // Set metadata for the transaction. Source is Oracle, we
+                // normalize time data to GMT, and strings are in UTF8.
                 event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                         Database.ORACLE);
-                // Strings are converted to UTF8 rather than using bytes for
-                // this extractor.
+                event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
+                        "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
 
                 q.put(event);
@@ -394,6 +424,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
                         commitTime);
                 event.setMetaDataOption(ReplOptionParams.DBMS_TYPE,
                         Database.ORACLE);
+                event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
+                        "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
                 q.put(event);
             }
@@ -430,6 +462,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
 
         OneRowChange oneRowChange = new OneRowChange(LCR.tableOwner,
                 LCR.tableName, LCR.subtypeAsActionType());
+        oneRowChange.setTableId(LCR.tableId);
         rowData.appendOneRowChange(oneRowChange);
 
         LCR.parseDataTypes(oneRowChange);
@@ -440,11 +473,21 @@ class PlogTransaction implements Comparable<PlogTransaction>
         ArrayList<ArrayList<OneRowChange.ColumnVal>> keyValuesArray = oneRowChange
                 .getKeyValues();
         ArrayList<OneRowChange.ColumnVal> keyValues = new ArrayList<ColumnVal>();
-        keyValuesArray.add(keyValues);
+        if (oneRowChange.getAction() != ActionType.INSERT)
+        {
+            // Do not add key values list for a delete operation.
+            keyValuesArray.add(keyValues);
+        }
         ArrayList<ArrayList<OneRowChange.ColumnVal>> valValuesArray = oneRowChange
                 .getColumnValues();
         ArrayList<OneRowChange.ColumnVal> valValues = new ArrayList<ColumnVal>();
-        valValuesArray.add(valValues);
+        if (oneRowChange.getAction() != ActionType.DELETE)
+        {
+            // Do not add column values list for a DELETE operation. This breaks
+            // downstream processors that do not expect to see a value in this
+            // array.
+            valValuesArray.add(valValues);
+        }
 
         if (logger.isDebugEnabled())
         {
@@ -562,4 +605,19 @@ class PlogTransaction implements Comparable<PlogTransaction>
         return rowData;
     }
 
+    /**
+     * Print summary of transaction contents.
+     */
+    public String toString()
+    {
+        StringBuffer sb = new StringBuffer();
+        sb.append(this.getClass().getSimpleName()).append(":");
+        sb.append(" XID=").append(XID);
+        sb.append(" committed=").append(committed);
+        sb.append(" empty=").append(empty);
+        sb.append(" startSCN=").append(startSCN);
+        sb.append(" commitSCN=").append(commitSCN);
+        sb.append(" startPlogId=").append(startPlogId);
+        return sb.toString();
+    }
 }

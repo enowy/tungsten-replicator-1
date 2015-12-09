@@ -307,7 +307,7 @@ public class ConsistencyCheckFilter implements Filter
         where.append("' AND ");
         where.append(ConsistencyTable.idColumnName);
         where.append(" = ");
-        where.append((Integer) keyValues.get(ConsistencyTable.idColumnIdx)
+        where.append(keyValues.get(ConsistencyTable.idColumnIdx)
                 .getValue());
 
         // Set the db name as the shard ID unless we don't have it, in which

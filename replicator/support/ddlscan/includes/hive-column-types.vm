@@ -37,9 +37,21 @@ STRING##
 #end
 #elseif ( $col.getTypeDescription().startsWith("DECIMAL") )
 STRING##
+#elseif ( $col.getTypeDescription().startsWith("NUMBER") )
+STRING##
+#elseif ( $col.getTypeDescription().startsWith("FLOAT") )
+STRING##
+#elseif ( $col.getTypeDescription().startsWith("NVARCHAR") )
+STRING##
+#elseif ( $col.getTypeDescription().startsWith("NCHAR") )
+STRING##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
 STRING##
 #elseif ( $col.getTypeDescription().startsWith("CHAR") )
+STRING##
+#elseif ( $col.getTypeDescription().startsWith("ROWID") )
+STRING##
+#elseif ( $col.getTypeDescription().startsWith("UROWID") )
 STRING##
 #elseif ( $col.getTypeDescription().startsWith("BINARY") )
 BINARY##
@@ -48,6 +60,16 @@ BINARY##
 #elseif ( $col.getTypeDescription().contains("TEXT") )
 STRING## 
 #elseif ( $col.getTypeDescription().contains("BLOB") )
+BINARY## 
+#elseif ( $col.getTypeDescription().contains("CLOB") )
+BINARY## 
+#elseif ( $col.getTypeDescription().contains("NCLOB") )
+BINARY## 
+#elseif ( $col.getTypeDescription().contains("BFILE") )
+BINARY## 
+#elseif ( $col.getTypeDescription().contains("LONG") )
+BINARY## 
+#elseif ( $col.getTypeDescription().contains("RAW") )
 BINARY## 
 #elseif ( $col.getTypeDescription().startsWith("FLOAT") )
 DOUBLE##

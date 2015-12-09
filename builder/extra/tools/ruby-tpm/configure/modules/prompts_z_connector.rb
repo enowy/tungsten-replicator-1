@@ -45,6 +45,7 @@ CONN_RO_PROPERTIES_EXISTS = "connector_ro_properties_exists"
 CONN_MAX_SLAVE_LATENCY = "connector_max_slave_latency"
 CONN_MAX_CONNECTIONS = "connector_max_connections"
 CONN_DROP_AFTER_MAX_CONNECTIONS = "connector_drop_after_max_connections"
+CONN_DISABLE_CONNECTION_WARNINGS = "connector_disable_connection_warnings"
 
 class Connectors < GroupConfigurePrompt
   def initialize
@@ -109,6 +110,10 @@ module ConnectorPrompt
   
   def get_host_key(key)
     [HOSTS, @config.getProperty(get_member_key(DEPLOYMENT_HOST)), key]
+  end
+  
+  def get_host_property(key)
+    @config.getProperty(get_host_key(key))
   end
   
   def get_hash_prompt_key
@@ -335,6 +340,23 @@ class ConnectorDBVersion < ConfigurePrompt
   
   def initialize
     super(CONN_DB_VERSION, "DB version for the connector to display", PV_ANY, "autodetect")
+  end
+end
+
+class ConnectorDisableConnectionWarnings < ConfigurePrompt
+  include ConnectorPrompt
+  include AdvancedPromptModule
+  
+  def initialize
+    super(CONN_DISABLE_CONNECTION_WARNINGS, "Hide Connector warnings in log files", PV_BOOLEAN, "false")
+  end
+  
+  def get_template_value
+    if get_value() == "true"
+      return "false"
+    else
+      return "true"
+    end
   end
 end
 
@@ -894,7 +916,7 @@ class ConnectorEnableBridgeMode < ConfigurePrompt
   include ConnectorPrompt
   
   def initialize
-    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN, "false")
+    super(ENABLE_CONNECTOR_BRIDGE_MODE, "Enable the Tungsten Connector bridge mode", PV_BOOLEAN)
     override_command_line_argument("connector-bridge-mode")
   end
   
@@ -907,6 +929,55 @@ class ConnectorEnableBridgeMode < ConfigurePrompt
       end
     else
       "OFF"
+    end
+  end
+  
+  def load_default_value
+    # If --enable-connector-bridge-mode is in the config, this entire
+    # section will be skipped. If it isn't, the default is true but we
+    # check for a bunch of values to see if it should be turned off
+    @default = "true"
+    
+    # Check if SmartScale is enabled
+    if get_member_property(CONN_SMARTSCALE) == "true"
+      @default = "false"
+    else
+      # Check if Selective R/W Splitting is enabled
+      property_strings = get_host_property(FIXED_PROPERTY_STRINGS)
+      if property_strings.include?("selective.rwsplitting=true")
+        @default = "false"
+      end
+      
+      user_map = "#{@config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tungsten-connector/conf/user.map"
+      # If user.map exists, check it for R/W splitting features
+      # If not, check the configured settings
+      if File.exists?(user_map) && File.readable?(user_map)
+        begin
+          direct_count = cmd_result("egrep \"^@direct\" #{user_map} | wc -l").to_i()
+        rescue CommandError => ce
+          debug(ce)
+          direct_count = 0
+        end
+        
+        begin
+          hostoption_count = cmd_result("egrep \"^@hostoption\" #{user_map} | wc -l").to_i()
+        rescue CommandError => ce
+          debug(ce)
+          hostoption_count = 0
+        end
+      
+        if direct_count > 0 || hostoption_count > 0
+          @default = "false"
+        end
+      else
+        if get_member_property(CONN_RWSPLITTING) == "true"
+          @default = "false"
+        elsif get_member_property(CONN_RW_ADDRESSES).to_s() != ""
+          @default = "false"
+        elsif get_member_property(CONN_RO_ADDRESSES).to_s() != ""
+          @default = "false"
+        end
+      end
     end
   end
 end

@@ -55,7 +55,7 @@ import com.continuent.tungsten.replicator.plugin.PluginContext;
  */
 public class PrimaryKeyFilter implements Filter
 {
-    private static Logger                               logger                    = Logger.getLogger(PrimaryKeyFilter.class);
+    private static Logger logger = Logger.getLogger(PrimaryKeyFilter.class);
 
     // Metadata cache is a hashtable indexed by the database name and each
     // database uses a hashtable indexed by the table name (This is done in
@@ -65,22 +65,22 @@ public class PrimaryKeyFilter implements Filter
     private Hashtable<String, Hashtable<String, Table>> metadataCache;
 
     // Connection information.
-    private SqlDataSource                               dataSourceImpl;
-    private String                                      dataSource;
-    Database                                            conn                      = null;
+    private SqlDataSource dataSourceImpl;
+    private String        dataSource;
+    Database              conn = null;
 
-    private List<String>                                tables                    = null;
-    private List<String>                                schemas                   = null;
-    private String                                      processTablesSchemas      = null;
-    private boolean                                     addPkeyToInserts          = false;
-    private boolean                                     addColumnsToDeletes       = false;
+    private List<String> tables               = null;
+    private List<String> schemas              = null;
+    private String       processTablesSchemas = null;
+    private boolean      addPkeyToInserts     = false;
+    private boolean      addColumnsToDeletes  = false;
 
-    private long                                        reconnectTimeoutInSeconds = 60;
+    private long reconnectTimeoutInSeconds = 60;
 
     // SQL parser.
-    SqlOperationMatcher                                 sqlMatcher                = new MySQLOperationMatcher();
+    SqlOperationMatcher sqlMatcher = new MySQLOperationMatcher();
 
-    private long                                        lastConnectionTime;
+    private long lastConnectionTime;
 
     /**
      * {@inheritDoc}
@@ -124,8 +124,8 @@ public class PrimaryKeyFilter implements Filter
         dataSourceImpl = (SqlDataSource) context.getDataSource(dataSource);
         if (dataSourceImpl == null)
         {
-            throw new ReplicatorException("Unable to locate data source: name="
-                    + dataSource);
+            throw new ReplicatorException(
+                    "Unable to locate data source: name=" + dataSource);
         }
         conn = dataSourceImpl.getConnection();
     }
@@ -200,12 +200,14 @@ public class PrimaryKeyFilter implements Filter
                     if (metadataCache.remove(dbName) != null)
                     {
                         if (logger.isDebugEnabled())
-                            logger.debug("DROP DATABASE detected - Removing database metadata for '"
-                                    + dbName + "'");
+                            logger.debug(
+                                    "DROP DATABASE detected - Removing database metadata for '"
+                                            + dbName + "'");
                     }
                     else if (logger.isDebugEnabled())
-                        logger.debug("DROP DATABASE detected - no cached database metadata to delete for '"
-                                + dbName + "'");
+                        logger.debug(
+                                "DROP DATABASE detected - no cached database metadata to delete for '"
+                                        + dbName + "'");
                     continue;
                 }
                 else if (sqlOperation.getOperation() == SqlOperation.ALTER)
@@ -233,22 +235,26 @@ public class PrimaryKeyFilter implements Filter
             if (tableCache != null && tableCache.remove(tableName) != null)
             {
                 if (logger.isDebugEnabled())
-                    logger.debug("ALTER TABLE detected - Removing table metadata for '"
-                            + schemaName + "." + tableName + "'");
+                    logger.debug(
+                            "ALTER TABLE detected - Removing table metadata for '"
+                                    + schemaName + "." + tableName + "'");
             }
             else if (logger.isDebugEnabled())
-                logger.debug("ALTER TABLE detected - no cached table metadata to remove for '"
-                        + schemaName + "." + tableName + "'");
+                logger.debug(
+                        "ALTER TABLE detected - no cached table metadata to remove for '"
+                                + schemaName + "." + tableName + "'");
         }
         else if (defaultDB != null)
         {
             Hashtable<String, Table> tableCache = metadataCache.get(defaultDB);
             if (tableCache != null && tableCache.remove(tableName) != null)
-                logger.info("ALTER TABLE detected - Removing table metadata for '"
-                        + defaultDB + "." + tableName + "'");
+                logger.info(
+                        "ALTER TABLE detected - Removing table metadata for '"
+                                + defaultDB + "." + tableName + "'");
             else
-                logger.info("ALTER TABLE detected - no cached table metadata to remove for '"
-                        + defaultDB + "." + tableName + "'");
+                logger.info(
+                        "ALTER TABLE detected - no cached table metadata to remove for '"
+                                + defaultDB + "." + tableName + "'");
         }
     }
 
@@ -260,10 +266,10 @@ public class PrimaryKeyFilter implements Filter
 
         String tableName = orc.getTableName();
 
-        if (schemas != null
-                && (!schemas.contains(orc.getSchemaName().toUpperCase()) && !tables
-                        .contains((orc.getSchemaName() + "." + tableName)
-                                .toUpperCase())))
+        if (schemas != null && (!schemas
+                .contains(orc.getSchemaName().toUpperCase())
+                && !tables.contains(
+                        (orc.getSchemaName() + "." + tableName).toUpperCase())))
         {
             if (logger.isInfoEnabled())
                 logger.info("Table " + orc.getSchemaName() + "." + tableName
@@ -278,8 +284,8 @@ public class PrimaryKeyFilter implements Filter
                     new Hashtable<String, Table>());
         }
 
-        Hashtable<String, Table> dbCache = metadataCache.get(orc
-                .getSchemaName());
+        Hashtable<String, Table> dbCache = metadataCache
+                .get(orc.getSchemaName());
 
         if (!dbCache.containsKey(tableName) || orc.getTableId() == -1
                 || dbCache.get(tableName).getTableId() != orc.getTableId())
@@ -343,8 +349,8 @@ public class PrimaryKeyFilter implements Filter
         {
             // No primary key -> just return
             if (logger.isDebugEnabled())
-                logger.debug("Table has no primary keys: "
-                        + orc.getSchemaName() + "." + tableName);
+                logger.debug("Table has no primary keys: " + orc.getSchemaName()
+                        + "." + tableName);
             return;
         }
 
@@ -353,8 +359,8 @@ public class PrimaryKeyFilter implements Filter
         {
             // No primary key -> just return
             if (logger.isDebugEnabled())
-                logger.debug("Table has no primary keys: "
-                        + orc.getSchemaName() + "." + tableName);
+                logger.debug("Table has no primary keys: " + orc.getSchemaName()
+                        + "." + tableName);
             return;
         }
 
@@ -405,6 +411,12 @@ public class PrimaryKeyFilter implements Filter
         // Add the PK information to the INSERTs.
         if (orc.getAction() == ActionType.INSERT)
         {
+            if (logger.isDebugEnabled())
+            {
+                logger.debug("Looking to add PK info to insert: keySpecs.size="
+                        + keySpecs.size() + " keyValues.size="
+                        + keyValues.size());
+            }
             if (keySpecs.size() == 0 && keyValues.size() == 0)
             {
                 // Add the key columns.
@@ -434,8 +446,8 @@ public class PrimaryKeyFilter implements Filter
     private void reconnectIfNeeded() throws SQLException
     {
         long currentTime = System.currentTimeMillis();
-        if (reconnectTimeoutInSeconds > 0
-                && currentTime - lastConnectionTime > reconnectTimeoutInSeconds * 1000)
+        if (reconnectTimeoutInSeconds > 0 && currentTime
+                - lastConnectionTime > reconnectTimeoutInSeconds * 1000)
         {
             // Time to reconnect now
             lastConnectionTime = currentTime;

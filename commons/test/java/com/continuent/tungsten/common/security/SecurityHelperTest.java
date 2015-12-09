@@ -19,7 +19,16 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import javax.net.ssl.SSLSocketFactory;
+
 import junit.framework.TestCase;
+
+import org.junit.Assert;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
@@ -34,6 +43,9 @@ import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATI
  */
 public class SecurityHelperTest extends TestCase
 {
+
+    public static int stopNow = 0;
+
     /**
      * Test we can retrieve passwords from the passwords.store file
      * 
@@ -114,6 +126,10 @@ public class SecurityHelperTest extends TestCase
         System.clearProperty("javax.net.ssl.keyStorePassword");
         System.clearProperty("javax.net.ssl.trustStore");
         System.clearProperty("javax.net.ssl.trustStorePassword");
+        System.clearProperty("javax.rmi.ssl.client.enabledCipherSuites");
+        System.clearProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS);
+        System.clearProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS);
+        System.clearProperty("https.protocols");
     }
 
     /**
@@ -277,6 +293,84 @@ public class SecurityHelperTest extends TestCase
 
     }
 
+    // Determines whether protocols, cipher suites or both properties is set to empty.
+    private static enum TEST_ARG {PROTOCOLS, CIPHERS, BOTH}; 
+    
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocol
+     * property
+     */
+    public void testSSLWithEmptyProtocolsProperty()
+    {
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.PROTOCOLS);
+    }
+
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty cipher
+     * suites property
+     */
+    public void testSSLWithEmptyCipherSuitesProperty()
+    {
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.CIPHERS);
+    }
+
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocols
+     * and cipher suites properties
+     */
+    public void testSSLWithEmptyProtocolsAndCipherSuitesProperties()
+    {
+        testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG.BOTH);
+    }
+    
+    /**
+     * check that loading AuthenticationInfo also succeeds with empty protocols
+     * and cipher suites properties
+     */
+    private void testSSLProtocolsAndCipherSuitesProperties(SecurityHelperTest.TEST_ARG arg)
+    {
+        // Reset info
+        resetSecuritySystemProperties();
+
+        // Confirm that by default connector.security.use.SSL=false
+        AuthenticationInfo authInfo = null;
+        try
+        {
+            List <String> emptyList = new ArrayList <String>();
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "sample.security.properties");
+            if (arg == SecurityHelperTest.TEST_ARG.PROTOCOLS)
+            {
+                // Set empty protocols property
+                authInfo.setEnabledProtocols(emptyList);
+            } 
+            else if (arg == SecurityHelperTest.TEST_ARG.CIPHERS)
+            {
+                // Set empty cipher suites property
+                authInfo.setEnabledCipherSuites(emptyList);
+            }
+            else if (arg == SecurityHelperTest.TEST_ARG.BOTH)
+            {
+                // Set empty protocols property
+                authInfo.setEnabledProtocols(emptyList);
+                // Set empty cipher suites property
+                authInfo.setEnabledCipherSuites(emptyList);
+            }
+            
+            // Test
+            SecurityHelper.testSetSecurityProperties(authInfo, true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertFalse("Could not load authentication and securiy information",
+                    true);
+        }
+        assertTrue(authInfo.isConnectorUseSSL());
+        // Reset info
+        resetSecuritySystemProperties();
+    }
+
+    
     /**
      * Confirm behavior when connector.security.use.SSL=true
      * 
@@ -373,11 +467,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -409,11 +502,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.wrong.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -446,11 +538,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.2.position.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -482,11 +573,10 @@ public class SecurityHelperTest extends TestCase
 
         // Confirm that exception is thrown when keystore location is not
         // specified
-        // AuthenticationInfo authInfo = null;
+        AuthenticationInfo authInfo = null;
         try
         {
-            // authInfo =
-            SecurityHelper.loadAuthenticationInformation(
+            authInfo = SecurityHelper.loadAuthenticationInformation(
                     "test.ssl.alias.not.defined.security.properties", true,
                     TUNGSTEN_APPLICATION_NAME.CONNECTOR);
         }
@@ -503,6 +593,338 @@ public class SecurityHelperTest extends TestCase
 
         // Reset info
         resetSecuritySystemProperties();
+    }
+
+    /**
+     * Confirm that an Exception is thrown when the security.properties files
+     * does not pass validation. Confirm validation steps
+     * 
+     * @throws ConfigurationException
+     */
+    public void testValidateSecurityProperties()
+            throws ConfigurationException, ServerRuntimeException
+    {
+        // Reset info
+        resetSecuritySystemProperties();
+
+        // Confirm that initial values are OK
+        AuthenticationInfo authInfo = null;
+        AuthenticationInfo badAuthInfo = null;
+        try
+        {
+            authInfo = SecurityHelper.loadAuthenticationInformation(
+                    "test.validation.security.properties", true,
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+            badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        }
+        catch (ConfigurationException e)
+        {
+            assertFalse(
+                    "Initial values should not cause an exception as they are supposed to be OK",
+                    true);
+        }
+
+        // --- Try validations steps one after the other ---
+
+        // ###### REST API: If Authentication is on, Encryption can be off
+        badAuthInfo.setAuthenticationNeeded(true);
+        try
+        {
+            badAuthInfo.setAuthenticationNeeded(true);
+            assertFalse(badAuthInfo.isEncryptionNeeded()); // Encryption is off
+
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse(badAuthInfo.isEncryptionNeeded()); // Not Updated to
+                                                           // true
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue(
+                    "That should not throw an exception, just update values.",
+                    false);
+        }
+
+        // ############################## Check password file location ########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setPasswordFileLocation(
+                badAuthInfo.getPasswordFileLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Authentication not needed. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setAuthenticationNeeded(true);
+
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setPasswordFileLocation(
+                    badAuthInfo.getPasswordFileLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check keystore for https ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setKeystoreLocation(
+                badAuthInfo.getKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setKeystoreLocation(
+                    badAuthInfo.getKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check trustore for server ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setTruststoreLocation(
+                badAuthInfo.getTruststoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off, no exception should be thrown !", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setTruststoreLocation(
+                    badAuthInfo.getTruststoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (Exception ee)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ############################## Check keystore for client ###########
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setClientKeystoreLocation(
+                badAuthInfo.getClientKeystoreLocation() + "_XXX");
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + good value
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setAuthenticationNeeded(true);
+        badAuthInfo.setAuthenticationByCertificateNeeded(true);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("File exists, no exception should be thrown !", true);
+
+        // Feature on + bad value
+        try
+        {
+            badAuthInfo.setClientKeystoreLocation(
+                    badAuthInfo.getClientKeystoreLocation() + "_XXX");
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ServerRuntimeException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // ######################## Check non empty aliases in Keystore #######
+        // This also checks that the password can open the keystore
+        String EMPTY_KEYSTORE = "empty_keystore.jks";
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+
+        // Feature off + bad value
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+        badAuthInfo.checkAndCleanAuthenticationInfo(
+                TUNGSTEN_APPLICATION_NAME.REST_API);
+        assertTrue("Feature off. No exception was thrown.", true);
+
+        // Feature on + bad value (empty aliases)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Feature on + bad value (wrong password)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setKeystoreLocation(EMPTY_KEYSTORE);
+        badAuthInfo.setKeystorePassword("bad_password");
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Check that the trustore is accessible
+        // Feature on + bad value (empty aliases)
+        badAuthInfo = (AuthenticationInfo) authInfo.clone();
+        badAuthInfo.setEncryptionNeeded(true);
+        badAuthInfo.setTruststorePassword(
+                badAuthInfo.getTruststorePassword() + "_XXX");
+
+        try
+        {
+            badAuthInfo.checkAndCleanAuthenticationInfo(
+                    TUNGSTEN_APPLICATION_NAME.REST_API);
+
+            assertFalse("Exception should have been thrown !", true);
+        }
+        catch (ConfigurationException e)
+        {
+            assertTrue("That's expected", true);
+        }
+
+        // Reset info
+        resetSecuritySystemProperties();
+    }
+
+    /**
+     * Confirm that the SecurityHelper.getMatchingStrings() method correctly
+     * computes intersection between two arrays of strings.
+     * 
+     * @throws ConfigurationException
+     */
+    public void testMatchingStrings()
+            throws ConfigurationException, ServerRuntimeException
+    {
+        String[] s0 = {};
+        String[] s1 = {"abcd"};
+        String[] s2 = {"defg", "abcd"};
+        String[] s3 = {"hijk", "abcd", "defg"};
+        String[] s4 = {"0123", "defg", "hijl", "abcd"};
+        String[] s5 = {"0123", "0234"};
+
+        // Prove that intersecting with empty array results in empty array.
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s0, s1));
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s3, s0));
+
+        // Prove that intersecting with a single member results in just that
+        // member.
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s1, s1));
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s2, s1));
+        Assert.assertArrayEquals(s1, SecurityHelper.getMatchingStrings(s3, s1));
+
+        // Prove that intersection with multiple members results in only common
+        // members. Sort result to ensure match.
+        String[] intersection = SecurityHelper.getMatchingStrings(s3, s4);
+        Arrays.sort(intersection);
+        Assert.assertArrayEquals(new String[]{"abcd", "defg"}, intersection);
+
+        // Prove that disjoint array values result in an empty set.
+        Assert.assertArrayEquals(s0, SecurityHelper.getMatchingStrings(s3, s5));
+    }
+
+    /**
+     * Confirm that RealmJMXAuthenticator.getRandomInt(min, max) always returns
+     * a coherent value
+     */
+    public void testRealmJMXAuthenticatorRandomNumberGenerator()
+    {
+        // 0 value -> 0
+        int randomNumber = RealmJMXAuthenticator.getRandomInt(0, 0, 0);
+        assertTrue(randomNumber == 0);
+
+        // negative values -> 0
+        randomNumber = RealmJMXAuthenticator.getRandomInt(-1, -10, 1);
+        assertTrue(randomNumber == 0);
+
+        // One negative value -> 0 and other value
+        randomNumber = RealmJMXAuthenticator.getRandomInt(-10, 2, 1);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 0 && randomNumber <= 2);
+
+        // inverted min and max -> revert values
+        randomNumber = RealmJMXAuthenticator.getRandomInt(5, 2, 1);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber <= 5 && randomNumber >= 2);
+
+        // steps of 100
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 100);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                (randomNumber - 500) % 100 == 0);
+
+        // steps of 15
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 15);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                (randomNumber - 500) % 15 == 0);
+
+        // step of 0 -> step of 1
+        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 0);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 500 && randomNumber <= 3000);
+
+        // step > max-min
+        randomNumber = RealmJMXAuthenticator.getRandomInt(0, 10, 11);
+        assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
+                randomNumber >= 0 && randomNumber <= 10);
+
     }
 
 }

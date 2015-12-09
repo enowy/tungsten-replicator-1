@@ -21,7 +21,6 @@
 package com.continuent.tungsten.replicator.database;
 
 import java.io.BufferedWriter;
-import java.io.Serializable;
 import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -583,7 +582,8 @@ public abstract class AbstractDatabase implements Database
 
         for (Column c : columns)
         {
-            statement.setObject(bindNo++, c.getValue());
+            setColumnValue(statement, bindNo, c);
+            bindNo++;
         }
 
         return statement.executeUpdate();
@@ -631,8 +631,8 @@ public abstract class AbstractDatabase implements Database
 
             for (Column c : columns)
             {
-                Serializable val = c.getValue();
-                statement.setObject(bindNo++, val);
+                setColumnValue(statement, bindNo, c);
+                bindNo++;
             }
             affectedRows = statement.executeUpdate();
         }
@@ -648,6 +648,12 @@ public abstract class AbstractDatabase implements Database
             table.setStatement(type, statement);
 
         return affectedRows;
+    }
+
+    protected void setColumnValue(PreparedStatement statement, int bindNo,
+            Column c) throws SQLException
+    {
+        statement.setObject(bindNo++, c.getValue());
     }
 
     /**
@@ -1108,6 +1114,16 @@ public abstract class AbstractDatabase implements Database
     }
 
     /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.database.Database#findTungstenTable(java.lang.String, java.lang.String)
+     */
+    public Table findTungstenTable(String schemaName, String tableName)
+            throws SQLException
+    {
+        return findTable(schemaName, tableName);
+    }
+    
+    /**
      * Finds unique indexes from the metadata and adds them to the table.
      * Primary key is included too, if it exists.
      * 
@@ -1336,12 +1352,16 @@ public abstract class AbstractDatabase implements Database
                 // Create SET array
                 Column col;
                 ArrayList<Column> setColumns = new ArrayList<Column>();
+                String crcValue = rs
+                        .getString(ConsistencyTable.thisCrcColumnName);
                 if (masterCrc == null)
                 {
                     // We are the master, so put CC results into master columns.
                     col = ctColumns.get(ConsistencyTable.masterCrcColumnIdx);
-                    col.setValue(rs
-                            .getString(ConsistencyTable.thisCrcColumnName));
+                    if (crcValue != null)
+                        col.setValue(crcValue);
+                    else
+                        col.setValueNull();
                     setColumns.add(col);
                     col = ctColumns.get(ConsistencyTable.masterCntColumnIdx);
                     col.setValue(rs.getInt(ConsistencyTable.thisCntColumnName));
@@ -1358,8 +1378,10 @@ public abstract class AbstractDatabase implements Database
                     setColumns.add(col);
                     // Save calculated CC values to "this" fields.
                     col = ctColumns.get(ConsistencyTable.thisCrcColumnIdx);
-                    col.setValue(rs
-                            .getString(ConsistencyTable.thisCrcColumnName));
+                    if (crcValue != null)
+                        col.setValue(crcValue);
+                    else
+                        col.setValueNull();
                     setColumns.add(col);
                     col = ctColumns.get(ConsistencyTable.thisCntColumnIdx);
                     col.setValue(rs.getInt(ConsistencyTable.thisCntColumnName));

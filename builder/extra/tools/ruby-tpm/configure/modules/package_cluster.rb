@@ -39,8 +39,10 @@ module ClusterCommandModule
       checks << klass.new()
     }
     
-    checks << GlobalHostAddressesCheck.new()
-    checks << GlobalMatchingPingMethodCheck.new()
+    ClusterHostPostValidationCheck.subclasses.each{
+      |klass|
+      checks << klass.new()
+    }
     
     return checks
   end
@@ -235,6 +237,7 @@ module ClusterCommandModule
           load_cluster_defaults()
         else
           parse_cluster_options(arguments)
+          
           load_cluster_options([to_identifier(section)])
         end
       }
@@ -1404,10 +1407,6 @@ module ClusterCommandModule
         next
       end
       
-      if config_obj.getProperty([DATASERVICES, ds_alias, DATASERVICEALIAS]) != nil
-        config_obj.setProperty([DATASERVICES, ds_alias, DATASERVICENAME], config_obj.getProperty([DATASERVICES, ds_alias, DATASERVICEALIAS]))
-      end
-      
       if config_obj.getPropertyOr([DATASERVICES, ds_alias, DATASERVICE_IS_COMPOSITE]) == "true"
         comp_ds_list = config_obj.getPropertyOr([DATASERVICES, ds_alias, DATASERVICE_COMPOSITE_DATASOURCES], "").split(",")
         
@@ -1525,10 +1524,16 @@ module ClusterCommandModule
             next
           end
           
-          if config_obj.getProperty([p[:group], g_alias, p[:local]]) != nil
-            config_obj.setProperty([p[:group], g_alias, p[:global]], config_obj.getProperty([p[:group], g_alias, p[:local]]))
-            config_obj.setProperty([p[:group], g_alias, p[:local]], "#{config_obj.getProperty(TEMP_DIRECTORY)}/#{config_obj.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(config_obj.getProperty([p[:group], g_alias, p[:local]]))}")
+          if config_obj.getProperty([p[:group], g_alias, p[:local]]) == nil
+            next
           end
+          
+          if config_obj.getProperty([p[:group], g_alias, p[:local]]) == AUTOGENERATE
+            next
+          end
+          
+          config_obj.setProperty([p[:group], g_alias, p[:global]], config_obj.getProperty([p[:group], g_alias, p[:local]]))
+          config_obj.setProperty([p[:group], g_alias, p[:local]], "#{config_obj.getProperty(TEMP_DIRECTORY)}/#{config_obj.getProperty(CONFIG_TARGET_BASENAME)}/#{File.basename(config_obj.getProperty([p[:group], g_alias, p[:local]]))}")
         }
       }
     end
@@ -1541,6 +1546,13 @@ module ClusterCommandModule
       |ds_alias|
       topology = Topology.build(ds_alias, config)
       topology.build_services()
+      
+      # Update the dataservice name and any replication services if
+      # they should be identified by some other label
+      newname = config.getProperty([DATASERVICES, ds_alias, DATASERVICEALIAS])
+      if newname != nil
+        config.setProperty([DATASERVICES, ds_alias, DATASERVICENAME], newname)
+      end
     }
   end
   

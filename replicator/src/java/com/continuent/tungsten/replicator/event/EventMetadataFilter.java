@@ -360,19 +360,15 @@ public class EventMetadataFilter implements Filter
                 // authorities.
                 logger.warn("Ambiguous service name: seqno=" + event.getSeqno()
                         + " index=" + schemaStats.toString());
-                metadataTags.put(ReplOptionParams.SHARD_ID,
-                        ReplOptionParams.SHARD_ID_UNKNOWN);
-                metadataTags.put(ReplOptionParams.TUNGSTEN_METADATA, "true");
             }
             else
             {
-                // This looks legal.
-                metadataTags.put(ReplOptionParams.SHARD_ID,
-                        schemaStats.getSingleDbName());
                 metadataTags.put(ReplOptionParams.SERVICE,
                         schemaStats.getService());
-                metadataTags.put(ReplOptionParams.TUNGSTEN_METADATA, "true");
             }
+            metadataTags.put(ReplOptionParams.SHARD_ID,
+                    ReplOptionParams.SHARD_ID_UNKNOWN);
+            metadataTags.put(ReplOptionParams.TUNGSTEN_METADATA, "true");
         }
         else
         {

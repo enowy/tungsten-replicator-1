@@ -23,9 +23,12 @@ package com.continuent.tungsten.common.sockets;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
+import javax.net.ssl.SSLSocket;
+
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Implements a simple client that connects to server and sends a string to the
@@ -49,6 +52,48 @@ public class EchoClient implements Runnable
     private Thread              clientThread;
     private volatile String     clientName;
     private int                 echoCount         = 0;
+    private String[]            enabledCiphers;
+    private String[]            enabledProtocols;
+
+    /**
+     * Returns the enabledCiphers value.
+     * 
+     * @return Returns the enabledCiphers.
+     */
+    public String[] getEnabledCiphers()
+    {
+        return enabledCiphers;
+    }
+
+    /**
+     * Sets the enabledCiphers value.
+     * 
+     * @param enabledCiphers The enabledCiphers to set.
+     */
+    public void setEnabledCiphers(String[] enabledCiphers)
+    {
+        this.enabledCiphers = enabledCiphers;
+    }
+
+    /**
+     * Returns the enabledProtocols value.
+     * 
+     * @return Returns the enabledProtocols.
+     */
+    public String[] getEnabledProtocols()
+    {
+        return enabledProtocols;
+    }
+
+    /**
+     * Sets the enabledProtocols value.
+     * 
+     * @param enabledProtocols The enabledProtocols to set.
+     */
+    public void setEnabledProtocols(String[] enabledProtocols)
+    {
+        this.enabledProtocols = enabledProtocols;
+    }
 
     /**
      * Create a new echo server instance.

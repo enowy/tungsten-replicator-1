@@ -1,0 +1,33 @@
+/* Example table containing all MySQL data types for template checking. */
+CREATE TABLE tungsten.all_oracle_types (
+  ora_id int PRIMARY KEY,
+  ora_char char(256) DEFAULT NULL,
+  ora_nchar nchar(256) DEFAULT NULL,
+  ora_varchar2 varchar2(256) DEFAULT NULL,
+  ora_nvarchar2 nvarchar2(256) DEFAULT NULL,
+  ora_long long DEFAULT NULL,
+  ora_raw raw(1000) DEFAULT NULL,
+  ora_decimal_10_5 decimal(10,5) DEFAULT NULL,
+  ora_dec_10_5 dec(10,5) DEFAULT NULL,
+  ora_number_10_5 number(10,5) DEFAULT NULL,
+  ora_numeric_10_5 numeric(10,5) DEFAULT NULL,
+  ora_smallint smallint DEFAULT NULL,
+  ora_int int DEFAULT NULL,
+  ora_integer integer DEFAULT NULL,
+  ora_float float DEFAULT NULL,
+  ora_real real DEFAULT NULL,
+  ora_double_precision double precision DEFAULT NULL,
+  ora_binary_float binary_float DEFAULT NULL,
+  ora_binary_double binary_double DEFAULT NULL,
+  ora_date date DEFAULT NULL,
+  ora_interval_year interval year to month default null,
+  ora_interval_day interval day to second default null,
+  ora_timestamp timestamp NOT NULL,
+  ora_bfile bfile DEFAULT NULL,
+  ora_blob blob DEFAULT NULL,
+  ora_clob clob,
+  ora_nclob nclob,
+  ora_rowid rowid,
+  ora_urowid urowid
+);
+

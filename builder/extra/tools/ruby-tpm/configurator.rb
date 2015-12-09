@@ -47,6 +47,7 @@ system_require 'configure/database_platform'
 system_require 'configure/cctrl'
 system_require 'configure/topology'
 system_require 'configure/watch_files'
+system_require 'configure/keytool'
 
 begin
   require 'readline'
@@ -138,6 +139,7 @@ PROVISION_NEW_SLAVES = "provision_new_slaves"
 
 TPM_COMMAND_NAME = "tpm"
 AUTODETECT = 'autodetect'
+AUTOGENERATE = 'autogenerate'
 
 PRODUCT_VMWARE_CLUSTERING = "VMware Continuent for Clustering"
 ABBR_VMWARE_CLUSTERING = "vCC"
@@ -145,6 +147,8 @@ PRODUCT_VMWARE_REPLICATION = "VMware Continuent for Replication"
 ABBR_VMWARE_REPLICATION = "vCR"
 PRODUCT_TUNGSTEN_REPLICATOR = "Tungsten Replicator"
 ABBR_TUNGSTEN_REPLICATOR = "TR"
+
+LICENSE_TRIAL = "TRIAL"
 
 class IgnoreError < StandardError
 end
@@ -197,11 +201,6 @@ class Configurator
     stop_alive_thread()
     
     if @log
-      begin
-        @log.chmod(0660)
-      rescue
-      end
-      
       @log.close
       @log = nil
     end
@@ -237,20 +236,15 @@ class Configurator
       # we create on the users behalf
       if @config.getNestedProperty([DEPLOYMENT_HOST]) != nil
         target_umask = @config.getTemplateValue(FILE_PROTECTION_LEVEL)
-      else
-        target_umask = nil
-        if Configurator.instance.default_security?() == true
-          desired_umask = 0077
-        else
-          desired_umask = nil
+        if target_umask != nil
+          umask(target_umask.to_i(8))
         end
-      end
-      
-      if target_umask != nil
-        File.umask(target_umask)
-      elsif desired_umask != nil
-        unless original_umask == desired_umask.to_i()
-          warning("Your umask is not set to #{sprintf("%04o", desired_umask)}. This may result in some files not being fully protected from other users on this sytem.")
+      else
+        # Convert the umask to match the base directory
+        if Configurator.instance.default_security?() == true
+          staging_mode = sprintf("%o", File.stat(get_base_path()).mode)
+          staging_umask = 777 - staging_mode[-3,3].to_i()
+          umask(sprintf("%04d", staging_umask).to_i(8))
         end
       end
 			
@@ -293,6 +287,12 @@ class Configurator
       end
     end
     Dir[File.dirname(__FILE__) + '/configure/topologies/*.rb'].sort().each do |file| 
+      begin
+        require File.dirname(file) + '/' + File.basename(file, File.extname(file))
+      rescue IgnoreError
+      end
+    end
+    Dir[File.dirname(__FILE__) + '/configure/extensions/*.rb'].sort().each do |file| 
       begin
         require File.dirname(file) + '/' + File.basename(file, File.extname(file))
       rescue IgnoreError
@@ -383,6 +383,10 @@ class Configurator
                                           @command = HelpCommand.new(@config)
                                           @command.subcommand(HelpCommand::HELP_TEMPLATE_FILE)
       }
+      opts.on("--version")           {
+        @command = QueryCommand.new(@config)
+        @command.subcommand(QueryCommand::QUERY_VERSION)
+      }
       # Force logging to be enabled for this command
       opts.on("--log String")           { |val|
         @options.log_name = val
@@ -440,7 +444,7 @@ class Configurator
       end  
       @command.advanced?(advanced)
       
-      if @command.enable_log?()
+      if @command.enable_log?() && @command.display_help?() == false
         initialize_log()
         debug("Logging started to #{get_log_filename()}")
       else
@@ -593,12 +597,16 @@ class Configurator
         return false
       end
     else
-      if ! File.writable?(File.dirname(@options.config))
-        write "Config file directory must be writable: #{@options.config}", Logger::ERROR
+      config_parent_directory = File.dirname(@options.config)
+      unless File.exist?(config_parent_directory)
+        mkdir_if_absent(config_parent_directory)
+      end
+      if ! File.writable?(config_parent_directory)
+        write "Config file directory must be writable: #{config_parent_directory}", Logger::ERROR
         return false
       end
-      if ! File.readable?(File.dirname(@options.config))
-        write "Config file directory must be readable: #{@options.config}", Logger::ERROR
+      if ! File.readable?(config_parent_directory)
+        write "Config file directory must be readable: #{config_parent_directory}", Logger::ERROR
         return false
       end
     end
@@ -729,7 +737,11 @@ class Configurator
   def initialize_log
     unless @log
       begin
-        @log = File.open(get_log_filename(), "a", 0660)
+        logfile = File.expand_path(get_log_filename())
+        if File.exist?(logfile) && ! File.writable?(logfile)
+          raise "Unable to write to log at #{logfile}. Update the permissions or specify a new location with the --log option."
+        end
+        @log = File.open(logfile, "a")
       rescue => e
         raise e
       end
@@ -861,46 +873,51 @@ class Configurator
   end
   
   def is_localhost?(hostname)
-    if hostname == DEFAULTS
-      return false
-    end
-    
     @_is_localhost_cache ||= {}
     unless @_is_localhost_cache.has_key?(hostname)
       @_is_localhost_cache[hostname] = _is_localhost?(hostname)
     end
-    
+  
     return @_is_localhost_cache[hostname]
   end
   
   def _is_localhost?(hostname)
-    if hostname == hostname()
+    case hostname
+    when DEFAULTS
+      return false
+    when hostname()
       return true
-    end
+    when "localhost"
+      return true
+    when "127.0.0.1"
+      return true
+    when "::1"
+      return true
+    else
+      ip_addresses = get_ip_addresses(hostname)
+      if ip_addresses == false
+        return false
+      end
 
-    ip_addresses = get_ip_addresses(hostname)
-    if ip_addresses == false
+      debug("Search ifconfig for #{ip_addresses.join(', ')}")
+      ipparsed = IPParse.new().get_interfaces()
+      ipparsed.each{
+        |iface, addresses|
+
+        begin
+          # Do a string comparison so that we only match the address portion
+          addresses.each{
+            |type, details|
+            if ip_addresses.include?(details[:address])
+              return true
+            end
+          }
+        rescue ArgumentError
+        end
+      }
+
       return false
     end
-
-    debug("Search ifconfig for #{ip_addresses.join(', ')}")
-    ipparsed = IPParse.new().get_interfaces()
-    ipparsed.each{
-      |iface, addresses|
-
-      begin
-        # Do a string comparison so that we only match the address portion
-        addresses.each{
-          |type, details|
-          if ip_addresses.include?(details[:address])
-            return true
-          end
-        }
-      rescue ArgumentError
-      end
-    }
-
-    false
   end
   
   def get_ip_addresses(hostname)
@@ -1018,6 +1035,14 @@ class Configurator
   end
   
   def get_log_filename
+    if @command_log_filename == nil
+      @command_log_filename = build_log_filename()
+    end
+    
+    @command_log_filename
+  end
+  
+  def build_log_filename
     if is_locked?
       "#{get_base_path()}/tungsten-configure.log"
     else
@@ -1026,6 +1051,8 @@ class Configurator
         filename = "tungsten-configure_pid#{Process.pid}.log"
       when "timestamp"
         filename = "tungsten-configure_#{DateTime.now.strftime('%Y%m%d%H%M%S')}.log"
+      when "username"
+        filename = "tungsten-configure_#{whoami()}.log"
       else
         if @options.log_name == nil
           filename = "tungsten-configure.log"
@@ -1039,7 +1066,15 @@ class Configurator
       end
       
       if File.exists?("/tmp") && File.writable?("/tmp")
-        "/tmp/#{filename}"
+        logfile = "/tmp/#{filename}"
+        if File.exists?(logfile) && File.writable?(logfile) != true
+          logfile = "/tmp/#{whoami()}/#{filename}"
+          mkdir_if_absent(File.dirname(logfile))
+          notice("Log output being sent to #{logfile}")
+          return logfile
+        else
+          return logfile
+        end
       else
         "#{get_base_path()}/#{filename}"
       end
@@ -1097,27 +1132,40 @@ class Configurator
       begin
         File.open(get_manifest_json_file_path(), 'r') do |file|
           begin
+            @release_details = {}
             parsed = JSON.parse(file.readlines().join())
             
             version = "#{parsed['version']['major']}.#{parsed['version']['minor']}.#{parsed['version']['revision']}"
+            @release_details[:simple_version] = version
+            
             if parsed['hudson']['buildNumber'].to_s() != ""
               version = version + "-#{parsed['hudson']['buildNumber']}"
             end
-            @release_details = {
-              "version" => version,
-              "product" => parsed['product']
+            @release_details["version"] = version
+            
+            @release_details["product"] = parsed['product']
+            @release_details[:is_enterprise_package] = false
+            @release_details[:licensed_products] = []
+            
+            base = get_base_path()
+            Dir.glob("#{base}/cluster-home/lib/vmware/licenses/*").each {
+              |path|
+              edition = cmd_result("egrep '^LicenseEdition' #{path}")
+              match = edition.match(/^LicenseEdition = \"(.*)\"$/)
+              if match == nil
+                raise "Unable to parse license information from #{path}"
+              else
+                @release_details[:licensed_products] << match[1]
+                
+                if match[1] =~ /^continuent\.clustering\./
+                  @release_details[:is_enterprise_package] = true
+                end
+              end
             }
             
-            if parsed['product'] == "Tungsten Replicator"
-              @release_details[:is_enterprise_package] = false
-              
-              if parsed["git"]["URL"] =~ /github\.com/
-                @release_details[:is_open_source] = true
-              else
-                @release_details[:is_open_source] = false
-              end
+            if @release_details[:licensed_products].size() == 0
+              @release_details[:is_open_source] = true
             else
-              @release_details[:is_enterprise_package] = true
               @release_details[:is_open_source] = false
             end
           rescue JSON::ParserError
@@ -1144,6 +1192,11 @@ class Configurator
   def get_release_version
     release_details = get_release_details()
     release_details["version"]
+  end
+  
+  def get_simple_version
+    release_details = get_release_details()
+    release_details[:simple_version]
   end
   
   def get_svc_path(svc_name, tungsten_base_path = nil)
@@ -1265,6 +1318,26 @@ class Configurator
   def version
     release_details = get_release_details()
     release_details["version"]
+  end
+  
+  def umask(umask)
+    File.umask(umask)
+    
+    # Update the @log permissions to be under the umask
+    if @log
+      limit_file_permissions(@log.path())
+    end
+  end
+  
+  def limit_file_permissions(path)
+    if File.exists?(path)
+      # Get values like 0660 or 0700 for the log and umask
+      log_perms = sprintf("%o", File.stat(path).mode)[-4,4].to_i(8)
+      max_perms = sprintf("%04d", 777-sprintf("%o", File.umask()).to_i()).to_i(8)
+      # Calculate the target permissions for @log and set them
+      set_to_perms = log_perms & max_perms
+      File.chmod(sprintf("%o", set_to_perms).to_i(8), path)
+    end
   end
   
   def get_config
@@ -1766,13 +1839,35 @@ def cmd_result(command, ignore_fail = false, hide_result = false)
   return result
 end
 
+# Create a directory if it is absent. 
+def mkdir_if_absent(dirname)
+  if dirname == nil
+    return
+  end
+  
+  if File.exists?(dirname)
+    if File.directory?(dirname)
+      debug("Found directory, no need to create: #{dirname}")
+      
+      unless File.writable?(dirname)
+        raise "Directory already exists but is not writable: #{dirname}"
+      end
+    else
+      raise "Directory already exists as a file: #{dirname}"
+    end
+  else
+    debug("Creating missing directory: #{dirname}")
+    FileUtils.mkdir_p(dirname)
+  end
+end
+
 # Find out the full executable path or return nil
 # if this is not executable. 
 def which(cmd)
   if ! cmd
     nil
   else 
-    path = cmd_result("which #{cmd}")
+    path = cmd_result("which #{cmd} 2>/dev/null", true)
     path.chomp!
     if File.executable?(path)
       path

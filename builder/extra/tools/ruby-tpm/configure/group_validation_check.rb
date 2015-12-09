@@ -35,7 +35,7 @@ class GroupValidationCheck
         
         check.set_member(member)
         check.run()
-        @errors = @errors + check.errors
+        add_remote_result(check.get_remote_result())
 
         unless check.is_valid?()
           if check.fatal_on_error?()
@@ -138,6 +138,30 @@ module GroupValidationCheckMember
       raise "Unable to call get_member_key in #{self.class} because parent_group is empty"
     end
     [@parent_group.name, get_member(), name]
+  end
+  
+  def get_member_configured_value(key)
+    [
+      get_member_key(key),
+      get_group_option_key(key),
+      [@parent_group.name, DEFAULTS, key]
+    ].each{
+      |k|
+      v = @config.getNestedProperty(k)
+      if v != nil
+        return v
+      end
+    }
+    
+    return nil
+  end
+  
+  def get_member_value(key)
+    @config.getProperty(get_member_key(key))
+  end
+  
+  def get_member_property(key)
+    get_member_value(key)
   end
   
   def enabled?

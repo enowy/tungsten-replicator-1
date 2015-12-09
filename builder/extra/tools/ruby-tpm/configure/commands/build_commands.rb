@@ -293,10 +293,10 @@ class ReverseEngineerCommand
       if args.length > 0
         commands << "# Options for the #{ds_alias} data service"
         if @ini_format == false
-          commands << "tools/tpm configure #{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])} \\"
+          commands << "tools/tpm configure #{get_dsname(cfg, ds_alias)} \\"
           commands << args.sort().map{|s| Escape.shell_single_word(s)}.join(" \\\n")
         else
-          commands << "[#{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])}]"
+          commands << "[#{get_dsname(cfg, ds_alias)}]"
           commands << args.sort().join(" \\\n")
         end
       end
@@ -307,10 +307,10 @@ class ReverseEngineerCommand
       if args.length > 0
         commands << "# Options for the #{ds_alias} data service"
         if @ini_format == false
-          commands << "tools/tpm configure #{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])} \\"
+          commands << "tools/tpm configure #{get_dsname(cfg, ds_alias)} \\"
           commands << args.sort().map{|s| Escape.shell_single_word(s)}.join(" \\\n")
         else
-          commands << "[#{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])}]"
+          commands << "[#{get_dsname(cfg, ds_alias)}]"
           commands << args.sort().map{|s| Escape.shell_single_word(s)}.join("\n")
         end
       end
@@ -337,10 +337,10 @@ class ReverseEngineerCommand
         if args.length > 0
           commands << "# Options for #{command_host_alias(cfg, h_alias)}"
           if @ini_format == false
-            commands << "tools/tpm configure #{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])} \\\n--hosts=#{command_host_alias(cfg, h_alias)} \\"
+            commands << "tools/tpm configure #{get_dsname(cfg, ds_alias)} \\\n--hosts=#{command_host_alias(cfg, h_alias)} \\"
             commands << args.sort().map{|s| Escape.shell_single_word(s)}.join(" \\\n")
           else
-            commands << "[#{cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])}]"
+            commands << "[#{get_dsname(cfg, ds_alias)}]"
             commands << args.sort().map{|s| Escape.shell_single_word(s)}.join("\n")
           end
         end
@@ -366,6 +366,17 @@ class ReverseEngineerCommand
       }
     elsif args != nil
       container << args.to_s()
+    end
+  end
+  
+  def get_dsname(cfg, ds_alias)
+    cfg_alias = cfg.getNestedProperty([DATASERVICES, ds_alias, DATASERVICENAME])
+    cfg_name = cfg.getProperty([DATASERVICES, ds_alias, DATASERVICENAME])
+    
+    if cfg_alias != nil
+      ds_alias
+    else
+      cfg_name
     end
   end
   

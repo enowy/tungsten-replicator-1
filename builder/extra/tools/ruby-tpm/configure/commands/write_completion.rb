@@ -66,7 +66,8 @@ tpm_#{cmd.tr('-', '_')}=\"#{klass_options.join(' ')}\"
     COMPREPLY=( $(compgen -W "${tpm_commands} ${tpm_options}" -- ${cur}) )
     return 0
   else
-    eval opts='$tpm_'${COMP_WORDS[1]}
+    ESCAPED_COMP_WORD=`echo ${COMP_WORDS[1]} | tr "-" "_"`
+    eval opts='$tpm_'${ESCAPED_COMP_WORD}
     COMPREPLY=( $(compgen -W "${opts} ${tpm_options}" -- ${cur}) )
     return 0
   fi

@@ -53,6 +53,7 @@ module TungstenScript
     TU.debug("Begin #{$0} #{ARGV.join(' ')}")
     
     begin
+      prepare_environment()
       configure()
       @option_definitions.each{
         |option_key,definition|
@@ -132,6 +133,24 @@ module TungstenScript
       :default => false,
       :hidden => true
     })
+  end
+  
+  def prepare_environment
+    target_umask = nil
+    if TI != nil
+      install_umask = TI.setting(TI.setting_key(HOSTS, "file_protection_umask"))
+      if install_umask.to_s() != ""
+        target_umask = install_umask.to_i(8)
+      end
+    else
+      library_mode = sprintf("%o", File.stat(File.dirname(__FILE__)).mode)
+      library_umask = 777 - library_mode[-3,3].to_i()
+      target_umask = sprintf("%04d", library_umask).to_i(8)
+    end
+    
+    if target_umask != nil
+      File.umask(target_umask)
+    end
   end
   
   def opt(option_key, value = nil)
@@ -614,7 +633,7 @@ module OfflineServicesScript
     })
     
     add_option(:offline, {
-      :on => "--offline String",
+      :on => "--offline [String]",
       :help => "Put required replication services offline before processing",
       :default => false,
       :parse => method(:parse_boolean_option_blank_is_true)
@@ -628,7 +647,7 @@ module OfflineServicesScript
     })
     
     add_option(:online, {
-      :on => "--online String",
+      :on => "--online [String]",
       :help => "Put required replication services online after successful processing",
       :default => false,
       :parse => method(:parse_boolean_option_blank_is_true)
@@ -690,7 +709,7 @@ module OfflineServicesScript
                   
                   begin
                     if use_manager == true
-                      get_manager_api.call("#{ds}/#{TI.hostname()}", 'shun')
+                      TU.cmd_result("echo 'datasource #{TI.hostname()} shun' | #{TI.cctrl()}")
                     end
                   
                     # The trepctl offline command is required even when using 
@@ -708,8 +727,20 @@ module OfflineServicesScript
             raise("The replication #{TU.pluralize(ds_list, "service", "services")} #{TU.pluralize(ds_list, "is", "are")} taking too long to go offline. Check the status for more information or use the --offline-timeout argument.")
           end
         end
+      end
+      
+      begin
+        clear_logs = opt(:clear_logs)
+        if clear_logs_during_prepare() == false
+          clear_logs = false
+        end
+        
+        if clear_logs == true
+          cleanup_services(false, clear_logs)
+        end
       rescue => e
         TU.exception(e)
+        code = 1
       end
     end
   end
@@ -717,10 +748,15 @@ module OfflineServicesScript
   def cleanup(code = 0)
     if initialized?() == true && TI != nil && code == 0
       begin
+        clear_logs = opt(:clear_logs)
+        if clear_logs_during_prepare() == true
+          clear_logs = false
+        end
+        
         if allow_service_state_change?() == true && @options[:online] == true
-          cleanup_services(true, @options[:clear_logs])
-        elsif @options[:clear_logs] == true
-          cleanup_services(false, @options[:clear_logs])
+          cleanup_services(true, clear_logs)
+        elsif clear_logs == true
+          cleanup_services(false, clear_logs)
         end
       rescue => e
         TU.exception(e)
@@ -839,6 +875,10 @@ module OfflineServicesScript
     end
     
     @api
+  end
+  
+  def clear_logs_during_prepare
+    false
   end
 end
 
@@ -975,7 +1015,7 @@ module MySQLServiceScript
   # Read the configured value for a mysql variable
   def get_mysql_option(opt)
     begin
-      val = TU.cmd_result("my_print_defaults --config-file=#{@options[:my_cnf]} mysqld | grep -e'^--#{opt.gsub(/[\-\_]/, "[-_]")}'")
+      val = TU.cmd_result("my_print_defaults --config-file=#{@options[:my_cnf]} mysqld | grep -e'^--#{opt.gsub(/[\-\_]/, "[-_]")}='")
     rescue CommandError => ce
       return nil
     end

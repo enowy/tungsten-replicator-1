@@ -19,6 +19,17 @@ module ClusterHostCheck
   end
 end
 
+module ClusterHostPostValidationCheck
+  def self.included(subclass)
+    @subclasses ||= []
+    @subclasses << subclass
+  end
+
+  def self.subclasses
+    @subclasses || []
+  end
+end
+
 module ConnectorOnlyCheck
   def enabled?
     super() && @config.getProperty(HOST_ENABLE_CONNECTOR) == "true"
@@ -427,9 +438,9 @@ class JavaVersionCheck < ConfigureValidationCheck
       if java_out =~ /Java|JDK/
         debug "Supported Java found"
         
-        java_version = java_out.scan(/(?:java|openjdk) version \"1.(?:6|7|8)./)
+        java_version = java_out.scan(/(?:java|openjdk) version \"1.(?:7|8)./)
         unless java_version.length == 1
-          error "Java 1.6 or greater is required to run Tungsten"
+          error "Java 1.7 or greater is required to run Tungsten"
         end
       else
         error "Unknown Java version"
@@ -762,6 +773,53 @@ class CurrentReleaseDirectoryIsSymlink < ConfigureValidationCheck
   end
 end
 
+class NewDirectoryRequiredCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Determine if the update operation must go to a new directory"
+  end
+  
+  def validate
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    @original_config = Properties.new()
+    @original_config.load(current_release_directory + "/." + Configurator::HOST_CONFIG + '.orig')
+    Configurator.instance.command.build_topologies(@original_config)
+    
+    updated_keys = @config.getPromptHandler().get_updated_keys(@original_config)
+    unless is_valid?()
+      return is_valid?()
+    end
+    
+    # Check the changed values to see what components need to be restarted
+    updated_keys.each{
+      |k|
+      p = @config.getPromptHandler().find_prompt(k.split('.'))
+      if p.allow_inplace_upgrade?() == false
+        error("A configuration change to --#{p.get_command_line_argument()} requires a new installation directory. This can be done by running `tpm update --replace-release` from the staging directory.")
+      end
+    }
+  end
+  
+  def enabled?
+    if super() == false
+      return false
+    end
+    
+    # This check is only needed if we are updating an existing
+    # installed directory
+    current_release_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    if File.exists?(current_release_directory)
+      realpath = File.readlink(current_release_directory)
+      if realpath == @config.getProperty(TARGET_DIRECTORY)
+        return true
+      end
+    end
+    
+    return false
+  end
+end
+
 class CommitDirectoryCheck < ConfigureValidationCheck
   include ClusterHostCheck
   include CommitValidationCheck
@@ -892,6 +950,81 @@ class CurrentCommandCoordinatorCheck < ConfigureValidationCheck
   
   def enabled?
     super() && Configurator.instance.is_enterprise?()
+  end
+end
+
+class KeystoresToCommitCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  include CommitValidationCheck
+  
+  def set_vars
+    @title = "Collect information on the certificates to be used"
+  end
+  
+  def validate
+    tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+    tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
+    jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+    jgroups_keystore = @config.getTemplateValue(JAVA_JGROUPS_KEYSTORE_PATH)
+    ks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    if File.exists?(tls_keystore)
+      keystore = JavaKeytool.new(tls_keystore)
+      listing = keystore.list(ks_pass)
+      if listing.has_key?(tls_alias)
+        output_property("final_tls_certificate_sha256", listing[tls_alias][JavaKeytool::SHA256])
+      end
+    end
+    
+    if File.exists?(jgroups_keystore)
+      keystore = JavaKeytool.new(jgroups_keystore, JavaKeytool::TYPE_JCEKS)
+      listing = keystore.list(ks_pass)
+      if listing.has_key?(jgroups_alias)
+        output_property("final_jgroups_certificate_md5", listing[jgroups_alias][JavaKeytool::MD5])
+      end
+    end
+  end
+end
+
+class GlobalRestartComponentsCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  include PostValidationCommitCheck
+  
+  def set_vars
+    @title = "Check across all configs to see if components need to be restarted"
+  end
+  
+  def validate
+    props = Configurator.instance.command.get_validation_handler().output_properties.props
+    
+    Configurator.instance.command.get_deployment_configurations.each{
+      |cfg|
+      cfg_key = cfg.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
+      if props.has_key?(cfg_key)
+        initial_tls = props[cfg_key]["initial_tls_certificate_sha256"]
+        final_tls = props[cfg_key]["final_tls_certificate_sha256"]
+        initial_jgroups = props[cfg_key]["initial_jgroups_certificate_md5"]
+        final_jgroups = props[cfg_key]["final_jgroups_certificate_md5"]
+        
+        if initial_tls != final_tls
+          if props[cfg_key][RESTART_REPLICATORS] == false
+            props[cfg_key][RESTART_REPLICATORS] = true
+          end
+          if props[cfg_key][RESTART_MANAGERS] == false
+            props[cfg_key][RESTART_MANAGERS] = true
+          end
+          if props[cfg_key][RESTART_CONNECTORS] == false
+            props[cfg_key][RESTART_CONNECTORS] = true
+          end
+        end
+        
+        if initial_jgroups != final_jgroups
+          if props[cfg_key][RESTART_MANAGERS] == false
+            props[cfg_key][RESTART_MANAGERS] = true
+          end
+        end
+      end
+    }
   end
 end
 
@@ -1300,6 +1433,57 @@ class HostsFileCheck < ConfigureValidationCheck
   end
 end
 
+class KeystoresCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Collect information on existing Java Keystores"
+  end
+  
+  def validate
+    ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
+    jceks = @config.getTemplateValue(JAVA_JGROUPS_KEYSTORE_PATH)
+    password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+
+    # Keystore
+    if File.exists?(ks)
+      keystore = JavaKeytool.new(ks)
+      listing = keystore.list(password)
+      tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+      if listing.has_key?(tls_alias)
+        output_property("initial_tls_certificate_sha256", listing[tls_alias][JavaKeytool::SHA256])
+      end
+    end
+    
+    # Jgroups
+    if File.exists?(jceks)
+      keystore = JavaKeytool.new(jceks, JavaKeytool::TYPE_JCEKS)
+      listing = keystore.list(password)
+      jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+      if listing.has_key?(jgroups_alias)
+        output_property("initial_jgroups_certificate_md5", listing[jgroups_alias][JavaKeytool::MD5])
+      end
+    end
+  end
+end
+
+class EncryptionCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+  
+  def set_vars
+    @title = "Check for a valid encryption configuration"
+  end
+  
+  def validate
+    rmi_ssl = get_member_property(ENABLE_RMI_SSL)
+    rmi_authentication = get_member_property(ENABLE_RMI_AUTHENTICATION)
+    
+    if rmi_ssl != rmi_authentication
+      error("The --enable-rmi-ssl and --enable-rmi-authentication settings must match. Currently the configuration has --enable-rmi-ssl=#{rmi_ssl} and --enable-rmi-authentication=#{rmi_authentication}")
+    end
+  end
+end
+
 class ModifiedConfigurationFilesCheck < ConfigureValidationCheck
   include ClusterHostCheck
   
@@ -1329,6 +1513,7 @@ end
 
 class GlobalHostAddressesCheck < ConfigureValidationCheck
   include PostValidationCheck
+  include ClusterHostPostValidationCheck
   
   def set_vars
     @title = "Matching IP addresses check"
@@ -1364,6 +1549,7 @@ end
 
 class GlobalMatchingPingMethodCheck < ConfigureValidationCheck
   include PostValidationCheck
+  include ClusterHostPostValidationCheck
   
   def set_vars
     @title = "Matching manager ping method check"
@@ -1503,85 +1689,168 @@ class EncryptionKeystoreCheck < ConfigureValidationCheck
       connector_ssl_enabled = false
     end
     
-    if ssl_enabled == false && connector_ssl_enabled == false
-      return
+    if ssl_enabled == true
+      ks_path = @config.getProperty(JAVA_KEYSTORE_PATH).to_s()
+      ts_path = @config.getProperty(JAVA_TRUSTSTORE_PATH).to_s()
+      if ks_path != "" || ts_path != ""
+        # Both keystore and truststore must be provided if either is provided
+        validate_complete_keystore()
+        validate_complete_truststore()
+      else
+        validate_tls_keystore()
+      end
     end
     
-    begin
-      keytool_path = which("keytool")
-    rescue CommandError
-      keytool_path = nil
-    end
-    
-    keystore_path = @config.getProperty(JAVA_KEYSTORE_PATH)
-    truststore_path = @config.getProperty(JAVA_TRUSTSTORE_PATH)
-    if ssl_enabled == true && keystore_path != nil && truststore_path != nil
-      if keystore_path.to_s() == ""
-        if File.exist?(@config.getTemplateValue(JAVA_KEYSTORE_PATH))
-          keystore_path = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
-        else
-          error("Unable to find #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)} for use with SSL encryption. You must create the file or provide a path to it with --java-keystore-path.")
-        end
-      end
-    
-      if keystore_path.to_s() != "" && keytool_path != nil
-        begin
-          cmd_result("keytool -list -keystore #{keystore_path} -storepass #{@config.getProperty(JAVA_KEYSTORE_PASSWORD)}")
-        rescue CommandError => ce
-          error("There was an issue validating the SSL keystore: #{ce.result}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
-        end
-      end
-    
-      if truststore_path.to_s() == ""
-        if File.exist?(@config.getTemplateValue(JAVA_TRUSTSTORE_PATH))
-          truststore_path = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
-        else
-          error("Unable to find #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)} for use with SSL encryption. You must create the file or provide a path to it with --java-truststore-path.")
-        end
-      end
-    
-      if truststore_path.to_s() != "" && keytool_path != nil
-        begin
-          cmd_result("keytool -list -keystore #{truststore_path} -storepass #{@config.getProperty(JAVA_TRUSTSTORE_PASSWORD)}")
-        rescue CommandError => ce
-          error("There was an issue validating the SSL truststore: #{ce.result}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
-        end
-      end
+    if @config.getProperty(ENABLE_JGROUPS_SSL) == "true"
+      validate_jgroups_keystore()
     end
     
     if connector_ssl_enabled == true
-      keystore_path = @config.getProperty(JAVA_CONNECTOR_KEYSTORE_PATH)
-      if keystore_path.to_s() == ""
-        if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH))
-          keystore_path = @config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)
-        else
-          error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)} for use with Connector SSL encryption. You must create the file or provide a path to it with --java-connector-keystore-path.")
+      validate_complete_connector_keystore()
+      validate_complete_connector_truststore()
+    end
+  end
+  
+  def validate_keystore_alias(store_path, store_password, key_alias, key_password, store_type = JavaKeytool::TYPE_JKS)
+    keystore = JavaKeytool.new(store_path, store_type)
+    keystore.test_key_password(store_password, key_alias, key_password)
+    
+    return true
+  end
+  
+  def validate_keystore(store_path, store_password, store_type = JavaKeytool::TYPE_JKS)
+    keystore = JavaKeytool.new(store_path, store_type)
+    keystore.count(store_password)
+    
+    return true
+  end
+  
+  def validate_tls_keystore
+    key = JAVA_TLS_KEYSTORE_PATH
+    keystore_path = @config.getProperty(key).to_s()
+    if keystore_path == ""
+      keystore_path = @config.getTemplateValue(key).to_s()
+      if keystore_path != ""
+        unless File.exists?(keystore_path)
+          # Reset the keystore path since we should treat 
+          # this as if the argument is not set
+          keystore_path = ""
         end
       end
+    end
     
-      if keystore_path.to_s() != "" && keytool_path != nil
-        begin
-          cmd_result("keytool -list -keystore #{keystore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_KEYSTORE_PASSWORD)}")
-        rescue CommandError => ce
-          error("There was an issue validating the SSL keystore: #{ce.result}. Check the values of --java-connector-keystore-path and --java-connector-keystore-password. If you did not provide --java-connector-keystore-path, check the file at #{@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)}")
+    if keystore_path != ""
+      password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+      tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+      begin
+        validate_keystore_alias(keystore_path, password, tls_alias, password)
+      rescue => e
+        error("There was an issue validating the TLS keystore: #{e.message}. Check the values of --java-tls-keystore-path and --java-keystore-password.")
+      end
+    else
+      error("Encryption of cluster communications is enabled but no certificate has been provided. Specify a TLS keystore using --java-tls-keystore-path or include '--replace-tls-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
+    end
+  end
+  
+  def validate_jgroups_keystore
+    key = JAVA_JGROUPS_KEYSTORE_PATH
+    keystore_path = @config.getProperty(key).to_s()
+    if keystore_path == ""
+      keystore_path = @config.getTemplateValue(key).to_s()
+      if keystore_path != ""
+        unless File.exists?(keystore_path)
+          # Reset the keystore path since we should treat 
+          # this as if the argument is not set
+          keystore_path = ""
         end
       end
+    end
     
-      truststore_path = @config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PATH)
-      if truststore_path.to_s() == ""
-        if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH))
-          truststore_path = @config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)
-        else
-          error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)} for use with SSL encryption. You must create the file or provide a path to it with --java-connector-truststore-path.")
-        end
+    if keystore_path.to_s() != ""
+      password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+      jgroups_alias = @config.getProperty(JAVA_JGROUPS_ENTRY_ALIAS)
+      begin
+        validate_keystore_alias(keystore_path, password, jgroups_alias, password, JavaKeytool::TYPE_JCEKS)
+      rescue => e
+        error("There was an issue validating the JGroups keystore: #{e.message}. Check the values of --java-jgroups-keystore-path and --java-keystore-password.")
       end
-    
-      if truststore_path.to_s() != "" && keytool_path != nil
-        begin
-          cmd_result("keytool -list -keystore #{truststore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PASSWORD)}")
-        rescue CommandError => ce
-          error("There was an issue validating the SSL truststore: #{ce.result}. Check the values of --java-truststore-path and --java-connector-truststore-password. If you did not provide --java-connector-truststore-path, check the file at #{@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)}")
-        end
+    else
+      error("Encryption of JGroups data is enabled but no certificate has been provided. Specify a JGroups keystore using --java-jgroups-keystore-path or include '--replace-jgroups-certificate' in the `tpm update` command. You may disable this encryption by adding '--disable-security-controls=true'.")
+    end
+  end
+  
+  def validate_complete_keystore
+    keystore_path = @config.getProperty(JAVA_KEYSTORE_PATH)
+    if keystore_path.to_s() == ""
+      if File.exist?(@config.getTemplateValue(JAVA_KEYSTORE_PATH))
+        keystore_path = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
+      end
+    end
+
+    if keystore_path.to_s() != ""
+      password = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+      tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+      begin
+        validate_keystore(keystore_path, password)
+      rescue => e
+        error("There was an issue validating the SSL keystore: #{e.message}. Check the values of --java-keystore-path and --java-keystore-password. If you did not provide --java-keystore-path, check the file at #{@config.getTemplateValue(JAVA_KEYSTORE_PATH)}")
+      end
+    end
+  end
+  
+  def validate_complete_truststore
+    truststore_path = @config.getProperty(JAVA_TRUSTSTORE_PATH)
+    if truststore_path.to_s() == ""
+      if File.exist?(@config.getTemplateValue(JAVA_TRUSTSTORE_PATH))
+        truststore_path = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
+      end
+    end
+  
+    if truststore_path.to_s() != ""
+      password = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
+      tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+      begin
+        validate_keystore(truststore_path, password)
+      rescue => e
+        error("There was an issue validating the SSL truststore: #{e.message}. Check the values of --java-truststore-path and --java-truststore-password. If you did not provide --java-truststore-path, check the file at #{@config.getTemplateValue(JAVA_TRUSTSTORE_PATH)}")
+      end
+    end
+  end
+  
+  def validate_complete_connector_keystore
+    keystore_path = @config.getProperty(JAVA_CONNECTOR_KEYSTORE_PATH)
+    if keystore_path.to_s() == ""
+      if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH))
+        keystore_path = @config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)
+      else
+        error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)} for use with Connector SSL encryption. You must create the file or provide a path to it with --java-connector-keystore-path.")
+      end
+    end
+  
+    if keystore_path.to_s() != "" && keytool_path != nil
+      begin
+        cmd_result("keytool -list -keystore #{keystore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_KEYSTORE_PASSWORD)}")
+      rescue CommandError => ce
+        error("There was an issue validating the SSL keystore: #{ce.result}. Check the values of --java-connector-keystore-path and --java-connector-keystore-password. If you did not provide --java-connector-keystore-path, check the file at #{@config.getTemplateValue(JAVA_CONNECTOR_KEYSTORE_PATH)}")
+      end
+    end
+  end
+  
+  def validate_complete_connector_truststore
+    truststore_path = @config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PATH)
+    if truststore_path.to_s() == ""
+      if File.exist?(@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH))
+        truststore_path = @config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)
+      else
+        error("Unable to find #{@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)} for use with SSL encryption. You must create the file or provide a path to it with --java-connector-truststore-path.")
+      end
+    end
+  
+    if truststore_path.to_s() != "" && keytool_path != nil
+      begin
+        cmd_result("keytool -list -keystore #{truststore_path} -storepass #{@config.getProperty(JAVA_CONNECTOR_TRUSTSTORE_PASSWORD)}")
+      rescue CommandError => ce
+        error("There was an issue validating the SSL truststore: #{ce.result}. Check the values of --java-truststore-path and --java-connector-truststore-password. If you did not provide --java-connector-truststore-path, check the file at #{@config.getTemplateValue(JAVA_CONNECTOR_TRUSTSTORE_PATH)}")
       end
     end
   end
@@ -1602,5 +1871,76 @@ class NtpdRunningCheck < ConfigureValidationCheck
 
   def enabled?
     super()
+  end
+end
+
+class HostLicensesCheck < ConfigureValidationCheck
+  include ClusterHostCheck
+
+  def set_vars
+    @title = "Check for VMware Continuent licenses"
+  end
+
+  def validate
+    @has_licenses = false
+    @has_invalid_licenses = false
+    @trial_license_found = false
+    
+    licenses = @config.getProperty(HOST_LICENSES)
+    if licenses.is_a?(Array)
+      if licenses.size() > 0
+        @has_licenses = true
+        licenses.each {
+          |lic|
+          if validate_license(lic.to_s()) != true
+            error("The license key #{lic} is invalid.")
+            @has_invalid_licenses = true
+          end
+        }
+      end
+    elsif licenses.to_s() != ""
+      @has_licenses = true
+      if validate_license(licenses.to_s()) != true
+        error("The license key #{licenses.to_s()} is invalid.")
+        @has_invalid_licenses = true
+      end
+    end
+    
+    if @has_licenses == true
+      if @has_invalid_licenses == true
+        error("There are problems with some of your licenses. Use a proper VMware V8 license for Continuent or temporarily enable trial-mode by using '#{LICENSE_TRIAL}'. The trial-mode does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
+      end
+      
+      if @trial_license_found == true
+        warning("You have trial-mode enabled. It does not have any runtime limitations at this time but may affect your ability to get rapid support if there are questions about your license.")
+      end
+    else
+      search_paths = @config.getProperty(HOST_LICENSE_PATHS)
+      if search_paths.is_a?(Array)
+        warning("Unable to find licenses for this host in any of the following locations: #{search_paths.join(', ')}. Place your VMware Continuent license key into one of the paths listed on every host.")
+      else
+        warning("Unable to find licenses for this host.")
+      end
+    end
+  end
+  
+  def validate_license(license)
+    # The regex matches values like ABCD1-FGHI2-KLMN3-PQRS4-UVWX5
+    if license == LICENSE_TRIAL
+      @trial_license_found = true
+      return true
+    elsif license =~ /^([A-Z0-9]{5}\-){4}[A-Z0-9]{5}$/
+      return true
+    else
+      return false
+    end
+  end
+  
+  def enabled?
+    if Configurator.instance.is_open_source?()
+      false
+    else
+      super()
+    end
   end
 end

@@ -50,7 +50,7 @@ public class EchoPingTest extends TestCase
 
     protected void setUp() throws Exception
     {
-        server = new EchoServer(LOCALHOST_IP, PORT, NO_SSL, null, null);
+        server = new EchoServer(LOCALHOST_IP, PORT, NO_SSL, null, null, false);
         server.start();
     }
 
@@ -77,7 +77,7 @@ public class EchoPingTest extends TestCase
 
     public void testEchotoNonExistentDomain() throws Exception
     {
-        TungstenProperties result = Echo.isReachable("nonexistent.domain.com",
+        TungstenProperties result = Echo.isReachable("nonexistent.vmware.com",
                 PORT, TIMEOUT);
         assertEquals("Cannot ping unknown address", EchoStatus.UNKNOWN_HOST,
                 result.getObject(Echo.STATUS_KEY));

@@ -177,6 +177,22 @@ class ConfigureDatabasePlatform
     ""
   end
   
+  def getExternalLibraryDirectory()
+    nil
+  end
+  
+  def needsExternalLibraries
+    false
+  end
+  
+  def getExternalLibraries()
+    nil
+  end
+  
+  def missingExternalLibrariesErrorMessage
+    "Unable to find necessary libraries for #{get_connection_summary()}"
+  end
+  
   def get_default_master_log_directory
     raise "Undefined function: #{self.class.name}.get_default_master_log_directory"
   end
@@ -195,6 +211,37 @@ class ConfigureDatabasePlatform
   
   def get_default_systemctl_service
     raise "Undefined function: #{self.class.name}.get_default_systemctl_service"
+  end
+  
+  def find_systemctl_service(options)
+    unless options.is_a?(Array)
+      raise "find_systemctl_service requires a single Array argument"
+    end
+    
+    cmd = which("systemctl")
+    if cmd == nil
+      if File.exist?("/bin/systemctl")
+        cmd = "/bin/systemctl"
+      else
+        Configurator.instance.debug("Unable to search using systemctl because it is not in the $PATH")
+        return nil
+      end
+    end
+    
+    options.each{
+      |o|
+      begin
+        service = cmd_result("#{cmd} list-units | grep #{o} | awk -F' ' '{print $1}'")
+        if service.to_s() != ""
+          return service
+        end
+      rescue CommandError => ce  
+        debug("Unable to search systemctl for #{o}")
+        debug(ce)
+      end
+    }
+    
+    return nil
   end
   
   def create_tungsten_schema(schema_name = nil)
@@ -232,6 +279,16 @@ class ConfigureDatabasePlatform
   def get_service_control_command(subcommand)
     control_type = nil
     default_control_type = @config.getProperty(DEFAULT_SERVICE_CONTROL_TYPE)
+    begin
+      default_initd_script = get_default_start_script()
+    rescue
+      default_initd_script = nil
+    end
+    begin
+      default_systemctl_script = get_default_systemctl_service()
+    rescue
+      default_systemctl_script = nil
+    end
     initd_script = @config.getProperty(@prefix + [REPL_BOOT_SCRIPT])
     systemctl_service = @config.getProperty(@prefix + [REPL_SYSTEMCTL_SERVICE])
     
@@ -250,7 +307,34 @@ class ConfigureDatabasePlatform
       end
     end
     
-    # use the default service control type since no overrides were found
+    # Check the default control type to make sure it has a valid script
+    if control_type == nil
+      case default_control_type
+      when HostServiceControlType::INITD
+        if default_initd_script.to_s() != ""
+          control_type = HostServiceControlType::INITD
+          initd_script = default_initd_script
+        end
+      when HostServiceControlType::SYSTEMCTL
+        if default_systemctl_script.to_s() != ""
+          control_type = HostServiceControlType::SYSTEMCTL
+          systemctl_service = default_systemctl_script
+        end
+      end
+    end
+    
+    # If no other match has been found, go through all possible 
+    # start scripts to find a possible match
+    if control_type == nil
+      if default_systemctl_script.to_s() != ""
+        control_type = HostServiceControlType::SYSTEMCTL
+        systemctl_service = default_systemctl_script
+      elsif default_initd_script.to_s() != ""
+        control_type = HostServiceControlType::INITD
+        initd_script = default_initd_script
+      end
+    end
+    
     if control_type == nil
       control_type = default_control_type
     end
@@ -259,19 +343,11 @@ class ConfigureDatabasePlatform
     case control_type
     when HostServiceControlType::INITD
       if initd_script.to_s() == ""
-        initd_script = get_default_start_script()
-      end
-      
-      if initd_script.to_s() == ""
         return nil
       end
       
       return "#{initd_script} #{subcommand}"
     when HostServiceControlType::SYSTEMCTL
-      if systemctl_service.to_s() == ""
-        systemctl_service = get_default_systemctl_service()
-      end
-      
       if systemctl_service.to_s() == ""
         return nil
       end
@@ -344,6 +420,146 @@ class ConfigureDatabasePlatform
   
   def applier_supports_statements?
     false
+  end
+  
+  def can_sql?
+    false
+  end
+  
+  def sql_url
+    raise "Undefined function: #{self.class.name}.sql_url"
+  end
+
+  def sql_libraries
+    libraries = getExternalLibraries()
+    if libraries.is_a?(Hash)
+      return libraries.keys()
+    else
+      return []
+    end
+  end
+  
+  def sql_results(sql)
+    unless can_sql?()
+      raise "Unable to run SQL command for the #{get_connection_summary}. The datasource type does not support SQL commands."
+    end
+    
+    sql_results_from_url(sql, sql_url(), @username, @password)
+  end
+  
+  def sql_results_from_url(sql, url, user, password)
+    cfg = nil
+    command = nil
+    begin
+      cfg = Tempfile.new("cnf")
+      cfg.puts("url=#{url}")
+      cfg.puts("user=#{user}")
+      cfg.puts("password=#{password}")
+      cfg.close()
+      
+      command = Tempfile.new("query")
+      if sql.is_a?(Array)
+        command.puts(sql.join("\n"))
+      else
+        command.puts(sql)
+      end
+      command.close()
+      
+      libraries = sql_libraries()
+      if libraries.is_a?(Array) && libraries.size() > 0
+        set_classpath = "CP=#{libraries.join(':')}"
+      else
+        if needsExternalLibraries() == true
+          raise MessageError.new(missingExternalLibrariesErrorMessage())
+        end
+        set_classpath = ""
+      end
+      
+      base_path = Configurator.instance.get_base_path()
+      output = cmd_result("#{set_classpath} #{base_path}/tungsten-replicator/bin/query -conf #{cfg.path} -file #{command.path}")
+    rescue CommandError => ce
+      Configurator.instance.debug(ce)
+      raise MessageError.new("There was an error processing the query: #{ce.result}")
+    ensure
+      if cfg != nil
+        cfg.close()
+        cfg.unlink()
+      end
+      
+      if command != nil
+        command.close()
+        command.unlink()
+      end
+    end
+    
+    begin
+      results = JSON.parse(output)
+      results.each {
+        |result|
+        if result["rc"] == 0
+          result["error"] = nil
+        else
+          obj = CommandError.new(result["statement"], result["rc"], result["results"], result["error"])
+          result["error"] = obj
+        end
+      }
+      results
+    rescue JSON::ParserError => pe
+      Configurator.instance.debug("Unable to parse SQL results: #{output}")
+      raise MessageError.new("There was an error processing the query: #{output}")
+    end
+  end
+  
+  def sql_result(sql)
+    results = sql_results(sql)
+    
+    return_first_result(results)
+  end
+  
+  def sql_column(sql, column)
+    column.upcase!()
+    result = sql_result(sql)
+    
+    if result.size() > 0 && result[0].is_a?(Hash)
+      if result[0].has_key?(column)
+        return result[0][column]
+      else
+        raise MessageError.new("The SQL result does not contain the '#{column}' column")
+      end
+    else
+      return nil
+    end
+  end
+  
+  def sql_result_from_url(sql, url, user, password)
+    results = sql_results_from_url(sql, url, user, password)
+    
+    return_first_result(results)
+  end
+  
+  def return_first_result(results)
+    unless results.is_a?(Array)
+      raise "No results were returned"
+    end
+    
+    if results.size() == 0
+      raise "No results were returned"
+    end
+    
+    if results[0]["error"] == nil
+      return results[0]["results"][0]
+    else
+      raise results[0]["error"]
+    end
+  end
+  
+  def check_sql_results(results)
+    results.each{
+      |r|
+      if r["error"] != nil
+        raise r["error"]
+      end
+    }
   end
   
   def self.build(prefix, config, extractor = false)

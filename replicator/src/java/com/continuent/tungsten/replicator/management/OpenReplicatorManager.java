@@ -2820,7 +2820,7 @@ public class OpenReplicatorManager extends NotificationBroadcasterSupport
         catch (Exception e)
         {
             logger.error("Consistency check failed", e);
-            throw new Exception("Consistency check failed: " + e.getMessage());
+            throw new Exception("Consistency check failed", e);
         }
     }
 

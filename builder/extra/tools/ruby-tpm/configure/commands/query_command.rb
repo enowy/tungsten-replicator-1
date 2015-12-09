@@ -278,7 +278,7 @@ class QueryCommand
       Configurator.instance.output(cfg.to_s())
     }
   end
-  
+
   def allow_command_hosts?
     false
   end

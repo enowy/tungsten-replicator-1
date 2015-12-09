@@ -20,20 +20,28 @@
 
 package com.continuent.tungsten.common.sockets;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
-import junit.framework.Assert;
+import javax.net.ssl.SSLHandshakeException;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.SecurityConf;
+import com.continuent.tungsten.common.security.SecurityHelper;
+
+import org.junit.Assert;
 
 /**
  * Implements a test of client and server socket wrappers using SSL and non-SSL
@@ -48,11 +56,36 @@ import com.continuent.tungsten.common.security.SecurityConf;
  */
 public class SocketWrapperTest
 {
-    private static Logger logger = Logger.getLogger(SocketWrapperTest.class);
+    private static Logger logger            = Logger.getLogger(SocketWrapperTest.class);
     private EchoServer    server;
-    private SocketHelper  helper = new SocketHelper();
+    private SocketHelper  helper            = new SocketHelper();
 
-    /** Terminate echo server if still running. */
+    Level                 debugLevel_socket = null;
+
+    /**
+     * Make sure that tests are terminated if prerequirements are not met.
+     * 
+     * @throws ConfigurationException
+     */
+    @Before
+    public void checkConfiguration() throws ConfigurationException
+    {
+        if (!System.getProperty("user.dir").endsWith("commons/build/work"))
+        {
+            throw new ConfigurationException("\n\tInvalid working directory : "
+                    + System.getProperty("user.dir") + ".\n"
+                    + "\tWorking directory must be "
+                    + "../commons/build/work in order to test work.\n"
+                    + "\tHINT: in Eclipse, set working directory to "
+                    + "${workspace_loc:commons/build/work} in arguments.");
+        }
+    }
+
+    /**
+     * Terminate echo server if still running.
+     * 
+     * @throws ClassNotFoundException
+     */
     @After
     public void teardown()
     {
@@ -71,7 +104,7 @@ public class SocketWrapperTest
     public void testNonSSLConnection() throws Exception
     {
         logger.info("### testNonSSLConnection");
-        verifyConnection(2113, false, null, null, null);
+        verifyConnection(2113, false, null, null, null, false);
     }
 
     /**
@@ -82,8 +115,8 @@ public class SocketWrapperTest
     public void testSSLConnection() throws Exception
     {
         logger.info("### testSSLConnection");
-        helper.loadSecurityProperties();
-        verifyConnection(2114, true, null, null, null);
+        AuthenticationInfo securityInfo = helper.loadSecurityProperties();
+        verifyConnection(2114, true, null, null, securityInfo, null, false);
     }
 
     /**
@@ -98,10 +131,17 @@ public class SocketWrapperTest
         AuthenticationInfo securityInfo = helper
                 .loadSecurityProperties_keystoreWithAlias();
         String server_masterAlias = securityInfo
-                .getKeystoreAliasForConnectionType(
-                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
-        verifyConnection(2114, true, server_masterAlias, server_masterAlias,
-                securityInfo);
+                .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+        try
+        {
+            verifyConnection(2114, true, server_masterAlias,
+                    server_masterAlias, securityInfo, securityInfo, false);
+        }
+        catch (Exception e)
+        {
+            assertFalse("No exception should have been thrown", true);
+        }
+
     }
 
     /**
@@ -110,28 +150,51 @@ public class SocketWrapperTest
      */
     @Test
     public void testSSLConnection_keystoreWithAlias_wrong_server_alias()
-            throws Exception
+            throws ConfigurationException, Exception
     {
-        logger.info(
-                "### testSSLConnection with alias selection: wrong server alias");
+        logger.info("### testSSLConnection with alias selection: wrong server alias");
         AuthenticationInfo securityInfo = helper
                 .loadSecurityProperties_keystoreWithAlias();
         String client_slaveAlias = securityInfo
-                .getKeystoreAliasForConnectionType(
-                        SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+                .getKeystoreAliasForConnectionType(SecurityConf
+                        .KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
         try
         {
-            verifyConnection(2114, true, "alias_that_does_not_exist",
-                    client_slaveAlias, securityInfo);
+            // Change debug level so that trace messages are shown
+            debugLevel_socket = LogManager
+                    .getLogger(
+                            Class.forName("com.continuent.tungsten.common"
+                                    + ".sockets.AliasSelectorKeyManager"))
+                    .getLevel();
+            LogManager
+                    .getLogger(
+                            Class.forName("com.continuent.tungsten.common"
+                                    + ".sockets.AliasSelectorKeyManager"))
+                    .setLevel(Level.TRACE);
+
+            verifyConnection(
+                    2114,
+                    true,
+                    "alias_that_does_not_exist_but it's ok it's the expected result",
+                    client_slaveAlias, securityInfo, securityInfo, true);
             assertTrue(
-                    "The server should not have started: we used a non existing alias in the keystore",
+                    "The server should not have started: we used a non existing "
+                    + "alias in the keystore",
                     false);
         }
-        catch (Exception e)
+        catch (SSLHandshakeException e)
         {
             assertTrue(
-                    "This exception is expected as we're trying to use a non existant server alias in the keystore",
+                    "This exception is expected as we're trying to use a non "
+                    + "existant server alias in the keystore",
                     true);
+        }
+        finally
+        {
+            LogManager
+                    .getLogger(
+                            Class.forName("com.continuent.tungsten.common.sockets.AliasSelectorKeyManager"))
+                    .setLevel(debugLevel_socket);
         }
     }
 
@@ -144,7 +207,7 @@ public class SocketWrapperTest
         // Start an SSL server.
         logger.info("### testSSLConnectionIncompatibility");
         helper.loadSecurityProperties();
-        server = new EchoServer("127.0.0.1", 2115, true, null, null);
+        server = new EchoServer("127.0.0.1", 2115, true, null, null, true);
         server.start();
 
         // Connect with non-SSL socket.
@@ -182,7 +245,7 @@ public class SocketWrapperTest
     public void testNonSSLClientsBasic() throws Exception
     {
         logger.info("### testNonSSLClientsBasic");
-        verifyClients(2116, 5, false);
+        verifyClients(2116, 5, false, false);
     }
 
     /**
@@ -193,8 +256,8 @@ public class SocketWrapperTest
     public void testSSLClientsBasic() throws Exception
     {
         logger.info("### testSSLClientsBasic");
-        helper.loadSecurityProperties();
-        verifyClients(2117, 5, true);
+        AuthenticationInfo securityInfo = helper.loadSecurityProperties();
+        verifyClients(2117, 5, true, securityInfo, false);
     }
 
     /**
@@ -202,14 +265,30 @@ public class SocketWrapperTest
      */
     private void verifyConnection(int port, boolean useSSL,
             String serverKeystoreAlias, String clientKeystoreAlias,
-            AuthenticationInfo securityInfo) throws Exception
+            AuthenticationInfo securityInfo, boolean silentFail)
+            throws Exception
+    {
+        verifyConnection(port, useSSL, serverKeystoreAlias,
+                clientKeystoreAlias, securityInfo, null, silentFail);
+    }
+
+    private void verifyConnection(int port, boolean useSSL,
+            String serverKeystoreAlias, String clientKeystoreAlias,
+            AuthenticationInfo securityInfo,
+            AuthenticationInfo serverSecurityInfo, boolean silentFail)
+            throws Exception, ConfigurationException
     {
         server = new EchoServer("127.0.0.1", port, useSSL, serverKeystoreAlias,
-                securityInfo);
+                serverSecurityInfo, silentFail);
         server.start();
 
         ClientSocketWrapper clientWrapper = new ClientSocketWrapper();
         clientWrapper.setUseSSL(useSSL);
+
+        if (useSSL)
+        {
+            Assert.assertTrue(securityInfo != null);
+        }
         clientWrapper.setAddress(new InetSocketAddress("127.0.0.1", port));
         clientWrapper.connect();
 
@@ -222,23 +301,39 @@ public class SocketWrapperTest
         clientWrapper.close();
     }
 
+    public void verifyClients(int port, int numberOfClients, boolean useSSL,
+            boolean silentFail) throws Exception
+    {
+        verifyClients(port, numberOfClients, useSSL, null, silentFail);
+    }
+
     /**
      * Verify that multiple clients can connect to the server and that the
      * server can stop when the clients are idle.
      */
-    public void verifyClients(int port, int numberOfClients, boolean useSSL)
+    public void verifyClients(int port, int numberOfClients, boolean useSSL,
+            AuthenticationInfo securityInfo, boolean silentFail)
             throws Exception
     {
         // Start a server.
-        server = new EchoServer("127.0.0.1", port, useSSL, null, null);
+        server = new EchoServer("127.0.0.1", port, useSSL, null, null,
+                silentFail);
         server.start();
 
         // Launch echo clients with 100ms think time between
         // requests.
         EchoClient[] clients = new EchoClient[numberOfClients];
+
+        if (useSSL)
+        {
+            Assert.assertTrue(securityInfo != null);
+        }
+
         for (int i = 0; i < clients.length; i++)
         {
             EchoClient client = new EchoClient("127.0.0.1", port, useSSL, 100);
+            client.setEnabledCiphers(SecurityHelper.getCiphers());
+            client.setEnabledProtocols(SecurityHelper.getProtocols());
             client.start();
             clients[i] = client;
         }
@@ -255,10 +350,8 @@ public class SocketWrapperTest
                 // Ensure we can shut down the client.
                 Assert.assertTrue("Shut down client: " + client.getName(),
                         client.shutdown());
-                Assert.assertTrue(
-                        "Expect least 10 operations per client: "
-                                + client.getName(),
-                        client.getEchoCount() >= 10);
+                Assert.assertTrue("Expect least 10 operations per client: "
+                        + client.getName(), client.getEchoCount() >= 10);
                 Assert.assertNull(
                         "Do not expect errors for client: " + client.getName(),
                         client.getThrowable());

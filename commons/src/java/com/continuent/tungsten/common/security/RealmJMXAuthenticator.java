@@ -20,11 +20,15 @@
 
 package com.continuent.tungsten.common.security;
 
+import java.text.MessageFormat;
 import java.util.Collections;
+import java.util.Random;
 
 import javax.management.remote.JMXAuthenticator;
 import javax.management.remote.JMXPrincipal;
 import javax.security.auth.Subject;
+
+import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
@@ -37,8 +41,8 @@ import com.continuent.tungsten.common.security.PasswordManager.ClientApplication
  */
 public class RealmJMXAuthenticator implements JMXAuthenticator
 {
-//    private static final Logger logger                 = Logger.getLogger(JmxManager.class);
-//    private TungstenProperties  passwordProps          = null;
+    private static final Logger logger                 = Logger
+            .getLogger(RealmJMXAuthenticator.class);
 
     private AuthenticationInfo  authenticationInfo     = null;
 
@@ -47,13 +51,16 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
     private static final String INVALID_CREDENTIALS    = "Invalid credentials";
     private static final String AUTHENTICATION_PROBLEM = "Error while trying to authenticate";
 
-    public RealmJMXAuthenticator(AuthenticationInfo authenticationInfo) throws ConfigurationException
+    public RealmJMXAuthenticator(AuthenticationInfo authenticationInfo)
+            throws ConfigurationException
     {
         this.authenticationInfo = authenticationInfo;
-        this.passwordManager    = new PasswordManager(authenticationInfo.getParentPropertiesFileLocation(), ClientApplicationType.RMI_JMX);
+        this.passwordManager = new PasswordManager(
+                authenticationInfo.getParentPropertiesFileLocation(),
+                ClientApplicationType.RMI_JMX);
 
-//        this.passwordProps = SecurityHelper
-//                .loadPasswordsFromAuthenticationInfo(authenticationInfo);
+        // this.passwordProps = SecurityHelper
+        // .loadPasswordsFromAuthenticationInfo(authenticationInfo);
     }
 
     /**
@@ -70,18 +77,19 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
         // --- Get auth parameters ---
         String username = (String) aCredentials[0];
         String password = (String) aCredentials[1];
-//        String realm = (String) aCredentials[2];
+        // String realm = (String) aCredentials[2];
 
         // --- Perform authentication ---
         try
         {
             // Password file syntax:
             // username=password
-//            String goodPassword = this.passwordProps.get(username);
-            String goodPassword = this.passwordManager.getClearTextPasswordForUser(username);
-//            this.authenticationInfo.setPassword(goodPassword);
-//            // Decrypt password if needed
-//            goodPassword = this.authenticationInfo.getPassword();
+            // String goodPassword = this.passwordProps.get(username);
+            String goodPassword = this.passwordManager
+                    .getClearTextPasswordForUser(username);
+            // this.authenticationInfo.setPassword(goodPassword);
+            // // Decrypt password if needed
+            // goodPassword = this.authenticationInfo.getPassword();
 
             if (goodPassword.equals(password))
                 authenticationOK = true;
@@ -96,11 +104,35 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
 
         if (authenticationOK)
         {
-            return new Subject(true, Collections.singleton(new JMXPrincipal(
-                    username)), Collections.EMPTY_SET, Collections.EMPTY_SET);
+            return new Subject(true,
+                    Collections.singleton(new JMXPrincipal(username)),
+                    Collections.EMPTY_SET, Collections.EMPTY_SET);
         }
         else
         {
+            try
+            {
+                // Generate a random number between
+                // security.randomWaitOnFailedLogin.min and
+                // security.randomWaitOnFailedLogin.max
+                int min = authenticationInfo.getMinWaitOnFailedLogin();
+                int max = authenticationInfo.getMaxWaitOnFailedLogin();
+                int increment = authenticationInfo
+                        .getIncrementStepWaitOnFailedLogin();
+                int randomNum = getRandomInt(min, max, increment);
+
+                // Sleep a random number of seconds = between min and max
+                logger.info(MessageFormat.format(
+                        "Invalid credentials. Sleeping (ms): {0,number,#}",
+                        randomNum));
+                if (randomNum > 0)
+                    Thread.sleep(randomNum);
+
+            }
+            catch (InterruptedException e)
+            {
+                logger.error(MessageFormat.format("Could not sleep !: {0}", e));
+            }
             throw new SecurityException(INVALID_CREDENTIALS);
         }
     }
@@ -127,14 +159,14 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
         // Verify that the array contains three elements
         // (username/password/realm).
         final String[] aCredentials = (String[]) credentials;
-        if (aCredentials.length != 3)
-        {
-            throw new SecurityException("Credentials should have 3 elements");
-        }
+        // if (aCredentials.length != 3)
+        // {
+        // throw new SecurityException("Credentials should have 3 elements");
+        // }
 
         return aCredentials;
     }
-    
+
     /**
      * Returns the authenticationInfo value.
      * 
@@ -153,6 +185,66 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
     public void setAuthenticationInfo(AuthenticationInfo authenticationInfo)
     {
         this.authenticationInfo = authenticationInfo;
+    }
+
+    /**
+     * Returns a psuedo-random number between min and max, inclusive. The
+     * difference between min and max can be at most
+     * <code>Integer.MAX_VALUE - 1</code>.
+     *
+     * @param min Minimim value
+     * @param max Maximim value. Must be greater than min.
+     * @return Integer between min and max, inclusive.
+     * @see java.util.Random#nextInt(int)
+     */
+    public static int getRandomInt(int min, int max, int incrementStep)
+    {
+        // Checks and validation
+        if (min < 0)
+            min = 0;
+        if (max < 0)
+            max = 0;
+        if (max < min)
+        {
+            // Invert max and min
+            logger.warn(MessageFormat.format(
+                    "{0} and {1} are inverted. You must specify values so that min <= max",
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
+            int tmpMin = max;
+            min = max;
+            max = tmpMin;
+        }
+        if (incrementStep <= 0)
+            incrementStep = 1;
+        if (incrementStep >= max - min && (max - min) > 0)
+        {
+            logger.warn(MessageFormat.format(
+                    "{0} is not coherent. {0} >= {1}-{2}",
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
+            incrementStep = 1;
+        }
+        if (max - min == 0)
+            return max;
+
+        // Usually this can be a field rather than a method variable
+        Random rand = new Random();
+
+        // nextInt is normally exclusive of the top value,
+        // so add 1 to make it inclusive
+        // int randomNum = rand.nextInt((max - min) + 1) + min;
+
+        Integer range = max - min;
+        int maxMultiplier = Double.valueOf(Math.floor(range / incrementStep))
+                .intValue();
+        int randomMultiplier = rand.nextInt(maxMultiplier);
+
+        int randomNumberWithIncrement = min
+                + (randomMultiplier * incrementStep);
+
+        return randomNumberWithIncrement;
     }
 
 }

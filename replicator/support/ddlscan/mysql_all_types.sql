@@ -8,8 +8,11 @@ CREATE TABLE `all_mysql_types` (
   `my_int` int(11) DEFAULT NULL,
   `my_bigint` bigint(20) DEFAULT NULL,
   `my_decimal_10_5` decimal(10,5) DEFAULT NULL,
+  `my_udecimal_10_5` decimal(10,5) unsigned DEFAULT NULL,
   `my_float` float DEFAULT NULL,
+  `my_ufloat` float unsigned DEFAULT NULL,
   `my_double` double DEFAULT NULL,
+  `my_udouble` double unsigned DEFAULT NULL,
   `my_date` date DEFAULT NULL,
   `my_datetime` datetime DEFAULT NULL,
   `my_timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -28,5 +31,6 @@ CREATE TABLE `all_mysql_types` (
   `my_longblob` longblob,
   `my_longtext` longtext,
   `my_enum_abc` enum('a','b','c') DEFAULT NULL,
+  `my_enum_string` enum('alpha','beta','gamma') DEFAULT NULL,
   `my_set_def` set('d','e','f') DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

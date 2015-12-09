@@ -1,35 +1,38 @@
 # escape.rb - escape/unescape library for several formats
 #
-# Copyright (C) 2006,2007,2009 Tanaka Akira  <akr@fsij.org>
-# 
+# Copyright (C) 2006-2014 Tanaka Akira  <akr@fsij.org>
+#
 # Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-# 
-#  1. Redistributions of source code must retain the above copyright notice, this
-#     list of conditions and the following disclaimer.
-#  2. Redistributions in binary form must reproduce the above copyright notice,
-#     this list of conditions and the following disclaimer in the documentation
-#     and/or other materials provided with the distribution.
-#  3. The name of the author may not be used to endorse or promote products
-#     derived from this software without specific prior written permission.
-# 
-# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
-# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
-# EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
-# OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-# IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
-# OF SUCH DAMAGE.
+# modification, are permitted provided that the following conditions
+# are met:
+#
+#  1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  2. Redistributions in binary form must reproduce the above
+#     copyright notice, this list of conditions and the following
+#     disclaimer in the documentation and/or other materials provided
+#     with the distribution.
+#  3. The name of the author may not be used to endorse or promote
+#     products derived from this software without specific prior
+#     written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+# GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Escape module provides several escape functions.
 # * URI
 # * HTML
 # * shell command
 # * MIME parameter
-# encoding: ascii
 module Escape
   module_function
 
@@ -82,7 +85,7 @@ module Escape
   # system(Escape.shell_command(command).to_s) is roughly same.
   # There are two exception as follows.
   # * The first is that the later may invokes /bin/sh.
-  # * The second is an interpretation of an array with only one element: 
+  # * The second is an interpretation of an array with only one element:
   #   the element is parsed by the shell with the former but
   #   it is recognized as single word with the later.
   #   For example, system(*["echo foo"]) invokes echo command with an argument "foo".
@@ -443,7 +446,7 @@ module Escape
   #
   # token is a sequence of any CHAR except CTLs or separators
   def http_token?(str)
-    /\A[!\#-'*+\-.0-9A-Z^-z|~]+\z/ =~ str ? true : false 
+    /\A[!\#-'*+\-.0-9A-Z^-z|~]+\z/ =~ str ? true : false
   end
 
   # Escape.http_quoted_string escapes a string as quoted-string defined in RFC 2616.
@@ -454,7 +457,7 @@ module Escape
   # Escape.http_quoted_string assumes that newlines are represented as
   # "\n" or "\r\n".
   def http_quoted_string(str)
-    if Regexp.new("\A(?:[\0-\x09\x0b\x0c\x0e-\xff]|\r?\n[ \t])*\z") !~ str
+    if /\A(?:[\0-\x09\x0b\x0c\x0e-\xff]|\r?\n[ \t])*\z/n !~ str
       raise ArgumentError, "CR or LF not part of folding white space exists: #{str.inspect}"
     end
     s = '"' + str.gsub(/["\\]/, '\\\\\&') + '"'
@@ -525,7 +528,7 @@ module Escape
 
   # Escape.http_params_with_pre encodes parameters and joins with given prefix.
   #
-  #  Escape.http_params_with_pre("; ", "foo", "bar")                
+  #  Escape.http_params_with_pre("; ", "foo", "bar")
   #  #=> #<Escape::MIMEParameter: ; foo=bar>
   #
   #  Escape.http_params_with_pre("; ", "foo", "bar", "hoge", "fuga")
@@ -539,6 +542,80 @@ module Escape
     pairs = _parse_http_params_args(args)
     s = pairs.map {|attribute, value| pre + http_parameter(attribute, value).to_s }.join('')
     MIMEParameter.new_no_dup(s)
+  end
+
+  class LTSVEscaped < StringWrapper
+    def inspect
+      if /\n\z/ =~ @str
+        "\#<#{self.class}: #{@str.chomp}>"
+      else
+        "\#<#{self.class}: #{@str} (no newline)>"
+      end
+    end
+  end
+
+  def ltsv_line(assoc)
+    result = ''
+    assoc.each {|k, v|
+      result << _ltsv_key(k)
+      result << ':'
+      result << _ltsv_val(v)
+      result << "\t"
+    }
+    result.sub!(/\t\z/, "\n")
+    LTSVEscaped.new_no_dup(result)
+  end
+
+  def _ltsv_key(str)
+    if /[\0-\x1f":\\\x7f]/ !~ str
+      # ASCII control characters, '"', ':' and '\\' not found
+      str
+    else
+      '"' +
+      str.gsub(/[\0-\x1f":\\\x7f]/) {
+        ch = $&
+        case ch
+        when "\0"; '\0'
+        when "\a"; '\a'
+        when "\b"; '\b'
+        when "\f"; '\f'
+        when "\n"; '\n'
+        when "\r"; '\r'
+        when "\t"; '\t'
+        when "\v"; '\v'
+        when "\e"; '\e'
+        else
+          "\\x%02X" % ch.unpack("C")[0]
+        end
+      } +
+      '"'
+    end
+  end
+
+  def _ltsv_val(str)
+    if /[\0-\x1f"\\\x7f]/ !~ str
+      # ASCII control characters, '"', and '\\' not found
+      str
+    else
+      '"' +
+      str.gsub(/[\0-\x1f"\\\x7f]/) {
+        ch = $&
+        case ch
+        when "\0"; '\0'
+        when "\a"; '\a'
+        when "\b"; '\b'
+        when "\f"; '\f'
+        when "\n"; '\n'
+        when "\r"; '\r'
+        when "\t"; '\t'
+        when "\v"; '\v'
+        when "\e"; '\e'
+        else
+          "\\x%02X" % ch.unpack("C")[0]
+        end
+      } +
+      '"'
+    end
   end
 
 end

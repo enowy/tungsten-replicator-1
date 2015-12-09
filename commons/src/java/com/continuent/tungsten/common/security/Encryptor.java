@@ -91,6 +91,14 @@ public class Encryptor
             String alias = null;
             if (listAliases.hasMoreElements())
                 alias = listAliases.nextElement();
+            else
+            {
+                // Store does not contain any aliases
+                String errorMessage = MessageFormat.format(
+                        "Store is empty. Does not contain any aliases: {0}",
+                        storeLocation);
+                throw new ConfigurationException(errorMessage);
+            }
 
             // Get certificate of public key
             Certificate cert = keystore.getCertificate(alias);

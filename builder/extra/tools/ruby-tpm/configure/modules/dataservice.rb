@@ -48,6 +48,10 @@ module ReplicationServicePrompt
     [HOSTS, get_host_alias(), key]
   end
   
+  def get_host_property(key)
+    @config.getProperty(get_host_key(key))
+  end
+  
   def get_dataservice_key(key)
     [DATASERVICES, @config.getProperty(get_member_key(DEPLOYMENT_DATASERVICE)), key]
   end
@@ -171,27 +175,29 @@ end
 class ReplicationServiceName < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(DEPLOYMENT_SERVICE, "What is the replication service name?", 
       PV_IDENTIFIER)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_dataservice_key(DATASERVICENAME))
+  def get_default_value
+    @config.getProperty(get_dataservice_key(DATASERVICENAME))
   end
 end
 
 class LocalReplicationServiceName < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(DSNAME, "What is the local service name?", PV_IDENTIFIER)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_dataservice_key(DATASERVICENAME))
+  def get_default_value
+    @config.getProperty(get_dataservice_key(DATASERVICENAME))
   end
 end
 
@@ -257,6 +263,57 @@ class ReplicationServiceEnableTHLListener < ConfigurePrompt
   def initialize
     super(REPL_SVC_ENABLE_SLAVE_THL_LISTENER, "Should this service allow THL connections?",
       PV_BOOLEAN, "true")
+  end
+end
+
+class ReplicationServiceDisableExtractor < ConfigurePrompt
+  include ReplicationServicePrompt
+  include ConstantValueModule
+  
+  def initialize
+    super(REPL_DISABLE_EXTRACTOR, "Should this service support the master role?",
+      PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    role = get_member_value(REPL_ROLE)
+    if role == REPL_ROLE_M
+      @default = "false"
+    else
+      @default = get_member_value(REPL_DISABLE_SLAVE_EXTRACTOR)
+    end
+  end
+end
+
+class ReplicationServiceDisableSlaveExtractor < ConfigurePrompt
+  include ReplicationServicePrompt
+  
+  def initialize
+    super(REPL_DISABLE_SLAVE_EXTRACTOR, "Should slave servers support the master role?",
+      PV_BOOLEAN)
+  end
+  
+  def load_default_value
+    if get_member_value(ENABLE_HETEROGENOUS_SLAVE) == "true"
+      @default = "true"
+    else
+      topology = get_topology()
+      @default = topology.disable_extractor?()
+    end
+  end
+  
+  def validate_value(value)
+    val = super(value)
+    if is_valid?() == true
+      topology = get_topology()
+      if topology.is_a?(ClusterTopology)
+        if val == "true"
+          error("The --disable-slave-extractor may not be set when --topology=clustered.")
+        end
+      end
+    end
+    
+    return val
   end
 end
 
@@ -971,8 +1028,26 @@ class THLSSL < ConfigurePrompt
   include ReplicationServicePrompt
   
   def initialize
-    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN, "false")
+    super(REPL_ENABLE_THL_SSL, "Enable SSL encryption of THL communication for this service", PV_BOOLEAN)
     add_command_line_alias("thl-ssl")
+  end
+  
+  def load_default_value
+    if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+      @default = "false"
+    else
+      @default = "true"
+    end
+  end
+  
+  def get_value(allow_default = true, allow_disabled = false)
+    is_replicator = get_host_property(HOST_ENABLE_REPLICATOR)
+    if is_replicator == "false"
+      # Do nothing because the TLS certificate is not used
+      return "false"
+    else
+      super(allow_default, allow_disabled)
+    end
   end
 end
 

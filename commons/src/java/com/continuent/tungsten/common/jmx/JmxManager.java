@@ -50,12 +50,15 @@ import javax.net.ssl.SSLHandshakeException;
 import javax.rmi.ssl.SslRMIClientSocketFactory;
 import javax.rmi.ssl.SslRMIServerSocketFactory;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
-import com.continuent.tungsten.common.config.TungstenProperties;
 import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.PasswordManager;
+import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
 import com.continuent.tungsten.common.security.RealmJMXAuthenticator;
+import com.continuent.tungsten.common.security.SecurityHelper;
 
 /**
  * Encapsulates JMX server start/stop and provides static utility methods to
@@ -67,39 +70,82 @@ import com.continuent.tungsten.common.security.RealmJMXAuthenticator;
  */
 public class JmxManager implements NotificationListener
 {
-    private static final Logger       logger              = Logger.getLogger(JmxManager.class);
+    private static final Logger         logger              = Logger
+            .getLogger(JmxManager.class);
 
     // RMI registry and connector server we are managing.
-    protected Registry                rmiRegistry;
-    protected JMXConnectorServer      jmxConnectorServer;
-  
+    protected Registry                  rmiRegistry;
+    protected JMXConnectorServer        jmxConnectorServer;
+
     // JMX server parameters.
-    private final String              host;
-    private final int                 registryPort;
-    private static int                beanPort;
+    private final String                host;
+    private final int                   registryPort;
+    private final int                   beanPort;
 
-    private final String              serviceName;
+    private final String                serviceName;
 
-    public final static String        CREATE_MBEAN_HELPER = "createHelper";
+    public final static String          CREATE_MBEAN_HELPER = "createHelper";
 
     // Authentication and Encryption parameters
-    private static AuthenticationInfo authenticationInfo  = null;
+    private volatile AuthenticationInfo authenticationInfo  = null;
+
+    public JmxManager(String host, int beanPort, int registryPort,
+            String serviceName)
+    {
+        this(host, beanPort, registryPort, serviceName, null);
+    }
 
     /**
      * Creates an instance to manage a JMX service
      * 
      * @param host The host name or IP to use
-     * @param beanPort
+     * @param beanPort The port used for JMX beans
      * @param registryPort The JMX server RMI registryPort
      * @param serviceName The JMX service name
+     * @param authInfo Authentication information from security.properties or
+     *            null if no security settings are available
      */
     public JmxManager(String host, int beanPort, int registryPort,
-            String serviceName)
+            String serviceName, AuthenticationInfo authInfo)
     {
         this.host = host;
+        this.beanPort = beanPort;
         this.registryPort = registryPort;
         this.serviceName = serviceName;
-        JmxManager.beanPort = beanPort;
+        this.authenticationInfo = authInfo;
+
+        // Load security information from security.properties
+        // Load password from file
+        // CONT-1069
+        if (authenticationInfo == null)
+        {
+            try
+            {
+                authenticationInfo = SecurityHelper
+                        .loadAuthenticationInformation();
+
+                // Sets the username and password in the authenticationInfo.
+                // This will be used as credentials when connecting
+                // Password is provided "as is" (potentially encrypted) and will
+                // be decrypted by the server if needed
+                if (authenticationInfo.isAuthenticationNeeded())
+                {
+                    PasswordManager passwordManager = new PasswordManager(
+                            authenticationInfo, ClientApplicationType.RMI_JMX);
+                    String goodPassword = passwordManager
+                            .getEncryptedPasswordForUser(
+                                    authenticationInfo.getUsername());
+                    authenticationInfo.setPassword(goodPassword);
+                }
+            }
+            catch (ConfigurationException e)
+            {
+                logger.error(MessageFormat.format(
+                        "Could not get security information. Will use default values: {0}",
+                        e));
+            }
+        }
+
     }
 
     /**
@@ -118,24 +164,18 @@ public class JmxManager implements NotificationListener
      * Creates an instance to manage a JMX service Called when using
      * authentication (and) encryption
      * 
-     * @see <a
-     *      href="http://download.java.net/jdk8/docs/technotes/guides/jmx/tutorial/security.html">JMX
-     *      Tutorial on Security</a>
+     * @see <a href=
+     *      "http://download.java.net/jdk8/docs/technotes/guides/jmx/tutorial/security.html">
+     *      JMX Tutorial on Security</a>
      * @param host
      * @param registryPort
      * @param serviceName
-     * @param tungstenProperty
+     * @param authInfo
      */
     public JmxManager(String host, int registryPort, String serviceName,
-            TungstenProperties tungstenProperty)
+            AuthenticationInfo authInfo)
     {
-        this(host, registryPort, serviceName);
-
-        // Authentication and encryption parameters
-        if (tungstenProperty != null)
-            authenticationInfo = (AuthenticationInfo) tungstenProperty
-                    .getObject(AuthenticationInfo.SECURITY_INFO_PROPERTY,
-                            null, false);
+        this(host, registryPort + 1, registryPort, serviceName, authInfo);
     }
 
     /**
@@ -167,10 +207,9 @@ public class JmxManager implements NotificationListener
         }
         catch (Exception r)
         {
-            throw new ServerRuntimeException(
-                    String.format(
-                            "Unable to locate the default registry on registryPort 1099, reason='%s'",
-                            r.getMessage()));
+            throw new ServerRuntimeException(String.format(
+                    "Unable to locate the default registry on registryPort 1099, reason='%s'",
+                    r.getMessage()));
         }
 
         return registry;
@@ -188,8 +227,8 @@ public class JmxManager implements NotificationListener
             {
                 if (logger.isDebugEnabled())
                 {
-                    logger.debug("Starting RMI registry on registryPort: "
-                            + port);
+                    logger.debug(
+                            "Starting RMI registry on registryPort: " + port);
                 }
                 rmiRegistry = LocateRegistry.createRegistry(port);
             }
@@ -216,8 +255,8 @@ public class JmxManager implements NotificationListener
             }
             catch (NoSuchObjectException e)
             {
-                logger.warn(
-                        "Unexpected error while shutting down RMI registry", e);
+                logger.warn("Unexpected error while shutting down RMI registry",
+                        e);
             }
             rmiRegistry = null;
         }
@@ -265,13 +304,67 @@ public class JmxManager implements NotificationListener
                         authenticationInfo.getKeystoreLocation());
                 System.setProperty("javax.net.ssl.keyStorePassword",
                         authenticationInfo.getKeystorePassword());
-                // Configure SSL
-                SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
-                SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory();
-                env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
-                        csf);
-                env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
-                        ssf);
+                /**
+                 * Configure SSL. Protocols and ciphers are set in
+                 * securityHelper.setSecurityProperties and used by
+                 * SslRMIClientSocketFactory
+                 */
+                try
+                {
+                    String[] protocolArray = authenticationInfo
+                            .getEnabledProtocols().toArray(new String[0]);
+                    String[] allowedCipherSuites = authenticationInfo
+                            .getEnabledCipherSuites().toArray(new String[0]);
+                    String[] cipherArray;
+
+                    if (protocolArray.length == 0)
+                        protocolArray = null;
+                    if (allowedCipherSuites.length == 0)
+                        cipherArray = null;
+                    else
+                    {
+                        // Ensure we choose an allowed cipher suite.
+                        cipherArray = authenticationInfo
+                                .getJvmEnabledCipherSuites()
+                                .toArray(new String[0]);
+                        if (cipherArray.length == 0)
+                        {
+                            // We don't have any cipher suites in common. This
+                            // is not good!
+                            String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
+                            StringBuffer sb = new StringBuffer(message)
+                                    .append("\n");
+                            sb.append(String.format(
+                                    "JVM supported cipher suites: %s\n",
+                                    StringUtils.join(SecurityHelper
+                                            .getJvmSupportedCiphers())));
+                            sb.append(String.format(
+                                    "Approved cipher suites from security.properties: %s\n",
+                                    StringUtils.join(allowedCipherSuites)));
+                            logger.error(sb.toString());
+                            throw new RuntimeException(message);
+                        }
+                    }
+
+                    logger.info("Setting allowed JMX server protocols: "
+                            + StringUtils.join(protocolArray, ","));
+                    logger.info("Setting allowed JMX server ciphers: "
+                            + StringUtils.join(cipherArray, ","));
+                    SslRMIClientSocketFactory csf = new SslRMIClientSocketFactory();
+                    SslRMIServerSocketFactory ssf = new SslRMIServerSocketFactory(
+                            cipherArray, protocolArray, false);
+                    env.put(RMIConnectorServer.RMI_CLIENT_SOCKET_FACTORY_ATTRIBUTE,
+                            csf);
+                    env.put(RMIConnectorServer.RMI_SERVER_SOCKET_FACTORY_ATTRIBUTE,
+                            ssf);
+                }
+                catch (IllegalArgumentException ie)
+                {
+                    logger.warn(
+                            "Some of the protocols or ciphers are not supported. "
+                                    + ie.getMessage());
+                    throw new RuntimeException(ie.getLocalizedMessage(), ie);
+                }
             }
 
             env.put(RMIConnectorServer.JNDI_REBIND_ATTRIBUTE, "true");
@@ -279,12 +372,14 @@ public class JmxManager implements NotificationListener
                     .newJMXConnectorServer(address, env, mbs);
             connector.start();
 
-            logger.info(MessageFormat
-                    .format("JMXConnector: security.propoerties={0} \n\t use.authentication={1} \n\t use.tungsten.authenticationRealm.encrypted.password={2} \n\t use.encryption={3}",
-                            (authenticationInfo != null) ? authenticationInfo.getParentPropertiesFileLocation() : "No security.propoerties file found !...",
-                            (authenticationInfo != null) ? authenticationInfo.isAuthenticationNeeded() : false,
-                            (authenticationInfo != null) ? authenticationInfo.isUseEncryptedPasswords(): false,
-                            (authenticationInfo != null) ? authenticationInfo.isEncryptionNeeded() : false));
+            logger.info(MessageFormat.format(
+                    "JMXConnector: security.properties={0}",
+                    (authenticationInfo != null)
+                            ? authenticationInfo
+                                    .getParentPropertiesFileLocation()
+                            : "No security.properties file found !..."));
+            if (authenticationInfo != null)
+                logger.info(authenticationInfo.toString());
             logger.info(String.format("JMXConnector started at address %s",
                     serviceAddress));
 
@@ -292,8 +387,9 @@ public class JmxManager implements NotificationListener
         }
         catch (Throwable e)
         {
-            throw new ServerRuntimeException("Unable to create RMI listener:"
-                    + getServiceProps(), e);
+            throw new ServerRuntimeException(MessageFormat.format(
+                    "Unable to create RMI listener: {0} -> {1}",
+                    getServiceProps(), e), e);
         }
     }
 
@@ -399,7 +495,8 @@ public class JmxManager implements NotificationListener
      * @param mbeanName A custom name for this MBean
      * @throws ServerRuntimeException
      */
-    public static void unregisterMBean(Class<?> mbeanInterface, String mbeanName)
+    public static void unregisterMBean(Class<?> mbeanInterface,
+            String mbeanName)
     {
         MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
         try
@@ -421,7 +518,8 @@ public class JmxManager implements NotificationListener
         {
             throw new ServerRuntimeException(
                     "Unable to unregister mbean: interface=" + mbeanInterface
-                            + " name=" + mbeanName, e);
+                            + " name=" + mbeanName,
+                    e);
 
         }
     }
@@ -462,72 +560,44 @@ public class JmxManager implements NotificationListener
     }
 
     /**
-     * Client helper method to return an RMI connection. The arguments match
-     * those used when instantiating the JmxManager class itself.
+     * Client helper method to return an RMI connection on the server whose
+     * properties are the same as this manager instance.
      * 
-     * @param host the hostname to bind to in the jmx url
-     * @param registryPort the registryPort number to bind to in the jmx url
-     * @param serviceName the JMX service name
      * @return a connection to the server
      */
-    public static JMXConnector getRMIConnector(String host, int registryPort,
-            String serviceName)
-    {
-        return getRMIConnector(host, registryPort, serviceName, null);
-    }
-
-    /**
-     * Client helper method to return an RMI connection. The arguments match
-     * those used when instantiating the JmxManager class itself.
-     * 
-     * @param host the hostname to bind to in the jmx url
-     * @param registryPort the registryPort number to bind to in the jmx url
-     * @param serviceName the JMX service name
-     * @param jmxProperties TungstenProperties holding the AuthenticationInfo
-     *            instance.
-     * @return a connection to the server
-     */
-    public static JMXConnector getRMIConnector(String host, int registryPort,
-            String serviceName, TungstenProperties jmxProperties)
+    public JMXConnector getLocalRMIConnector()
     {
         String serviceAddress = null;
         try
         {
-            // --- Retrieve jmx Properties for Authentication ---
-            AuthenticationInfo authInfo = null;
-            if (jmxProperties != null)
-                authInfo = (AuthenticationInfo) jmxProperties.getObject(
-                        AuthenticationInfo.SECURITY_INFO_PROPERTY, null,
-                        false);
-            if (authInfo == null) // Last chance: try the static member
-                authInfo = authenticationInfo;
-
             // --- Define security attributes ---
             HashMap<String, Object> env = new HashMap<String, Object>();
 
             // --- Authentication based on password and access files---
-            if (authInfo != null && authInfo.isAuthenticationNeeded())
+            if (authenticationInfo != null
+                    && authenticationInfo.isAuthenticationNeeded())
             {
                 // Build credentials
                 String[] credentials;
-                if (authInfo.isUseTungstenAuthenticationRealm())
-                    credentials = new String[]{authInfo.getUsername(),
-                            authInfo.getDecryptedPassword(),
+                if (authenticationInfo.isUseTungstenAuthenticationRealm())
+                    credentials = new String[]{authenticationInfo.getUsername(),
+                            authenticationInfo.getDecryptedPassword(),
                             AuthenticationInfo.TUNGSTEN_AUTHENTICATION_REALM};
                 else
-                    credentials = new String[]{authInfo.getUsername(),
-                            authInfo.getDecryptedPassword()};
+                    credentials = new String[]{authenticationInfo.getUsername(),
+                            authenticationInfo.getDecryptedPassword()};
 
                 env.put("jmx.remote.credentials", credentials);
             }
             // --- SSL ---
-            if (authInfo != null && authInfo.isEncryptionNeeded())
+            if (authenticationInfo != null
+                    && authenticationInfo.isEncryptionNeeded())
             {
                 // Truststore
                 System.setProperty("javax.net.ssl.trustStore",
-                        authInfo.getTruststoreLocation());
+                        authenticationInfo.getTruststoreLocation());
                 System.setProperty("javax.net.ssl.trustStorePassword",
-                        authInfo.getTruststorePassword());
+                        authenticationInfo.getTruststorePassword());
             }
 
             serviceAddress = generateServiceAddress(host, beanPort,
@@ -539,9 +609,13 @@ public class JmxManager implements NotificationListener
         catch (Exception e)
         {
             // --- Try to get more details on the connection problem
-            String errorMessage = String
-                    .format("Cannot establish a connection with component '%s' at address %s:%d\n",
-                            serviceName, host, registryPort);
+            // String errorMessage = String
+            // .format("Cannot establish a connection with component '%s' at
+            // address %s:%d\n",
+            // serviceName, host, registryPort);
+            String errorMessage = MessageFormat.format(
+                    "Cannot establish a connection with component {0} at address {1}:{2}\n{3}",
+                    serviceName, host, registryPort, e);
             String errorReason = null;
             AssertionError assertionError = null;
 
@@ -555,9 +629,8 @@ public class JmxManager implements NotificationListener
             // Encryption required by server
             else if (e.getCause() instanceof SSLHandshakeException)
             {
-                errorReason = String
-                        .format("Reason="
-                                + "javax.net.ssl.SSLHandshakeException: Server requires SSL.\n");
+                errorReason = String.format("Reason="
+                        + "javax.net.ssl.SSLHandshakeException: Server requires SSL.\n");
                 assertionError = new AssertionError(
                         "Encryption required by server");
             }
@@ -569,9 +642,9 @@ public class JmxManager implements NotificationListener
             // Other IOException
             else if (e instanceof IOException)
             {
-                errorMessage = String
-                        .format("A component of type '%s' at address %s:%d is not available.\n %s\n",
-                                serviceName, host, registryPort, e);
+                errorMessage = String.format(
+                        "A component of type '%s' at address %s:%d is not available.\n %s\n",
+                        serviceName, host, registryPort, e);
                 errorReason = "Check to be sure that the service is running.\n";
             }
 
@@ -580,11 +653,20 @@ public class JmxManager implements NotificationListener
                 logger.debug(String.format(errorMessage + errorReason), e);
             }
 
-            throw new ServerRuntimeException(String.format(errorMessage
-                    + errorReason), (assertionError != null)
-                    ? assertionError
-                    : e);
+            throw new ServerRuntimeException(
+                    String.format(errorMessage + errorReason),
+                    (assertionError != null) ? assertionError : e);
         }
+    }
+
+    /**
+     * Client helper method to connector to a JMX manager.
+     */
+    public static JMXConnector getRMIConnector(String host, int port,
+            String beanServiceName)
+    {
+        JmxManager jmxMgr = new JmxManager(host, port, beanServiceName);
+        return jmxMgr.getLocalRMIConnector();
     }
 
     /**
@@ -643,10 +725,9 @@ public class JmxManager implements NotificationListener
         }
         catch (ClassNotFoundException c)
         {
-            throw new ServerRuntimeException(
-                    String.format(
-                            "Cannot get an RMI proxy for class %s because the interface class %s was not found",
-                            mbeanClass.getName(), mbeanInterfaceClassName));
+            throw new ServerRuntimeException(String.format(
+                    "Cannot get an RMI proxy for class %s because the interface class %s was not found",
+                    mbeanClass.getName(), mbeanInterfaceClassName));
         }
 
         try
@@ -659,10 +740,9 @@ public class JmxManager implements NotificationListener
         }
         catch (Exception e)
         {
-            throw new ServerRuntimeException(
-                    String.format(
-                            "Cannot get an RMI proxy for class %s because of this exception: %s",
-                            mbeanClass.getName(), e), e);
+            throw new ServerRuntimeException(String.format(
+                    "Cannot get an RMI proxy for class %s because of this exception: %s",
+                    mbeanClass.getName(), e), e);
         }
     }
 
@@ -713,7 +793,7 @@ public class JmxManager implements NotificationListener
     static public void addNotificationListener(JMXConnector jmxConnector,
             Class<?> mbeanInterface, String mbeanName,
             NotificationListener notificationListener, boolean ignored)
-            throws InstanceNotFoundException, Exception
+                    throws InstanceNotFoundException, Exception
     {
         MBeanServerConnection mbsc = jmxConnector.getMBeanServerConnection();
         ObjectName objectName = generateMBeanObjectName(
@@ -740,7 +820,7 @@ public class JmxManager implements NotificationListener
      */
     static public void addNotificationListener(JMXConnector jmxConnector,
             Class<?> mbeanClass, NotificationListener notificationListener)
-            throws InstanceNotFoundException, Exception
+                    throws InstanceNotFoundException, Exception
     {
         MBeanServerConnection mbsc = jmxConnector.getMBeanServerConnection();
         ObjectName objectName = generateMBeanObjectName(mbeanClass);
@@ -761,7 +841,7 @@ public class JmxManager implements NotificationListener
     static public void removeNotificationListener(JMXConnector jmxConnector,
             Class<?> mbeanInterface, String mbeanName,
             NotificationListener notificationListener, boolean ignored)
-            throws Exception
+                    throws Exception
     {
         MBeanServerConnection mbsc = jmxConnector.getMBeanServerConnection();
         ObjectName objectName = generateMBeanObjectName(
@@ -780,7 +860,7 @@ public class JmxManager implements NotificationListener
      */
     static public void removeNotificationListener(JMXConnector jmxConnector,
             Class<?> mbeanClass, NotificationListener notificationListener)
-            throws Exception
+                    throws Exception
     {
         MBeanServerConnection mbsc = jmxConnector.getMBeanServerConnection();
         ObjectName objectName = generateMBeanObjectName(mbeanClass);

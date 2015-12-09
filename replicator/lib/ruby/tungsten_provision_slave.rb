@@ -23,7 +23,23 @@ class TungstenReplicatorProvisionSlave
   end
   
   def provision_with_xtrabackup
+    initial_dir_mode = {}
     begin
+      [
+        @options[:mysqldatadir],
+        @options[:mysqlibdatadir],
+        @options[:mysqliblogdir]
+      ].uniq().each{
+        |dir|
+        if dir.to_s() == ""
+          next
+        end
+        
+        if File.exist?(dir)
+          initial_dir_mode[dir] = sprintf("%o",File.stat(dir).mode)[-4,4]
+        end
+      }
+      
       # Does this version of innobackupex-1.5.1 support the faster 
       # --move-back instead of --copy-back
       supports_move_back = xtrabackup_supports_argument("--move-back")
@@ -57,7 +73,7 @@ class TungstenReplicatorProvisionSlave
         backup_options << "--service=#{@options[:service]}"
       end
       
-      TU.ssh_result("#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}/tungsten-replicator/bin/xtrabackup_to_slave #{backup_options.join(' ')}", 
+      TU.ssh_result("#{opt(:source_directory)}/tungsten-replicator/bin/xtrabackup_to_slave #{backup_options.join(' ')}", 
         @options[:source], TI.user())
       TU.forward_cmd_results?(false)
     
@@ -100,6 +116,9 @@ class TungstenReplicatorProvisionSlave
           next
         end
         
+        if initial_dir_mode.has_key?(dir)
+          TU.cmd_result("#{sudo_prefix()}chmod #{initial_dir_mode[dir]} #{dir}")
+        end
         TU.cmd_result("#{sudo_prefix()}chown -RL #{@options[:mysqluser]}: #{dir}")
       }
 
@@ -147,7 +166,7 @@ class TungstenReplicatorProvisionSlave
         backup_options << "--service=#{@options[:service]}"
       end
       
-      TU.ssh_result("#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}/tungsten-replicator/bin/mysqldump_to_slave #{backup_options.join(' ')}", 
+      TU.ssh_result("#{opt(:source_directory)}/tungsten-replicator/bin/mysqldump_to_slave #{backup_options.join(' ')}", 
         @options[:source], TI.user())
       TU.forward_cmd_results?(false)
       
@@ -186,6 +205,7 @@ class TungstenReplicatorProvisionSlave
       script.puts("#{mysqldump} | tee >(egrep \"^-- CHANGE MASTER\" > #{opt(:change_master_file)}) | #{get_mysql_command()}")
       script.close()
       File.chmod(0755, script.path())
+      TU.limit_file_permissions(script.path())
       TU.cmd_result("#{script.path()}")
     rescue CommandError => ce
       TU.debug(ce)
@@ -284,6 +304,33 @@ class TungstenReplicatorProvisionSlave
           TU.error("Unable to autodetect a value for --source. Make sure that the replicator is running on all other datasources for the #{opt(:service)} replication service.")
         end
       end
+    elsif opt(:source) != nil
+      source_parts = opt(:source).split(":")
+      case source_parts.size()
+      when 1
+        # Do nothing
+      when 2
+        opt(:source, source_parts[0])
+        if opt(:source_directory) != nil
+          if opt(:source_directory) == source_parts[1]
+            TU.warning("The same source directory was provided in --source and --source-directory.")
+          else
+            TU.error("The source directory provided in --source does not match the value provided for --source-directory.")
+          end
+        else
+          opt(:source_directory, source_parts[1])
+        end
+      else
+        TU.error("The value for --source includes multiple instances of ':'. This option must be '<source hostname>' or '<source hostname>:<source directory>'.")
+      end
+    end
+    
+    if opt(:source_directory) == nil
+      opt(:source_directory, "#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}")
+    else
+      unless opt(:source_directory) =~ /\/tungsten$/
+        opt(:source_directory, "#{opt(:source_directory)}/tungsten")
+      end
     end
     
     valid_service_option = false
@@ -298,7 +345,7 @@ class TungstenReplicatorProvisionSlave
         local_services = TI.dataservices()
         master_services = []
         service_names = []
-        raw = TU.ssh_result("#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}/tungsten-replicator/bin/trepctl services -json", 
+        raw = TU.ssh_result("#{opt(:source_directory)}/tungsten-replicator/bin/trepctl services -json", 
           opt(:source), TI.user())
         services = JSON.parse(raw)
         services.each{
@@ -495,10 +542,10 @@ class TungstenReplicatorProvisionSlave
           end
           
           if @options[:mysqldump] == false
-            TU.ssh_result("#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}/tungsten-replicator/bin/xtrabackup_to_slave #{backup_options.join(' ')}", 
+            TU.ssh_result("#{opt(:source_directory)}/tungsten-replicator/bin/xtrabackup_to_slave #{backup_options.join(' ')}", 
               @options[:source], TI.user())
           else
-            TU.ssh_result("#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}/tungsten-replicator/bin/mysqldump_to_slave #{backup_options.join(' ')}", 
+            TU.ssh_result("#{opt(:source_directory)}/tungsten-replicator/bin/mysqldump_to_slave #{backup_options.join(' ')}", 
               @options[:source], TI.user())
           end
           TU.forward_cmd_results?(false)
@@ -526,6 +573,12 @@ class TungstenReplicatorProvisionSlave
     add_option(:source, {
       :on => "--source String",
       :help => "Server to use as a source for the backup"
+    })
+    
+    add_option(:source_directory, {
+      :on => "--source-directory String",
+      :help => "Directory on --source to provision from",
+      :required => false
     })
     
     add_option(:direct, {

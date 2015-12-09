@@ -288,6 +288,11 @@ replicator.store.thl.resetPeriod=1
 # Do not allow this replication service to make any changes to the THL files
 replicator.store.thl.readOnly=@{REPL_SVC_THL_READ_ONLY}
 
+# Allow this replication service to keep on storing THL events even if it failed
+# to store its position into database. This is not activated by default and 
+# does require that THL syncTHLWithExtractor property is set to true (master case).
+replicator.store.thl.stopOnDBError=true
+
 #################################
 # IN-MEMORY QUEUE STORE         #
 #################################
@@ -315,6 +320,13 @@ replicator.extractor.thl-extractor.storeName=thl
 # Remote THL extractor. 
 replicator.extractor.thl-remote=com.continuent.tungsten.replicator.thl.RemoteTHLExtractor
 replicator.extractor.thl-remote.connectUri=${replicator.master.connect.uri}
+
+# Login for use with encrypted THL connections.  THL servers require that
+# encrypted THL connections be authenticated using a login and password.  
+# The password must be stored in the Java password store, whose path is 
+# provided in the security.properties file. Contents of the file are 
+# configured automatically during installation. 
+replicator.extractor.thl-remote.remoteLogin=@{RMI_USER}
 
 # If true, check to ensure logs are consistent on connection to master by 
 # comparing epoch numbers of last committed transaction.  This can be 
@@ -353,9 +365,20 @@ replicator.extractor.parallel-q-extractor.storeName=parallel-queue
 
 @{include(REPL_SVC_APPLIER_CONFIG)}
 
-# Local THL applier. 
+# Durable THL applier. This applier does not auto-flush hence only makes
+# fully durable transactions visible to downstream clients.  This is the 
+# standard slave-side applier. 
 replicator.applier.thl-applier=com.continuent.tungsten.replicator.thl.THLStoreApplier
 replicator.applier.thl-applier.storeName=thl
+replicator.applier.thl-applier.autoFlush=false
+
+# Fast THL applier. This applier auto-flushes every event, which means they 
+# can be immediately visible to downstream clients.  This is the standard
+# master-side applier as it makes individual transaction fragments 
+# immediately visible to clients of the THL. 
+replicator.applier.autoflush-thl-applier=com.continuent.tungsten.replicator.thl.THLStoreApplier
+replicator.applier.autoflush-thl-applier.storeName=thl
+replicator.applier.autoflush-thl-applier.autoFlush=true
 
 # Queue applier.
 replicator.applier.queue=com.continuent.tungsten.replicator.storage.InMemoryQueueAdapter

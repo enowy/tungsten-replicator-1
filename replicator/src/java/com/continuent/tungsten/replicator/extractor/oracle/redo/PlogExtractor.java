@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -29,6 +29,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.common.cache.RawByteCache;
+import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.ReplicatorRuntimeConf;
 import com.continuent.tungsten.replicator.database.Database;
@@ -72,11 +74,9 @@ class PlogDBMSErrorMessage extends DBMSEvent
  * <p/>
  * This extractor converts interleaved Oracle transactions to the fully
  * serialized Tungsten format. The conversion requires that large transactions
- * be buffered in order to await a final commit. The class uses a byte vector
- * cache for this purpose. For best performance the cache should have as much
- * memory as possible allocated. Serializing buffered transactions to storage
- * may be too orders of memory slower than using memory, hence should be avoided
- * except for very large transactions.
+ * be buffered in order to await a final commit. The class buffers LCRs for
+ * single transactions as Java objects up to a set number of objects and then
+ * spills transactions into a byte vector cache once they exceed the limit.
  */
 public class PlogExtractor implements RawExtractor
 {
@@ -84,30 +84,41 @@ public class PlogExtractor implements RawExtractor
 
     // Properties.
     private String plogDirectory = null;
+    private int    retainedPlogs = 20;
     private String dataSource    = "extractor";
 
     private PlogReaderThread              readerThread;
     private ArrayBlockingQueue<DBMSEvent> queue;
+    private String                        lastEventId;
 
     private boolean cancelled = false;
 
-    private int transactionFragSize = 10000;
-
-    private int queueSize = 100;
-
+    private int    transactionFragSize     = 10000;
+    private int    queueSize               = 100;
     private int    sleepSizeInMilliseconds = 1000;
-    private String replicateConsoleScript;
-    private String replicateApplyName      = "TungstenApply";
+    private int    healthCheckInterval     = 30;
+    private String replicateApplyName;
 
-    // Cache used for storing byte vectors.
+    // Manager for vmrr process.
+    private RedoReaderManager vmrrMgr;
+
+    // Cache used for storing byte vectors. For now the cache does not
+    // use object serialization to memory, hence the 0 defaults.
     private RawByteCache byteCache;
     private File         cacheDir;
-    private long         cacheMaxTotalBytes  = 50000000;
-    private long         cacheMaxObjectBytes = 1000000;
+    private long         cacheMaxTotalBytes  = 0;
+    private long         cacheMaxObjectBytes = 0;
     private int          cacheMaxOpenFiles   = 50;
+
+    // Number of LCRs to buffer as Java objects before using the cache.
+    private int lcrBufferLimit = 10000;
 
     // Data source used to get DBMS connections.
     private SqlDataSource dataSourceImpl;
+
+    // Flag so that we log information on first transaction to ensure good
+    // diagnostics for restart issues.
+    private boolean firstXactLatch = true;
 
     /**
      * {@inheritDoc}
@@ -118,6 +129,10 @@ public class PlogExtractor implements RawExtractor
     public void configure(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        if (this.replicateApplyName == null)
+        {
+            replicateApplyName = context.getServiceName();
+        }
         if (cacheDir == null)
         {
             File home = ReplicatorRuntimeConf.locateReplicatorHomeDir();
@@ -134,10 +149,39 @@ public class PlogExtractor implements RawExtractor
     public void prepare(PluginContext context)
             throws ReplicatorException, InterruptedException
     {
+        // Locate the vmrr control script and use this to configure the redo
+        // reader manager.
+        String clusterHome;
+        try
+        {
+            clusterHome = ClusterConfiguration.getClusterHome();
+        }
+        catch (ConfigurationException e)
+        {
+            throw new ReplicatorException(
+                    "Unable to locate cluster-home directory; ensure replicator is properly installed",
+                    e);
+        }
+        String vmrrControlScriptName = "bin/vmrrd_" + context.getServiceName();
+        String vmrrControlScript = new File(clusterHome, vmrrControlScriptName)
+                .getAbsolutePath();
+
+        vmrrMgr = new RedoReaderManager();
+        vmrrMgr.setVmrrControlScript(vmrrControlScript);
+        vmrrMgr.setReplicateApplyName(replicateApplyName);
+        vmrrMgr.initialize();
+
         // Set up the byte cache for large objects.
         byteCache = new RawByteCache(cacheDir, cacheMaxTotalBytes,
                 cacheMaxObjectBytes, cacheMaxOpenFiles);
         byteCache.prepare();
+
+        // Note the number of LCRs that will be buffered as Java objects.
+        logger.info(
+                "Number of LCRs that will be buffered per transaction in Java before flushing to byte cache: "
+                        + lcrBufferLimit);
+        logger.info(
+                "Raising lcrBufferLimit can speed extraction; lowering saves memory when there are concurrent large transactions");
 
         // Set up the data source so we can fetch current SCN, etc.
         // Locate our data source from which we are extracting.
@@ -149,12 +193,20 @@ public class PlogExtractor implements RawExtractor
                     "Unable to locate data source: name=" + dataSource);
         }
 
-        // Set up the reader thread.
-        queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
-        readerThread = new PlogReaderThread(context, queue, plogDirectory,
-                sleepSizeInMilliseconds, transactionFragSize,
-                replicateConsoleScript, replicateApplyName, byteCache);
+        // Note number of retained plogs.
+        logger.info("Maximum number of plogs to retain before compressing: "
+                + retainedPlogs);
 
+        // Set up the queue for reading.
+        queue = new ArrayBlockingQueue<DBMSEvent>(queueSize);
+        readerThread = new PlogReaderThread(context, queue, vmrrMgr, byteCache);
+        readerThread.setName("plog-reader-task");
+        readerThread.setRetainedPlogs(retainedPlogs);
+        readerThread.setPlogDirectory(plogDirectory);
+        readerThread.setSleepSizeInMilliseconds(sleepSizeInMilliseconds);
+        readerThread.setHealthCheckInterval(healthCheckInterval);
+        readerThread.setTransactionFragSize(transactionFragSize);
+        readerThread.setLcrBufferLimit(lcrBufferLimit);
         readerThread.prepare();
     }
 
@@ -168,8 +220,30 @@ public class PlogExtractor implements RawExtractor
             throws ReplicatorException, InterruptedException
     {
         cancelled = true;
+
+        // Stop the reader thread.
         if (readerThread != null)
+        {
             readerThread.cancel();
+            readerThread = null;
+        }
+
+        // Make a best effort to stop the redo reader process.
+        if (vmrrMgr != null)
+        {
+            try
+            {
+                vmrrMgr.stop();
+            }
+            catch (ReplicatorException e)
+            {
+                logger.warn("Unable to stop vmrr process", e);
+            }
+            finally
+            {
+                vmrrMgr = null;
+            }
+        }
     }
 
     /**
@@ -180,14 +254,11 @@ public class PlogExtractor implements RawExtractor
     @Override
     public void setLastEventId(String eventId) throws ReplicatorException
     {
+        // Store for use when we start extraction.
         if (eventId != null)
         {
-            logger.info("Starting from eventId " + eventId);
-            readerThread.setLastEventId(eventId);
-        }
-        else
-        {
-            logger.info("Starting from fresh, no eventId set.");
+            lastEventId = eventId.trim();
+            logger.info("Last event ID received: " + eventId);
         }
     }
 
@@ -200,6 +271,12 @@ public class PlogExtractor implements RawExtractor
     {
         logger.info("setPlogDirectory: set to [" + plogDirectory + "]");
         this.plogDirectory = plogDirectory;
+    }
+
+    /** Sets the number of plogs to retain uncompressed. */
+    public void setRetainedPlogs(int retainedPlogs)
+    {
+        this.retainedPlogs = retainedPlogs;
     }
 
     /**
@@ -237,14 +314,12 @@ public class PlogExtractor implements RawExtractor
     }
 
     /**
-     * Sets the replicateConsoleScript value - start-console.sh used to update
-     * last obsole plog for mine
-     * 
-     * @param replicateConsoleScript The complete pah+name of the script.
+     * Sets the number of sleep cycles to wait before doing a replicator health
+     * check.
      */
-    public void setReplicateConsoleScript(String replicateConsoleScript)
+    public void setHealthCheckInterval(int healthCheckInterval)
     {
-        this.replicateConsoleScript = replicateConsoleScript;
+        this.healthCheckInterval = healthCheckInterval;
     }
 
     /**
@@ -292,6 +367,15 @@ public class PlogExtractor implements RawExtractor
     }
 
     /**
+     * Maximum number of LCRs to buffer as Java objects before spilling to byte
+     * vector cache.
+     */
+    public void setLcrBufferLimit(int lcrBufferLimit)
+    {
+        this.lcrBufferLimit = lcrBufferLimit;
+    }
+
+    /**
      * {@inheritDoc}
      * 
      * @see com.continuent.tungsten.replicator.extractor.RawExtractor#extract()
@@ -299,8 +383,50 @@ public class PlogExtractor implements RawExtractor
     @Override
     public DBMSEvent extract() throws ReplicatorException, InterruptedException
     {
+        // Perform first time initialization.
         if (!readerThread.isAlive())
+        {
+            // See if we need to position the redo reader to read a different
+            // SCN.
+            if (this.lastEventId != null)
+            {
+                // Check to see the kind of last event ID and position redo
+                if (lastEventId.equalsIgnoreCase("NOW"))
+                {
+                    // Position to current SCN, whatever that may be.
+                    logger.info(
+                            "Positioning redo reader to start from current SCN");
+                    vmrrMgr.reset("NOW");
+                }
+                else if (lastEventId.matches("^[0-9]+$"))
+                {
+                    // Position to an explicit SCN.
+                    logger.info(
+                            "Positioning redo reader to start from explicit SCN: "
+                                    + lastEventId);
+                    vmrrMgr.reset(lastEventId);
+                }
+                else
+                {
+                    logger.info(
+                            "Starting from previous eventId: " + lastEventId);
+                }
+
+                // Set the redo reader thread restart position.
+                readerThread.setLastEventId(lastEventId);
+            }
+            else
+            {
+                logger.info(
+                        "Starting from current redo reader position, no eventId set.");
+            }
+
+            // Ensure the redo reader is started.
+            vmrrMgr.start();
+
+            // Start the thread.
             readerThread.start();
+        }
 
         if (logger.isDebugEnabled())
         {
@@ -321,6 +447,14 @@ public class PlogExtractor implements RawExtractor
                 {
                     logger.debug("Extractor returns DBMSEvent "
                             + dbmsMsg.getEventId());
+                }
+                if (firstXactLatch)
+                {
+                    String eventId = dbmsMsg.getEventId();
+                    logger.info(
+                            "First event ID extracted from log after start: "
+                                    + eventId);
+                    firstXactLatch = false;
                 }
                 return dbmsMsg; /*
                                  * ReaderThread already fragmented as necessary,
@@ -385,7 +519,6 @@ public class PlogExtractor implements RawExtractor
                 throw new ReplicatorException(
                         "Oracle SCN query returned no rows: " + query);
             String scn = rs.getString(1);
-            logger.info("Found an SCN: " + scn);
             return scn;
         }
         catch (SQLException e)

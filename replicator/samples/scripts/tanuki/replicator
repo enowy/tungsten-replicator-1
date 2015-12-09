@@ -14,6 +14,8 @@
 #  wrapped Java applications on UNIX platforms.
 #
 
+@{#(FILE_PROTECTION_LEVEL)}umask @{FILE_PROTECTION_LEVEL|0027}
+
 #-----------------------------------------------------------------------------
 # These settings can be modified to fit the needs of your application
 # Optimized for use with version 3.5.17-st of the Wrapper.

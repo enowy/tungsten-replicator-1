@@ -29,7 +29,7 @@ module ClusterDiagnosticPackage
     out.close
   end
 
-  def run_command(config,command)
+  def run_command(config,command, ignore_error=true)
 
     ret=nil
 
@@ -39,8 +39,12 @@ module ClusterDiagnosticPackage
       if path != ""
         ret=ssh_result(command, config.getProperty(HOST), config.getProperty(USERID))
       end
-    rescue
-      ret=nil
+    rescue CommandError => ce
+      if ignore_error == false
+        raise ce
+      else
+        ret = nil
+      end
     end
     ret
   end
@@ -82,7 +86,18 @@ module ClusterDiagnosticPackage
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}")
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}/os_info")
       FileUtils.mkdir_p("#{diag_dir}/#{h_alias}/conf")
-      
+
+      licenses = @promotion_settings.getProperty([c_key, "licenses"])
+      if licenses.is_a?(Array)
+        if licenses.size() > 0
+          licenses = licenses.join("\n")
+        else
+          licenses = "No license information available"
+        end
+      elsif licenses.to_s() == ""
+        licenses = "No license information available"
+      end
+write_file("#{diag_dir}/#{h_alias}/host_licenses.txt",licenses)
       write_file("#{diag_dir}/#{h_alias}/manifest.json",@promotion_settings.getProperty([c_key, "manifest"]))
       write_file("#{diag_dir}/#{h_alias}/tpm.txt",@promotion_settings.getProperty([c_key, "tpm_reverse"]))
       write_file("#{diag_dir}/#{h_alias}/tpm_diff.txt",@promotion_settings.getProperty([c_key, "tpm_diff"]))
@@ -165,13 +180,14 @@ module ClusterDiagnosticPackage
           write_file("#{diag_dir}/#{h_alias}/mysql/global_variables.txt",call_mysql(config,h_alias,ds,'show global variables'))
           write_file("#{diag_dir}/#{h_alias}/mysql/status.txt",call_mysql(config,h_alias,ds,'show status'))
 
-          #This will probably fail unless the tungsten user has access to the logfile
-          mysql_error_log = call_mysql(config,h_alias,ds,"select variable_value from information_schema.global_variables where variable_name='log_error'")
-          get_log(config, mysql_error_log,"#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
-          # If it does fail we'll try another way
-          unless File.exist?("#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
-            mysql_error_log_output=ssh_result("sudo -n cat #{mysql_error_log}|tail -n 1000", config.getProperty(HOST), config.getProperty(USERID))
+          mysql_error_log = call_mysql(config,h_alias,ds,"SELECT @@GLOBAL.log_error")
+
+          if config.getProperty(ROOT_PREFIX) == "true"
+            mysql_error_log_output=ssh_result("sudo -n tail -n 1000 #{mysql_error_log}", config.getProperty(HOST), config.getProperty(USERID))
             write_file("#{diag_dir}/#{h_alias}/mysql/mysql_error.log", mysql_error_log_output)
+          else
+            #This will probably fail unless the tungsten user has access to the logfile
+            get_log(config, mysql_error_log,"#{diag_dir}/#{h_alias}/mysql/mysql_error.log")
           end
         end
       end
@@ -204,8 +220,13 @@ module ClusterDiagnosticPackage
       write_file("#{diag_dir}/#{h_alias}/os_info/java_info.txt",run_command(config,"java -version 2>&1") )
       write_file("#{diag_dir}/#{h_alias}/os_info/ruby_info.txt",run_command(config,"ruby -v") )
       write_file("#{diag_dir}/#{h_alias}/os_info/uptime.txt",run_command(config,"uptime") )
-      write_file("#{diag_dir}/#{h_alias}/tpm_validate.txt",run_command(config,"#{config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tools/tpm validate-update --tty") )
-
+      begin
+        validate_text = run_command(config,"#{config.getProperty(CURRENT_RELEASE_DIRECTORY)}/tools/tpm validate-update --tty", false)
+      rescue CommandError => ce
+        validate_text = ce.result
+      end
+      write_file("#{diag_dir}/#{h_alias}/tpm_validate.txt", validate_text )
+      
     }
     
     require 'zip/zip'
@@ -257,6 +278,7 @@ class ClusterDiagnosticCheck < ConfigureValidationCheck
     tpm_cmd = c.get_tpm_path(current_release_directory)
     
     begin
+      output_property("licenses", @config.getProperty(HOST_LICENSES))
       output_property("manifest", cmd_result("cat #{current_release_directory}/.manifest.json"))
       output_property("tpm_reverse", cmd_result("#{tpm_cmd} reverse --public"))
       output_property("tpm_diff", cmd_result("#{tpm_cmd} query modified-files"))
@@ -322,6 +344,7 @@ class OldServicesRunningCheck < ConfigureValidationCheck
     allowed_pid_files = []
     if @config.getProperty(HOST_ENABLE_REPLICATOR) == "true"
       allowed_pid_files << "#{current_release_target_dir}/tungsten-replicator/var/treplicator.pid"
+      allowed_pid_files << "#{current_release_target_dir}/tungsten-replicator/var/replicator.pid"
     end
     if @config.getProperty(HOST_ENABLE_MANAGER) == "true"
       allowed_pid_files << "#{current_release_target_dir}/tungsten-manager/var/tmanager.pid"

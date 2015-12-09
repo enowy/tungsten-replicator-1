@@ -39,12 +39,14 @@ import com.continuent.tungsten.common.security.AuthenticationInfo;
  */
 public class EchoServer implements Runnable
 {
-    private static Logger                logger            = Logger.getLogger(EchoServer.class);
+    private static Logger                logger            = Logger
+            .getLogger(EchoServer.class);
     private final String                 host;
     private final int                    port;
     private final boolean                useSSL;
     private String                       keystoreAlias     = null;
     private AuthenticationInfo           securityInfo      = null;
+    private boolean                      silentFail        = false;
 
     // Latch to signal server is ready. This prevents race conditions around
     // start-up so that clients do not connect too quickly.
@@ -52,7 +54,7 @@ public class EchoServer implements Runnable
 
     // Operational variables. These are volatile to permit concurrent access.
     private final ExecutorService        pool              = Executors
-                                                                   .newFixedThreadPool(5);
+            .newFixedThreadPool(5);
     private volatile ServerSocketService socketService;
     private volatile boolean             shutdownRequested = false;
     private volatile Throwable           throwable;
@@ -60,17 +62,34 @@ public class EchoServer implements Runnable
 
     /**
      * Create a new echo server instance.
+     * @throws ConfigurationException 
      */
     public EchoServer(String host, int port, boolean useSSL,
-            String serverKeystoreAlias, AuthenticationInfo securityInfo)
+            String serverKeystoreAlias, AuthenticationInfo securityInfo,
+            boolean silentFail) throws ConfigurationException
     {
         this.host = host;
         this.port = port;
         this.useSSL = useSSL;
         this.keystoreAlias = serverKeystoreAlias;
         this.securityInfo = securityInfo;
+        this.silentFail = silentFail;
+        this.checkConsistency();
     }
 
+    private void checkConsistency() throws ConfigurationException
+    {
+        if (this.useSSL 
+                && this.keystoreAlias != null 
+                && this.securityInfo == null)
+        {
+            throw new ConfigurationException("\n\tError : "
+                    + "keystoreAlias is specified but securityInfo is null. "
+                    + "It makes it impossible to fetch the key from keyStore "
+                    + "from security properties by using the alias.");
+        }
+    }
+    
     public Throwable getThrowable()
     {
         return throwable;
@@ -147,7 +166,8 @@ public class EchoServer implements Runnable
         while ((shutdownRequested == false)
                 && (client = socketService.accept()) != null)
         {
-            EchoSocketHandler handler = new EchoSocketHandler(this, client);
+            EchoSocketHandler handler = new EchoSocketHandler(this, client,
+                    this.silentFail);
             pool.execute(handler);
         }
     }
@@ -197,14 +217,19 @@ public class EchoServer implements Runnable
 // Local class to implement a simple client handler.
 class EchoSocketHandler implements Runnable
 {
-    private static Logger logger = Logger.getLogger(EchoSocketHandler.class);
+    private static Logger logger     = Logger
+            .getLogger(EchoSocketHandler.class);
+    private boolean       silentFail = false;
+
     EchoServer            server;
     SocketWrapper         socketWrapper;
 
-    EchoSocketHandler(EchoServer server, SocketWrapper socketWrapper)
+    EchoSocketHandler(EchoServer server, SocketWrapper socketWrapper,
+            boolean silentFail)
     {
         this.server = server;
         this.socketWrapper = socketWrapper;
+        this.silentFail = silentFail;
     }
 
     @Override
@@ -223,7 +248,8 @@ class EchoSocketHandler implements Runnable
         }
         catch (Throwable t)
         {
-            logger.error("Socket handler failed: " + t.getMessage(), t);
+            if (!silentFail)
+                logger.error("Socket handler failed: " + t.getMessage(), t);
             server.shutdownWithError(t);
         }
         finally

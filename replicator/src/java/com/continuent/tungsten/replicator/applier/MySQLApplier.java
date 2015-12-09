@@ -53,10 +53,10 @@ import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
  */
 public class MySQLApplier extends JdbcApplier
 {
-    private static Logger            logger                 = Logger.getLogger(MySQLApplier.class);
-    protected String                 host                   = "localhost";
-    protected int                    port                   = 3306;
-    protected String                 urlOptions             = null;
+    private static Logger logger     = Logger.getLogger(MySQLApplier.class);
+    protected String      host       = "localhost";
+    protected int         port       = 3306;
+    protected String      urlOptions = null;
 
     /**
      * If true the replicator is operating time zone unaware compatibility mode.
@@ -65,32 +65,32 @@ public class MySQLApplier extends JdbcApplier
      * requires extra clean-up at release time to ensure the JVM time zone is
      * set back correctly.
      */
-    protected boolean                nonTzAwareMode         = false;
+    protected boolean nonTzAwareMode = false;
 
     /**
      * If true this applier will switch the replicator to time zone unaware
      * operation to apply events from a time zone unaware source. This is to
      * enable seamless upgrade of logs from older replicators.
      */
-    protected boolean                supportNonTzAwareMode  = true;
+    protected boolean supportNonTzAwareMode = true;
 
     // Formatters for MySQL DATE, TIME, and DATETIME values.
     /**
      * Format DATE value according to MySQL expectations.
      */
     protected final SimpleDateFormat dateFormatter          = new SimpleDateFormat(
-                                                                    "yyyy-MM-dd");
+            "yyyy-MM-dd");
     /**
      * Format TIME value according to MySQL expectations.
      */
     protected final SimpleDateFormat timeFormatter          = new SimpleDateFormat(
-                                                                    "HH:mm:ss");
+            "HH:mm:ss");
     /**
      * Format MySQL DATETIME value according to MySQL expectations. The DATETIME
      * data type cannot change time zones or upgrade breaks.
      */
     protected final SimpleDateFormat mysqlDatetimeFormatter = new SimpleDateFormat(
-                                                                    "yyyy-MM-dd HH:mm:ss");
+            "yyyy-MM-dd HH:mm:ss");
 
     /**
      * Host name or IP address.
@@ -141,8 +141,8 @@ public class MySQLApplier extends JdbcApplier
             return;
 
         // Compute time zone-awareness of the event.
-        boolean timeZoneAwareEvent = event
-                .getMetadataOptionValue(ReplOptionParams.TIME_ZONE_AWARE) != null;
+        boolean timeZoneAwareEvent = event.getMetadataOptionValue(
+                ReplOptionParams.TIME_ZONE_AWARE) != null;
 
         if (nonTzAwareMode)
         {
@@ -151,8 +151,10 @@ public class MySQLApplier extends JdbcApplier
             if (timeZoneAwareEvent)
             {
                 // We are now processing a time zone-aware event.
-                logger.info("Found a time zone-aware event while in non-TZ-aware mode: seqno="
-                        + header.getSeqno() + " fragno=" + header.getFragno());
+                logger.info(
+                        "Found a time zone-aware event while in non-TZ-aware mode: seqno="
+                                + header.getSeqno() + " fragno="
+                                + header.getFragno());
                 enableTzAwareMode();
             }
         }
@@ -163,8 +165,10 @@ public class MySQLApplier extends JdbcApplier
             if (!timeZoneAwareEvent)
             {
                 // We are now processing a time zone-unaware event.
-                logger.info("Found a non-time zone-aware event while in TZ-aware mode: seqno="
-                        + header.getSeqno() + " fragno=" + header.getFragno());
+                logger.info(
+                        "Found a non-time zone-aware event while in TZ-aware mode: seqno="
+                                + header.getSeqno() + " fragno="
+                                + header.getFragno());
                 enableNonTzAwareMode();
             }
         }
@@ -177,8 +181,9 @@ public class MySQLApplier extends JdbcApplier
     protected void enableTzAwareMode()
     {
         TimeZone replicatorTz = runtime.getReplicatorTimeZone();
-        logger.info("Resetting time zones used for date-time to enable time zone-aware operation: new tz="
-                + replicatorTz.getDisplayName());
+        logger.info(
+                "Resetting time zones used for date-time to enable time zone-aware operation: new tz="
+                        + replicatorTz.getDisplayName());
         dateTimeFormatter.setTimeZone(replicatorTz);
         dateFormatter.setTimeZone(replicatorTz);
         timeFormatter.setTimeZone(replicatorTz);
@@ -208,8 +213,9 @@ public class MySQLApplier extends JdbcApplier
 
         // Set the time zone to the host time zone.
         TimeZone hostTz = runtime.getHostTimeZone();
-        logger.info("Resetting time zones used for date-time to enable non-time zone-aware operation: new tz="
-                + hostTz.getDisplayName());
+        logger.info(
+                "Resetting time zones used for date-time to enable non-time zone-aware operation: new tz="
+                        + hostTz.getDisplayName());
         dateTimeFormatter.setTimeZone(hostTz);
         dateFormatter.setTimeZone(hostTz);
         timeFormatter.setTimeZone(hostTz);
@@ -297,12 +303,13 @@ public class MySQLApplier extends JdbcApplier
             else
                 prepStatement.setObject(bindLoc, value.getValue());
         }
-        else if (type == java.sql.Types.BLOB
-                && value.getValue() instanceof SerialBlob)
+        else
+            if (type == java.sql.Types.BLOB
+                    && value.getValue() instanceof SerialBlob)
         {
             SerialBlob val = (SerialBlob) value.getValue();
-            prepStatement
-                    .setBytes(bindLoc, val.getBytes(1, (int) val.length()));
+            prepStatement.setBytes(bindLoc,
+                    val.getBytes(1, (int) val.length()));
         }
         else
             prepStatement.setObject(bindLoc, value.getValue());
@@ -344,7 +351,7 @@ public class MySQLApplier extends JdbcApplier
                     && oneRowChange.getColumnValues().size() > 1)
             {
                 // optimize inserts
-                getColumnInfomation(oneRowChange);
+                getColumnInformation(oneRowChange);
 
                 executePreparedStatement(oneRowChange,
                         prepareOptimizedInsertStatement(oneRowChange),
@@ -352,10 +359,11 @@ public class MySQLApplier extends JdbcApplier
                         oneRowChange.getColumnValues());
                 return;
             }
-            else if (oneRowChange.getAction() == RowChangeData.ActionType.DELETE
-                    && oneRowChange.getKeyValues().size() > 1)
+            else
+                if (oneRowChange.getAction() == RowChangeData.ActionType.DELETE
+                        && oneRowChange.getKeyValues().size() > 1)
             {
-                getColumnInfomation(oneRowChange);
+                getColumnInformation(oneRowChange);
 
                 Table t = null;
 
@@ -379,18 +387,18 @@ public class MySQLApplier extends JdbcApplier
                     String keyName = t.getPrimaryKey().getColumns().get(0)
                             .getName();
 
-                    executePreparedStatement(
-                            oneRowChange,
+                    executePreparedStatement(oneRowChange,
                             prepareOptimizedDeleteStatement(oneRowChange,
-                                    keyName), oneRowChange.getKeySpec(),
+                                    keyName),
+                            oneRowChange.getKeySpec(),
                             oneRowChange.getKeyValues());
                     return;
                 }
                 else if (logger.isDebugEnabled())
-                    logger.debug("Unable to optimize delete statement as no suitable primary key was found for : "
-                            + oneRowChange.getSchemaName()
-                            + "."
-                            + oneRowChange.getTableName());
+                    logger.debug(
+                            "Unable to optimize delete statement as no suitable primary key was found for : "
+                                    + oneRowChange.getSchemaName() + "."
+                                    + oneRowChange.getTableName());
             }
         // No optimization found, let's run the unoptimized statement form.
         super.applyOneRowChangePrepared(oneRowChange);
@@ -411,7 +419,8 @@ public class MySQLApplier extends JdbcApplier
         stmt = new StringBuffer();
         stmt.append("INSERT INTO ");
         stmt.append(conn.getDatabaseObjectName(oneRowChange.getSchemaName())
-                + "." + conn.getDatabaseObjectName(oneRowChange.getTableName()));
+                + "."
+                + conn.getDatabaseObjectName(oneRowChange.getTableName()));
         stmt.append(" ( ");
         printColumnSpec(stmt, oneRowChange.getColumnSpec(), null, null,
                 PrintMode.NAMES_ONLY, ", ");
@@ -444,7 +453,8 @@ public class MySQLApplier extends JdbcApplier
         StringBuffer stmt = new StringBuffer();
         stmt.append("DELETE FROM ");
         stmt.append(conn.getDatabaseObjectName(oneRowChange.getSchemaName())
-                + "." + conn.getDatabaseObjectName(oneRowChange.getTableName()));
+                + "."
+                + conn.getDatabaseObjectName(oneRowChange.getTableName()));
         stmt.append(" WHERE ");
         stmt.append(conn.getDatabaseObjectName(keyName));
         stmt.append(" IN (");
@@ -479,17 +489,15 @@ public class MySQLApplier extends JdbcApplier
         {
             String statement = stmt.toString();
             if (logger.isDebugEnabled())
-                logger.debug("Statement is "
-                        + statement.substring(1,
-                                Math.min(statement.length(), 500)));
+                logger.debug("Statement is " + statement.substring(1,
+                        Math.min(statement.length(), 500)));
             prepStatement = conn.prepareStatement(statement);
             int bindLoc = 1; /* Start binding at index 1 */
 
             for (ArrayList<ColumnVal> oneRowValues : values)
             {
-                bindLoc = bindColumnValues(prepStatement, oneRowValues,
-                        bindLoc, spec, false);
-
+                bindLoc = bindColumnValues(prepStatement, oneRowValues, bindLoc,
+                        spec, false);
             }
 
             try
@@ -506,8 +514,8 @@ public class MySQLApplier extends JdbcApplier
         catch (SQLException e)
         {
             ApplierException applierException = new ApplierException(e);
-            applierException.setExtraData(logFailedRowChangeSQL(stmt,
-                    oneRowChange));
+            applierException
+                    .setExtraData(logFailedRowChangeSQL(stmt, oneRowChange));
             throw applierException;
         }
         finally

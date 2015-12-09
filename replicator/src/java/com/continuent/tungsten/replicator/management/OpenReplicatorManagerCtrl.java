@@ -59,6 +59,7 @@ import com.continuent.tungsten.common.security.AuthenticationInfo;
 import com.continuent.tungsten.common.security.PasswordManager;
 import com.continuent.tungsten.common.security.PasswordManager.ClientApplicationType;
 import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.utils.CLUtils;
 import com.continuent.tungsten.common.utils.ManifestParser;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.PropertiesManager;
@@ -167,7 +168,7 @@ public class OpenReplicatorManagerCtrl
         println("  properties [-filter name]    - Print all in-memory properties and their current values");
         println("             [-values]         - Print only the values in plain text");
         println("  purge [-y] [-limit s]        - Purge non-Tungsten logins on DBMS, waiting up to s seconds");
-        println("  reset [-y] {-all | -thl | -relay | -db}");
+        println("  reset [-y] {-all | -thl | -relay | -db | -redo}");
         println("                               - Deletes the replicator service (-all or empty), thl directory,");
         println("                                 relay logs directory or tungsten database for the service");
         println("  restore [-uri u] [-limit s]  - Restore database");
@@ -286,6 +287,15 @@ public class OpenReplicatorManagerCtrl
             {
                 this.authenticationInfo = SecurityHelper
                         .loadAuthenticationInformation(securityPropertiesFileLocation);
+                /**
+                 * If verbose mode is set print whether password is used, 
+                 * encryption is enabled, and if that is the case, the cipher,
+                 * and protocol
+                 */
+                if (verbose)
+                {
+                    CLUtils.print(SecurityHelper.printSecuritySummary(authenticationInfo));
+                }
                 // Sets the username and password in the authenticationInfo.
                 // This will be used as credentials when connecting
                 // Password is provided "as is" (potentilaly encrypted) and will
@@ -455,13 +465,10 @@ public class OpenReplicatorManagerCtrl
                 if (authenticationInfo != null)
                     authenticationInfo.checkAndCleanAuthenticationInfo();
 
-                TungstenProperties securityProperties = (authenticationInfo != null)
-                        ? authenticationInfo.getAsTungstenProperties()
-                        : null;
-
-                conn = JmxManager.getRMIConnector(rmiHost, rmiPort,
+                JmxManager jmxManager = new JmxManager(rmiHost, rmiPort,
                         ReplicatorConf.RMI_DEFAULT_SERVICE_NAME,
-                        securityProperties);
+                        authenticationInfo);
+                conn = jmxManager.getLocalRMIConnector();
             }
             catch (Exception e)
             {
@@ -845,6 +852,15 @@ public class OpenReplicatorManagerCtrl
                 {
                     yes = confirm(String
                             .format("Do you really want to delete database for replication service %s completely?",
+                                    service));
+                    options.put("option", curOption);
+                    // For now, take only first option into account
+                    break;
+                }
+                else if ("-redo".equalsIgnoreCase(curOption))
+                {
+                    yes = confirm(String
+                            .format("Do you really want to delete Oracle redo reader state for replication service %s and reset to current SCN?",
                                     service));
                     options.put("option", curOption);
                     // For now, take only first option into account

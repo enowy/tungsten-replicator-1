@@ -1175,6 +1175,18 @@ public class TestSqlOperationMatcher
                     sqlName.getSchema());
         }
 
+        String cmd = "LOAD DATA LOCAL INFILE '/data1/logs/mslog/tmp/560/560-ABC-603/ABCDE-FGHI_2015-11-18_16-32-15_abcdefghijklmnopqrstuv.log' IGNORE INTO TABLE `tmp_activity_log_item` "
+                + "FIELDS TERMINATED BY '~~' ENCLOSED BY '' ESCAPED BY '' LINES TERMINATED BY '' (`id`, `col1`, `col2`, `col3`, `col4`, `col5`, `col6`, `col7`, `col8`, `col9`, `col10`, `col11`, `col12`, `col13`, `col14`)";
+        SqlOperation sqlName = m.match(cmd);
+        Assert.assertNotNull("Matched: " + cmd, sqlName);
+        Assert.assertEquals("Found object: " + cmd, SqlOperation.TABLE,
+                sqlName.getObjectType());
+        Assert.assertEquals("Found operation: " + cmd, SqlOperation.LOAD_DATA,
+                sqlName.getOperation());
+        Assert.assertEquals("Found name: " + cmd, "tmp_activity_log_item", sqlName.getName());
+        Assert.assertNull("Found database: " + cmd, sqlName.getSchema());
+        Assert.assertFalse("Is autocommit: " + cmd, sqlName.isAutoCommit());
+
     }
 
     /**

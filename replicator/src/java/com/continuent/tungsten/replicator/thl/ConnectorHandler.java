@@ -49,23 +49,23 @@ import com.continuent.tungsten.replicator.thl.log.LogTimeoutException;
  */
 public class ConnectorHandler implements ReplicatorPlugin, Runnable
 {
-    private Server           server          = null;
-    private PluginContext    context         = null;
-    private Thread           thd             = null;
+    private Server           server    = null;
+    private PluginContext    context   = null;
+    private Thread           thd       = null;
     private SocketWrapper    socket;
-    private THL              thl             = null;
+    private THL              thl       = null;
     private int              resetPeriod;
     private int              heartbeatMillis;
-    private long             altSeqno        = -1;
-    private volatile boolean cancelled       = false;
-    private volatile boolean finished        = false;
+    private long             altSeqno  = -1;
+    private volatile boolean cancelled = false;
+    private volatile boolean finished  = false;
 
-    private String           rmiHost         = null;
-    private String           rmiPort         = null;
+    private String rmiHost = null;
+    private String rmiPort = null;
 
     private volatile boolean checkFirstSeqno = true;
 
-    private static Logger    logger          = Logger.getLogger(ConnectorHandler.class);
+    private static Logger logger = Logger.getLogger(ConnectorHandler.class);
 
     // Implements call-back to check log consistency between client and
     // master.
@@ -82,21 +82,92 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
          * @param handshakeResponse Response from client
          * @throws ReplicatorException Thrown if logs appear to diverge
          */
-        public void validateResponse(ProtocolHandshakeResponse handshakeResponse)
-                throws InterruptedException, ReplicatorException
+        public void validateResponse(
+                ProtocolHandshakeResponse handshakeResponse)
+                        throws InterruptedException, ReplicatorException
         {
+            // Fetch login and password, then suppress password value from
+            // options.
+            String remoteLogin = handshakeResponse
+                    .getOption(ProtocolParams.REMOTE_LOGIN);
+            String remotePassword = handshakeResponse
+                    .getOption(ProtocolParams.REMOTE_PASSWORD);
+            if (remotePassword != null)
+                handshakeResponse.setOption(ProtocolParams.REMOTE_PASSWORD,
+                        "****");
+
             // Get the heartbeat interval and check it.
             heartbeatMillis = handshakeResponse.getHeartbeatMillis();
             logger.info("New THL client connection: sourceID="
-                    + handshakeResponse.getSourceId()
-                    + " heartbeatMillis="
-                    + heartbeatMillis
-                    + " socketType="
+                    + handshakeResponse.getSourceId() + " heartbeatMillis="
+                    + heartbeatMillis + " socketType="
                     + socket.getSocket().getClass().getSimpleName()
                     + " options="
                     + new TungstenProperties(handshakeResponse.getOptions())
                             .toString());
 
+            // If authentication is required due to use of encrypted
+            // connections, do that now.
+            if (server.isUseSSL())
+            {
+                // Validate login and password values.
+                if (remoteLogin == null)
+                {
+                    logger.warn(String.format(
+                            "THL authentication failure: THL login was not specified: sourceID=%s",
+                            handshakeResponse.getSourceId()));
+                    throw new THLException("THL authentication failure");
+                }
+                else if (remotePassword == null)
+                {
+                    logger.warn(String.format(
+                            "THL authentication failure: THL password was not specified: sourceID=%s, login=%s",
+                            handshakeResponse.getSourceId(), remoteLogin));
+                    throw new THLException("THL authentication failure");
+                }
+
+                // Now authenticate the login.
+                int authResult = server.authenticate(remoteLogin,
+                        remotePassword);
+                if (authResult == Server.AUTH_OK)
+                {
+                    logger.info(String.format(
+                            "Client authenticated: sourceID=%s, login=%s",
+                            handshakeResponse.getSourceId(), remoteLogin));
+                }
+                else
+                {
+                    if (authResult == Server.AUTH_FAILED_NO_SUCH_USER)
+                    {
+                        logger.warn(String.format(
+                                "THL authentication failure: user does not exist: sourceID=%s, login=%s",
+                                handshakeResponse.getSourceId(), remoteLogin));
+                    }
+                    else if (authResult == Server.AUTH_FAILED_BAD_PASSWORD)
+                    {
+                        logger.warn(String.format(
+                                "THL authentication failure: bad password: sourceID=%s, login=%s",
+                                handshakeResponse.getSourceId(), remoteLogin));
+                    }
+                    else if (authResult == Server.AUTH_FAILED_UNKNOWN)
+                    {
+                        logger.warn(String.format(
+                                "THL authentication failure: unexpected failure, see other log messages: sourceID=%s, login=%s",
+                                handshakeResponse.getSourceId(), remoteLogin));
+                    }
+                    else
+                    {
+                        logger.warn(String.format(
+                                "THL authentication failure: unknown error code: sourceID=%s, login=%s, code=%d",
+                                handshakeResponse.getSourceId(), remoteLogin,
+                                authResult));
+                    }
+
+                    throw new THLException("THL authentication failed");
+                }
+            }
+
+            // Store the RMI host and port.
             setRmiHost(handshakeResponse.getOption(ProtocolParams.RMI_HOST));
             setRmiPort(handshakeResponse.getOption(ProtocolParams.RMI_PORT));
 
@@ -117,14 +188,16 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
             if ((clientLastEpochNumber < 0 || clientLastSeqno < 0)
                     && eventIdString == null)
             {
-                logger.info("Client log checking disabled; not checking for diverging histories");
+                logger.info(
+                        "Client log checking disabled; not checking for diverging histories");
             }
             else if (masterMaxSeqno == -1 && masterMinSeqno == -1)
             {
                 // If the master log is empty, we cannot check anything. Defer
                 // the log consistency check until later.
                 checkFirstSeqno = true;
-                logger.info("Server log is empty; deferring log consistency checking until first transaction");
+                logger.info(
+                        "Server log is empty; deferring log consistency checking until first transaction");
             }
             else
             {
@@ -165,8 +238,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                         {
                             // Otherwise we give the slave a pass and let it
                             // connect.
-                            logger.info("Master log has starting client seqno but does not have previous committed seqno;"
-                                    + " not checking for diverging histories");
+                            logger.info(
+                                    "Master log has starting client seqno but does not have previous committed seqno;"
+                                            + " not checking for diverging histories");
                         }
                     }
                     else if (event.getEpochNumber() != clientLastEpochNumber)
@@ -182,12 +256,12 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                     }
                     else
                     {
-                        logger.info("Log epoch numbers checked and match: client source ID="
-                                + handshakeResponse.getSourceId()
-                                + " seqno="
-                                + clientLastSeqno
-                                + " epoch number="
-                                + clientLastEpochNumber);
+                        logger.info(
+                                "Log epoch numbers checked and match: client source ID="
+                                        + handshakeResponse.getSourceId()
+                                        + " seqno=" + clientLastSeqno
+                                        + " epoch number="
+                                        + clientLastEpochNumber);
                     }
 
                     // If we have an event ID, we need to search forward to find
@@ -231,8 +305,10 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                                 // should be where we want to seek before
                                 // starting.
                                 altSeqno = currentSeqno + 1;
-                                logger.info("Found alterative seqno requested by client using eventId: seqno="
-                                        + altSeqno + " eventId=" + eventId);
+                                logger.info(
+                                        "Found alterative seqno requested by client using eventId: seqno="
+                                                + altSeqno + " eventId="
+                                                + eventId);
                                 break;
                             }
                             else
@@ -312,8 +388,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
         {
             // Issue 727 : Add debug info
             logger.error("Received SSL handshake exception", e);
-            logger.error("SSL handshake failed; ensure client replicator has SSL enabled: host="
-                    + socket.getSocket().getInetAddress().toString());
+            logger.error(
+                    "SSL handshake failed; ensure client replicator has SSL enabled: host="
+                            + socket.getSocket().getInetAddress().toString());
             return;
         }
         catch (IOException e)
@@ -330,7 +407,8 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
 
             // TUC-2 Added log validator to check log for divergent
             // epoch numbers on last common sequence number.
-            protocol.serverHandshake(logValidator, minSeqno, maxSeqno);
+            protocol.serverHandshake(logValidator, minSeqno, maxSeqno,
+                    server.isUseSSL());
 
             // Name the thread so that developers can see which source ID we
             // are serving.
@@ -407,10 +485,10 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                     // consistency, do that now.
                     if (checkFirstSeqno)
                     {
-                        logger.info("Checking first seqno returned by THL for consistency: client expected seqno="
-                                + seqno
-                                + " server returned seqno="
-                                + event.getSeqno());
+                        logger.info(
+                                "Checking first seqno returned by THL for consistency: client expected seqno="
+                                        + seqno + " server returned seqno="
+                                        + event.getSeqno());
 
                         if (event.getSeqno() != seqno)
                         {
@@ -426,7 +504,8 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                     // Peel off and process the underlying replication event.
                     ReplEvent revent = event.getReplEvent();
                     if (revent instanceof ReplDBMSEvent
-                            && ((ReplDBMSEvent) revent).getDBMSEvent() instanceof DBMSEmptyEvent)
+                            && ((ReplDBMSEvent) revent)
+                                    .getDBMSEvent() instanceof DBMSEmptyEvent)
                     {
                         if (logger.isDebugEnabled())
                             logger.debug("Got an empty event");
@@ -503,13 +582,15 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                         "Connector handler terminated by java.io.EOFException",
                         e);
             else
-                logger.info("Connector handler terminated by java.io.EOFException");
+                logger.info(
+                        "Connector handler terminated by java.io.EOFException");
         }
         catch (IOException e)
         {
             // The IOException occurs normally when a client goes away.
             if (logger.isDebugEnabled())
-                logger.debug("Connector handler terminated by i/o exception", e);
+                logger.debug("Connector handler terminated by i/o exception",
+                        e);
             else
                 logger.info("Connector handler terminated by i/o exception");
         }
@@ -568,14 +649,13 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
         }
     }
 
-    private void sendEvent(Protocol protocol, ReplEvent event, boolean forceSend)
-            throws IOException
+    private void sendEvent(Protocol protocol, ReplEvent event,
+            boolean forceSend) throws IOException
     {
         protocol.sendReplEvent(event, forceSend);
     }
 
-    private void sendError(Protocol protocol, String message)
-            throws IOException
+    private void sendError(Protocol protocol, String message) throws IOException
     {
         protocol.sendError(message);
     }
@@ -630,8 +710,8 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#configure(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void configure(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void configure(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         this.context = context;
     }
@@ -641,8 +721,8 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#prepare(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void prepare(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void prepare(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
         resetPeriod = thl.getResetPeriod();
     }
@@ -652,8 +732,8 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
      * 
      * @see com.continuent.tungsten.replicator.plugin.ReplicatorPlugin#release(com.continuent.tungsten.replicator.plugin.PluginContext)
      */
-    public void release(PluginContext context) throws ReplicatorException,
-            InterruptedException
+    public void release(PluginContext context)
+            throws ReplicatorException, InterruptedException
     {
     }
 

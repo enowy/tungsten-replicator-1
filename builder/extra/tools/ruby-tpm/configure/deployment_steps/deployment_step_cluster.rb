@@ -2,6 +2,7 @@ module ConfigureDeploymentStepDeployment
   def get_methods
     [
       ConfigureDeploymentMethod.new("create_release", 0, -40),
+      ConfigureDeploymentMethod.new("deploy_external_libraries"),
       ConfigureCommitmentMethod.new("commit_release")
     ]
   end
@@ -47,7 +48,6 @@ module ConfigureDeploymentStepDeployment
     File.open(@config.getProperty(DIRECTORY_LOCK_FILE), "w") {
       |f|
       f.puts(@config.getProperty(HOME_DIRECTORY))
-      f.chmod(0644)
     }
     
     # Reset the .watchfiles file before rewriting all configuration files
@@ -94,77 +94,6 @@ module ConfigureDeploymentStepDeployment
       end
     end
     
-    # Write the cluster-home/conf/security.properties file
-    transform_host_template("cluster-home/conf/security.properties",
-      "cluster-home/samples/conf/security.properties.tpl")
-      
-    rmi_user = @config.getProperty(RMI_USER)
-    
-    ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
-    ks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
-    
-    ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
-    ts_pass = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
-    
-    tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
-    tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
-    if File.exist?(tls_keystore)
-      if File.exist?(ks)
-        cmd = ["keytool -delete -alias #{tls_alias}",
-        	"-keystore #{ks}",
-        	"-storepass #{ks_pass}"]
-        cmd_result(cmd.join(" "))
-      end
-
-      cmd = ["keytool -importkeystore -noprompt",
-      	"-srckeystore #{tls_keystore}",
-      	"-srcstorepass #{ks_pass}",
-      	"-srckeypass #{ks_pass}",
-      	"-destkeystore #{ks}",
-      	"-deststorepass #{ks_pass}",
-      	"-destkeypass #{ks_pass}",
-      	"-srcalias #{tls_alias} -destalias #{tls_alias}"]
-      cmd_result(cmd.join(" "))
-      
-      local_cert = Tempfile.new("tcfg")
-      local_cert.close()
-      File.unlink(local_cert.path())
-      
-      cmd = ["keytool -export -alias #{tls_alias}",
-        "-file #{local_cert.path()}",
-        "-keystore #{ks} -storepass #{ks_pass}",
-        "-keypass #{ks_pass}"]
-      cmd_result(cmd.join(" "))
-      
-      if File.exist?(ts)
-        cmd = ["keytool -delete -alias #{tls_alias}",
-        	"-keystore #{ts}",
-        	"-storepass #{ts_pass}"]
-        cmd_result(cmd.join(" "))
-      end
-      
-      cmd = ["keytool -import -trustcacerts -alias #{tls_alias}",
-        "-file #{local_cert.path()} -keystore #{ts}",
-        "-storepass #{ts_pass} -noprompt"]
-      cmd_result(cmd.join(" "))
-    end
-    
-    jmxremote = @config.getTemplateValue(JAVA_JMXREMOTE_ACCESS_PATH)
-    unless File.exist?(jmxremote)
-      File.open(jmxremote, "w") {
-        |f|
-        f.puts("#{rmi_user}        readwrite \\
-  create javax.management.monitor.*,javax.management.timer.* \\
-  unregister")
-      }
-    end
-    
-    password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
-    unless File.exist?(password_store)
-cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass}")
-      cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c #{rmi_user} #{ks_pass} -p #{password_store} -e -ts #{ts} -tsp #{ts_pass} -target rmi_jmx")
-    end
-    
     # Write the tungsten-cookbook/INSTALLED* files
     write_tungsten_cookbook_installed_recipe()
     
@@ -189,6 +118,70 @@ cmd_result("#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd -c
         FileUtils.rm_f(installed_tungsten_ini)
       end
       FileUtils.ln_sf(external_source, installed_tungsten_ini)
+    end
+  end
+  
+  def write_tungsten_security_files
+    # Write the cluster-home/conf/security.properties file
+    transform_host_template("cluster-home/conf/security.properties",
+      "cluster-home/samples/conf/security.properties.tpl")
+      
+    rmi_user = @config.getProperty(RMI_USER)
+    
+    ks = @config.getTemplateValue(JAVA_KEYSTORE_PATH)
+    ks_pass = @config.getProperty(JAVA_KEYSTORE_PASSWORD)
+    
+    ts = @config.getTemplateValue(JAVA_TRUSTSTORE_PATH)
+    ts_pass = @config.getProperty(JAVA_TRUSTSTORE_PASSWORD)
+    
+    tls_alias = @config.getProperty(JAVA_TLS_ENTRY_ALIAS)
+    tls_keystore = @config.getTemplateValue(JAVA_TLS_KEYSTORE_PATH)
+    if File.exist?(tls_keystore)
+      keystore = JavaKeytool.new(ks)
+      keystore.import(tls_keystore, tls_alias, ks_pass)
+      WatchFiles.watch_file(ks, @config)
+      
+      truststore = JavaKeytool.new(ts)
+      truststore.trust(tls_keystore, tls_alias, ks_pass, ts_pass)
+      WatchFiles.watch_file(ts, @config)
+    end
+    
+    if File.exist?(ks)
+      jmxremote = @config.getTemplateValue(JAVA_JMXREMOTE_ACCESS_PATH)
+      File.open(jmxremote, "w") {
+        |f|
+        f.puts("#{rmi_user}        readwrite \\
+  create javax.management.monitor.*,javax.management.timer.* \\
+  unregister")
+      }
+      WatchFiles.watch_file(jmxremote, @config)
+    
+      password_store = @config.getTemplateValue(JAVA_PASSWORDSTORE_PATH)
+    
+      ks_pass_file = Tempfile.new("ks")
+      ks_pass_file.puts(ks_pass)
+      ks_pass_file.close()
+    
+      ts_pass_file = Tempfile.new("ts")
+      ts_pass_file.puts(ts_pass)
+      ts_pass_file.close()
+    
+      user_pass_file = Tempfile.new("user")
+      user_pass_file.puts(ks_pass)
+      user_pass_file.close()
+    
+      tpasswd = "#{Configurator.instance.get_base_path()}/cluster-home/bin/tpasswd"
+      tpasswd_options = [
+        "-c #{rmi_user}", "-e",
+        "-p #{password_store}",
+        "-upf #{ks_pass_file.path()}",
+        "-ts #{ts}",
+        "-tspf #{ts_pass_file.path()}"
+      ]
+    
+      cmd_result("#{tpasswd} #{tpasswd_options.join(' ')}")
+      cmd_result("#{tpasswd} #{tpasswd_options.join(' ')} -target rmi_jmx")
+      WatchFiles.watch_file(password_store, @config)
     end
   end
   
@@ -312,6 +305,7 @@ EOF
   end
   
   def commit_release
+    trigger_event(:before_commit_release)
     prepare_dir = @config.getProperty(PREPARE_DIRECTORY)
     target_dir = @config.getProperty(TARGET_DIRECTORY)
     
@@ -388,12 +382,15 @@ EOF
           if File.exists?(manager_dynamic_properties)
             info("Copy the previous manager dynamic properties")
             FileUtils.mv(manager_dynamic_properties, prepare_dir + '/tungsten-manager/conf')
+            Configurator.instance.limit_file_permissions(prepare_dir + '/tungsten-manager/conf/dynamic.properties')
           end
           
           Dir.glob("#{current_release_target_dir}/tungsten-replicator/conf/dynamic-*.properties") {
             |replicator_dynamic_properties|
+            basename = File.basename(replicator_dynamic_properties)
             info("Copy the previous replicator dynamic properties - #{File.basename(replicator_dynamic_properties)}")
-            FileUtils.mv(replicator_dynamic_properties, prepare_dir + '/tungsten-replicator/conf')
+            FileUtils.mv(replicator_dynamic_properties, prepare_dir + "/tungsten-replicator/conf")
+            Configurator.instance.limit_file_permissions(prepare_dir + "/tungsten-replicator/conf/#{basename}")
           }
           
           cluster_home_conf = current_release_target_dir + '/cluster-home/conf'
@@ -417,7 +414,7 @@ EOF
           end
           
           connector_user_map = current_release_target_dir + '/tungsten-connector/conf/user.map'
-          if File.exists?(connector_user_map) && @config.getProperty(CONN_DELETE_USER_MAP) == "false"
+          if File.exists?(connector_user_map) && @config.getProperty(CONN_DELETE_USER_MAP) == "false" && @config.getProperty(ENABLE_CONNECTOR_BRIDGE_MODE) == "false"
             info("Copy the previous connector user map")
             FileUtils.cp(connector_user_map, prepare_dir + '/tungsten-connector/conf')
           end
@@ -482,21 +479,31 @@ EOF
           end
         end
       }
+      
+      Dir.glob("#{@config.getProperty(REPL_LOG_DIR)}/**/*") {
+        |thl_file|
+        Configurator.instance.limit_file_permissions(thl_file)
+      }
     end
+    trigger_event(:after_commit_release)
     
     if is_replicator?()
-      add_service("tungsten-replicator/bin/replicator")
+      add_service("tungsten-replicator/bin/replicator", 25)
     end
     if is_manager?()
-      add_service("tungsten-manager/bin/manager")
+      add_service("tungsten-manager/bin/manager", 50)
     end
     if is_connector?()
-      add_service("tungsten-connector/bin/connector")
+      add_service("tungsten-connector/bin/connector", 75)
     end
+    trigger_event(:register_services)
+    
+    
     write_deployall()
     write_undeployall()
     write_startall()
     write_stopall()
+    write_tungsten_security_files()
   end
   
   def write_dataservices_properties
@@ -573,5 +580,54 @@ EOF
   def write_policymgr_properties
     transform_host_template("cluster-home/conf/policymgr.properties",
       "tungsten-connector/samples/conf/policymgr.properties.tpl")
+  end
+  
+  def deploy_external_libraries
+    external_libraries = {}
+    @config.getPropertyOr(REPL_SERVICES, {}).keys().each{
+      |rs_alias|
+      if rs_alias == DEFAULTS
+        next
+      end
+      
+      rs_prefix = [REPL_SERVICES, rs_alias]
+      ds_alias = @config.getProperty(rs_prefix + [DEPLOYMENT_DATASERVICE])
+      topology = Topology.build(ds_alias, @config)
+      
+      if topology.enable_dedicated_extractor_datasource?() == true
+        ds = ConfigureDatabasePlatform.build(rs_prefix, @config, true)
+        include_external_libraries_in_hash(ds, external_libraries)
+      end
+      
+      ds = ConfigureDatabasePlatform.build(rs_prefix, @config)
+      include_external_libraries_in_hash(ds, external_libraries)
+    }
+    
+    external_libraries.each{
+      |source, targets|
+      targets.each{
+        |target|
+        target = File.expand_path(target, get_deployment_basedir())
+        debug("Copy #{source} to #{target}")
+        FileUtils.cp(source, target)
+      }
+    }
+  end
+  
+  def include_external_libraries_in_hash(ds, external_libraries)
+    ds_libraries = ds.getExternalLibraries()
+    if ds_libraries.is_a?(Hash)
+      ds_libraries.each{
+        |source, target|
+        if external_libraries.has_key?(source)
+          external_libraries[source] << target
+          external_libraries[source].uniq!()
+        else
+          external_libraries[source] = [target]
+        end
+      }
+    elsif ds_libraries != nil
+      error("The #{ds.class.name}.getExternalLibraries method did not return a hash")
+    end
   end
 end

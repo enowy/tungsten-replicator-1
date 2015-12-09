@@ -50,6 +50,10 @@ module ReplicationServiceValidationCheck
     return [DATASERVICES, get_dataservice(), key]
   end
   
+  def get_group_option_key(key)
+    [DATASERVICE_REPLICATION_OPTIONS, get_dataservice(), key]
+  end
+  
   def get_applier_key(key)
     get_member_key(key)
   end

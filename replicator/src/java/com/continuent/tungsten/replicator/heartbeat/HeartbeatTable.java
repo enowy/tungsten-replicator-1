@@ -175,7 +175,7 @@ public class HeartbeatTable
             logger.debug("Initializing heartbeat table");
 
         // Create the table if it does not exist.
-        if (database.findTable(hbTable.getSchema(), hbTable.getName()) == null)
+        if (database.findTungstenTable(hbTable.getSchema(), hbTable.getName()) == null)
         {
             database.createTable(this.hbTable, false, this.hbTable.getSchema(),
                     tableType, serviceName);

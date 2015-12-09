@@ -46,6 +46,7 @@ MGR_HEAP_THRESHOLD = "mgr_heap_threshold"
 MGR_API = "mgr_api"
 MGR_API_PORT = "mgr_api_port"
 MGR_API_ADDRESS = "mgr_api_address"
+MGR_API_FULL_ACCESS = "mgr_api_full_access"
 MGR_VALIDATE_WITNESS = "mgr_validate_witness"
 MGR_IS_WITNESS = "mgr_is_witness"
 MGR_REPL_DBLOGIN = "mgr_repl_user"
@@ -732,6 +733,15 @@ class ManagerAPIAddress < ConfigurePrompt
   
   def initialize
     super(MGR_API_ADDRESS, "Address for the Manager API", PV_ANY, "127.0.0.1")
+  end
+end
+
+class ManagerAPIFullAccess < ConfigurePrompt
+  include ManagerPrompt
+  include AdvancedPromptModule
+  
+  def initialize
+    super(MGR_API_FULL_ACCESS, "Enable all Manager API commands. Only the status command will be enabled without it.", PV_BOOLEAN, "false")
   end
 end
 

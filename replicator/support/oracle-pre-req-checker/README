@@ -1,0 +1,58 @@
+# Oracle Redo Reader Replication Prerequisite Check Script
+
+The pre-req-checker.sql script will install a PL/SQL Package in the DB instance, which you can then run to check for any unsupported features, data types etc.  
+
+## INSTALLATION
+
+The SQL package should be installed and executed as follows:
+
+1. Copy the pre-req-checker sql script to the Oracle host machine.
+2. Login to sqlplus as sys
+3. Install the package as follow:
+
+	$ sqlplus '/ as sydba' @pre-req-checker.sql
+
+Step 3 above, is one time only, now that the package has been installed, you can run it as many times as you require.  
+
+## USAGE 
+
+To Execute the package and run the checks, from the sqlplus prompt, type the following:
+
+	SQL> set serveroutput on
+	SQL> exec ContinuentPreReqCheck.run(<target>,<schema>,<user>,<path>);
+
+Substituting variables as follows:
+
+*  *target*	The flavour of DB that you are replicating TO, one of 'ORACLE','MYSQL55','MYSQL56'
+*  *schema*	A comma separated list of schemas that you will be replicating
+*  *user*		The replicator user on the local source instance (Typically tungsten)
+*  *path*		The local OS path for the results of the checker to be logged to
+
+After executing, you will see a message that output has been written to a log file, the name and path will be given, and will look something similar to the following:
+
+	SQL> set serveroutput on
+	SQL> exec ContinuentPreReqCheck.run('ORACLE','LAB','TUNGSTEN','/home/oracle/log');
+	>> Checks complete, results in /home/oracle/log/prereq-201511020730.log
+	PL/SQL procedure successfully completed.
+
+You can then review the log file for the results, from the above example the log looks like the following:
+
+	$> cat /home/oracle/log/prereq-201511020730.log
+
+	INFO  >> Major Version : 11 Minor Version : 2
+	PASS  >> Source Version Check [1]
+	ERROR >> Table [LAB.DEMOTABLE] : Column [COL_ERR] is of unsupported datatype [ROWID]
+	FAIL  >> Data Type Check [0]
+	ERROR >> Table [LAB.DEMOTABLE] does not have a Primary Key
+	ERROR >> Table [LAB.LABTAB1] does not have a Primary Key
+	FAIL  >> Primary Key Check [0]
+	PASS  >> Unsupported Features Check [1]
+	INFO  >> User [TUNGSTEN] exists
+	INFO  >> [TUNGSTEN] user has DBA role
+	PASS  >> User Check [1]
+
+## CAVEAT
+
+The file created with the result is named using a timestamp with granularity of one minute. If you run the check the pre-requisite, fix the error and run the script again within 1 minute, you will see the error again, because the checking script is *adding* to the log, not creating a new one. If you fix a pre-requisite issue, allow one minute delay before checking again.
+
+

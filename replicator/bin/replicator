@@ -35,6 +35,8 @@
 # To configure script behavior, put default values in replicator.env
 # and they will be sourced on startup.  This is better than altering
 # the script directly.
+
+@{#(FILE_PROTECTION_LEVEL)}umask @{FILE_PROTECTION_LEVEL|0027}
  
 # Initialization block for the install_initd and remove_initd scripts used by
 #  SUSE linux distributions.
@@ -108,6 +110,21 @@ JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_HEAP_SIZE $REPLICATOR_GC_POLICY"
 # Set the timezone if available. 
 if [ ! -z "$REPLICATOR_USER_TIMEZONE" ]; then
   JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_USER_TIMEZONE"
+fi
+
+# Set the port for JVM remote debugging.
+if [ ! -z "$REPLICATOR_DEBUG_PORT" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_DEBUG_PORT"
+fi
+
+# Set options for debugging.
+if [ ! -z "$REPLICATOR_DEBUG_OPTS" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_DEBUG_OPTS"
+fi
+
+# Set RMI options, defaults to allowing remote access.
+if [ ! -z "$REPLICATOR_RMI_OPTS" ]; then
+  JVM_OPTIONS="${JVM_OPTIONS} $REPLICATOR_RMI_OPTS"
 fi
 
 # Set the platform charset if available.

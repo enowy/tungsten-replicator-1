@@ -7,15 +7,19 @@ class TungstenReplicatorSetPosition
     begin
       if @options[:source] != nil
         begin
+          thl = "#{opt(:source_directory)}/tungsten-replicator/bin/thl"
           TU.info("Load seqno #{@options[:seqno]} from #{@options[:source]}")
           if TI.is_commercial?()
             # Do not include a service name when using the clustering software
             # because the source service name be different but the replicator
             # will only have a single service defined. This enables proper
             # operation for SOR deployments
-            cmd = "#{TI.thl()} list -seqno #{@options[:seqno]} -headers -json"
+            cmd = "#{thl} list -seqno #{@options[:seqno]} -headers -json"
           else
-            cmd = "#{TI.thl(@options[:service])} list -seqno #{@options[:seqno]} -headers -json"
+            if opt(:service) != nil
+              thl = "#{thl} -service #{@options[:service]}"
+            end
+            cmd = "#{thl} list -seqno #{@options[:seqno]} -headers -json"
           end
           
           thl_record_content = TU.ssh_result(cmd, @options[:source], TI.user())
@@ -180,6 +184,12 @@ $> tungsten_set_position.sh --seqno=35 --epoch=23")
       :help => "Determine metadata for the --seqno statement from this host"
     })
     
+    add_option(:source_directory, {
+      :on => "--source-directory String",
+      :help => "Directory on --source to determine metadata from",
+      :required => false
+    })
+    
     add_option(:seqno, {
       :on => "--seqno String",
       :help => "The sequence number to use for updating the trep_commit_seqno table"
@@ -191,9 +201,9 @@ $> tungsten_set_position.sh --seqno=35 --epoch=23")
     })
     
     add_option(:replicate_statements, {
-      :on => "--replicate-statements String",
+      :on => "--replicate-statements [String]",
       :default => false,
-      :parse => method(:parse_boolean_option),
+      :parse => method(:parse_boolean_option_blank_is_true),
       :help => "Execute the events so they will be replicated if the service is a master"
     })
     
@@ -222,6 +232,35 @@ $> tungsten_set_position.sh --seqno=35 --epoch=23")
     
     if @options[:source] != nil && @options[:epoch] != nil
       TU.error("You may not provide the --source or --epoch arguments together")
+    end
+    
+    if opt(:source) != nil
+      source_parts = opt(:source).split(":")
+      case source_parts.size()
+      when 1
+        # Do nothing
+      when 2
+        opt(:source, source_parts[0])
+        if opt(:source_directory) != nil
+          if opt(:source_directory) == source_parts[1]
+            TU.warning("The same source directory was provided in --source and --source-directory.")
+          else
+            TU.error("The source directory provided in --source does not match the value provided for --source-directory.")
+          end
+        else
+          opt(:source_directory, source_parts[1])
+        end
+      else
+        TU.error("The value for --source includes multiple instances of ':'. This option must be '<source hostname>' or '<source hostname>:<source directory>'.")
+      end
+    end
+    
+    if opt(:source_directory) == nil
+      opt(:source_directory, "#{TI.root()}/#{CURRENT_RELEASE_DIRECTORY}")
+    else
+      unless opt(:source_directory) =~ /\/tungsten$/
+        opt(:source_directory, "#{opt(:source_directory)}/tungsten")
+      end
     end
   end
   

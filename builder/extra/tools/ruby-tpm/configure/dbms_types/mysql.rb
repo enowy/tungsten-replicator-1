@@ -305,19 +305,7 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
   end
   
   def get_default_systemctl_service
-    ["/etc/systemd/system/mysql.service", "/etc/systemd/system/mysqld.service"].each{|service|
-      Timeout.timeout(30){
-        begin
-          exists = cmd_result("if [ -f #{service} ]; then echo 0; else echo 1; fi")
-          if exists.to_i == 0
-             return File.basename(service)
-          end
-        rescue CommandError
-        end
-      }
-    }
-    
-    return nil
+    return find_systemctl_service(["mysqld.service", "mysql.service", "mariadb.service"])
   end
   
   def getJdbcUrl()
@@ -804,26 +792,28 @@ end
 class MySQLServiceConfigFile < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(REPL_MYSQL_SERVICE_CONF, "Path to my.cnf file customized for this service", PV_FILENAME)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.cnf"
+  def get_default_value
+    @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.cnf"
   end
 end
 
 class DirectMySQLServiceConfigFile < ConfigurePrompt
   include ReplicationServicePrompt
   include ConstantValueModule
+  include NoSystemDefault
   
   def initialize
     super(EXTRACTOR_REPL_MYSQL_SERVICE_CONF, "Path to my.cnf file customized for this service", PV_FILENAME)
   end
   
-  def load_default_value
-    @default = @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.direct.cnf"
+  def get_default_value
+    @config.getProperty(get_host_key(HOME_DIRECTORY)) + "/share/.my.#{@config.getProperty(get_member_key(DEPLOYMENT_SERVICE))}.direct.cnf"
   end
 end
 
@@ -998,7 +988,7 @@ class MySQLConnectorJPath < ConfigurePrompt
   
   def value_is_different?(old_cfg)
     old_value = old_cfg.getProperty(get_name())
-    if File.basename(get_value()) != File.basename(old_value)
+    if File.basename(get_value().to_s()) != File.basename(old_value.to_s())
       true
     else
       false
@@ -1018,7 +1008,7 @@ class MySQLGlobalConnectorJPath < ConfigurePrompt
   
   def value_is_different?(old_cfg)
     old_value = old_cfg.getProperty(get_name())
-    if File.basename(get_value()) != File.basename(old_value)
+    if File.basename(get_value().to_s()) != File.basename(old_value.to_s())
       true
     else
       false
@@ -1917,7 +1907,7 @@ module ConfigureDeploymentStepMySQL
   
   def get_methods
     [
-      ConfigureDeploymentMethod.new("deploy_mysql_connectorj_package"),
+      ConfigureDeploymentMethod.new("deploy_mysql_connectorj_package")
     ]
   end
   module_function :get_methods
@@ -2028,7 +2018,11 @@ module ConfigureDeploymentStepMySQL
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-replicator/lib/")
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-connector/lib/")
       FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/tungsten-manager/lib/")
-      FileUtils.ln_sf(connector_path, "#{get_deployment_basedir()}/bristlecone/lib-ext/")
+      
+      bristlecone_lib = "#{get_deployment_basedir()}/bristlecone/lib-ext/"
+      if File.exist?(bristlecone_lib)
+        FileUtils.ln_sf(connector_path, bristlecone_lib)
+      end
 		end
 	end
 end
@@ -2113,6 +2107,12 @@ class MySQLPasswordSettingCheck < ConfigureValidationCheck
       help("Review https://docs.continuent.com/wiki/display/TEDOC/Changing+MySQL+old+passwords for more information on this problem")
     end
   end
+
+  def enabled?
+    # Only run this check if the MySQL version lower than 5.7
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version < 5.7
+  end
 end
 
 class MySQLTriggerCheck < ConfigureValidationCheck
@@ -2153,26 +2153,37 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     if datadir == nil
       warning "Unable to determine datadir"
     else
-      test_cmd= "test -x \"#{datadir}\""
-      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' -prune -o -name '*.MYD' -print -quit"
+      # Define the find command start
+      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' "
 
-      # Check if we can run as root
+      mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+      if mysql_version >= 5.7
+        # Add the sys schema to the exlusions in the find command. It is new in 5.7 and we don't need to search it.
+        find_cmd = find_cmd + "-prune -o -path '#{datadir}sys' "
+      end
+
+      # Now complete the find command with the filename we are looking for.
+      find_cmd = find_cmd + "-prune -o -name '*.MYD' -print -quit"
+      # Define the test command
+      test_cmd= "test -x \"#{datadir}\""
+
+      # Check if we can run as root and add sudo prefix to the commands if we can.
       if @config.getProperty(get_host_key(ROOT_PREFIX)) == "true"
         test_cmd= "sudo -n " +  test_cmd
         find_cmd = "sudo -n " + find_cmd
       end
 
       begin
-        # Test for the existance of a data directory with execute permissions - needed to list directory contents
+        # Test for the existence of a data directory with execute permissions - needed to list directory contents.
         cmd_result(test_cmd)
         # Run the bash find command to search for MyISAM files having an extension of MYD. Quit after the first match.
         myisam_result = cmd_result(find_cmd)
         if myisam_result.include? ".MYD"
-          warning("MyISAM tables exist within this instance - These tables are not crash safe and may lead to data loss in a failover")
+          error("MyISAM tables were found. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
         end
         # If an error was raised then one of those two commands failed, indicating a lack of permissions.
         rescue CommandError => ce
-          warning("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories.")
+          error("Unable to determine if MyISAM tables exist. Replication will work properly during most cases but MyISAM tables can cause inconsistent checkpoints when stopping the replicator. To enable this check, add --root-command-prefix=true or ensure the mysql group has at least read and execute permissions on the data directory and all nested directories. If you have MyISAM tables and accept this risk, ignore the check by adding --skip-validation-check=MySQLMyISAMCheck.")
       end
     end
   end
@@ -2181,7 +2192,6 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     super()
   end
 end
-
 
 class MySQLDumpCheck < ConfigureValidationCheck
   include ReplicationServiceValidationCheck
@@ -2205,5 +2215,39 @@ class MySQLDumpCheck < ConfigureValidationCheck
   def enabled?
     super() && ["mysqldump"].include?(@config.getProperty(get_member_key(REPL_BACKUP_METHOD))) &&
       Configurator.instance.is_localhost?(@config.getProperty(get_applier_key(REPL_DBHOST)))
+  end
+end
+
+class MySQLSuperReadOnlyCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL super_read_only check"
+  end
+
+  def validate
+    info("Checking that super_read_only is not turned on")
+    # Check the running MySQL instance to see if super_read_only is on.
+    super_read_only = get_applier_datasource.get_value("show variables like 'super_read_only'", "Value")
+    if super_read_only == 'ON'
+      error("The mysql instance has the super_read_only option on. Replication will not work with this option on.")
+    else
+      # The instance does not have super_read_only on but we want to check the config file too.
+      conf_file = @config.getProperty(get_applier_key(REPL_MYSQL_CONF))
+      begin
+        conf_file_results = cmd_result("my_print_defaults --config-file=#{conf_file} mysqld|tr '_' '-'|grep '^--super-read-only'").split("=")[-1].strip()
+        if conf_file_results == '--super-read-only' || conf_file_results == 'on'
+          error("The mysql configuration has the super_read_only option on. Replication will not work with this option on.")
+        end
+      rescue CommandError
+      end
+    end
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version >= 5.7
   end
 end

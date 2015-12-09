@@ -105,7 +105,7 @@ public class PrefetchApplier implements RawApplier
     protected String                  driver                 = null;
     protected String                  url                    = null;
     protected String                  user                   = "root";
-    protected String                  password               = "rootpass";
+    protected String                  password               = null;
     protected String                  ignoreSessionVars      = null;
 
     protected int                     slowQueryCacheSize     = 10000;

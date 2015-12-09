@@ -395,6 +395,9 @@ module ConfigureCommand
   end
   
   def run
+    # Make sure they've read the release notes for this version
+    check_accepted_release_notes()
+    
     write_header("#{Configurator.instance.product_name()} Configuration Procedure")
     write_from_file(File.dirname(__FILE__) + "/interface_text/configure_run")
     check_current_version()
@@ -540,6 +543,10 @@ module ConfigureCommand
     }
     
     is_valid?()
+  end
+  
+  def prepare_config_for_command(config)
+    # Do nothing
   end
   
   def validate
@@ -1173,12 +1180,20 @@ module ConfigureCommand
               Thread.current.kill
             end
             
-            # This is a local server and we need to make sure the 
-            # PREFERRED_PATH is added
-            path = config_obj.getProperty(PREFERRED_PATH)
-            unless path.to_s() == ""
-              debug("Adding #{path} to $PATH")
-              ENV['PATH'] = path + ":" + ENV['PATH']
+            hostname = host_cfg.getProperty([HOSTS, h_alias, HOST])
+            if Configurator.instance.is_localhost?(hostname)
+              # This is a local server and we need to make sure the 
+              # PREFERRED_PATH is added
+              path = config_obj.getProperty(PREFERRED_PATH)
+              unless path.to_s() == ""
+                debug("Adding #{path} to $PATH")
+                ENV['PATH'] = path + ":" + ENV['PATH']
+              end
+              
+              target_umask = config_obj.getTemplateValue(FILE_PROTECTION_LEVEL)
+              if target_umask != nil
+                Configurator.instance.umask(target_umask.to_i(8))
+              end
             end
 
             tracking_key = to_identifier("#{config_obj.getProperty(HOST)}:#{config_obj.getProperty(HOME_DIRECTORY)}")
@@ -1287,7 +1302,9 @@ module ConfigureCommand
     }.new(config)
 
     # Execute each of the deployment steps
-    obj.prepare(get_deployment_object_modules(config))
+    base = get_deployment_object_modules(config)
+    additional = AdditionalDeploymentStep.get(self, config)
+    obj.prepare(base + additional)
     return obj
   end
   
@@ -1349,6 +1366,40 @@ module ConfigureCommand
         return @temp_directory
       end
     end
+  end
+  
+  def enable_release_notes_check?
+    false
+  end
+  
+  def check_accepted_release_notes
+    if enable_release_notes_check?() == false
+      return
+    end
+    
+    if Configurator.instance.is_locked?() == true
+      return
+    end
+    
+    basepath = Configurator.instance.get_base_path()
+    cmd = "#{basepath}/tools/accept_release_notes"
+    begin
+      cmd_result("#{cmd} -test")
+      accepted = true
+    rescue CommandError
+      accepted = false
+    end
+    
+    if accepted == false
+      version = Configurator.instance.get_simple_version()
+      warning("The release notes for #{version} have not been accepted. These list important changes to the new release and let you know how to avoid them or upgrade smoothly. Run `tools/accept_release_notes` to review and accept them.")
+      
+      unless forced?()
+        #raise IgnoreError.new()
+      end
+    end
+    
+    reset_errors()
   end
   
   def self.included(subclass)
@@ -1435,5 +1486,32 @@ module DatabaseTypeDeploymentStep
 
   def self.submodules
     @submodules || []
+  end
+end
+
+module AdditionalDeploymentStep
+  def self.included(subclass)
+    @submodules ||= []
+    @submodules << subclass
+  end
+
+  def self.submodules
+    @submodules || []
+  end
+  
+  def self.get(command, config)
+    r = []
+    
+    self.submodules().each{
+      |module_def|
+      begin
+        if module_def.include_in_command?(command, config)
+          r << module_def
+        end
+      rescue NoMethodError
+      end
+    }
+    
+    return r
   end
 end

@@ -1,0 +1,14 @@
+                              README
+
+The scripts in this directory demonstrate how to use Oracle data
+pump to dump and restore data.  Usage instructions are as follows.
+
+1.) Copy sample-dp-shell.env to dp-shell.env.  Edit the parameters
+as desired.
+
+2.) To dump data run the expdp-shell.sh script.  This will generated
+a backup that you can optionally rsync to another host.
+
+3.) To load data run the impdp-shell.sh script giving the backup
+name.  (To be implemented.)
+

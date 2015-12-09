@@ -30,9 +30,12 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.log4j.Logger;
 
-import com.continuent.tungsten.common.config.TungstenProperties;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.common.security.AuthenticationInfo;
+import com.continuent.tungsten.common.security.PasswordManager;
 import com.continuent.tungsten.common.security.SecurityConf;
+import com.continuent.tungsten.common.security.SecurityHelper;
+import com.continuent.tungsten.common.security.SecurityHelper.TUNGSTEN_APPLICATION_NAME;
 import com.continuent.tungsten.common.sockets.ServerSocketService;
 import com.continuent.tungsten.common.sockets.SocketTerminationException;
 import com.continuent.tungsten.common.sockets.SocketWrapper;
@@ -50,7 +53,20 @@ import com.continuent.tungsten.replicator.util.AtomicCounter;
  */
 public class Server implements Runnable
 {
-    private static Logger                         logger      = Logger.getLogger(Server.class);
+    private static Logger logger = Logger.getLogger(Server.class);
+
+    /** Authentication succeeded. */
+    public static int AUTH_OK = 1;
+
+    /** Authentication failed because the user could not be found. */
+    public static int AUTH_FAILED_NO_SUCH_USER = 2;
+
+    /** Authentication failed because the user password did not match. */
+    public static int AUTH_FAILED_BAD_PASSWORD = 3;
+
+    /** Authentication failed for an unknown reason; see logs for more. */
+    public static int AUTH_FAILED_UNKNOWN = 4;
+
     private PluginContext                         context;
     private Thread                                thd;
     private THL                                   thl;
@@ -62,6 +78,7 @@ public class Server implements Runnable
     private LinkedBlockingQueue<ConnectorHandler> deadClients = new LinkedBlockingQueue<ConnectorHandler>();
     private volatile boolean                      stopped     = false;
     private String                                storeName;
+    private PasswordManager                       passwordManager;
 
     /**
      * Creates a new <code>Server</code> object
@@ -102,6 +119,12 @@ public class Server implements Runnable
         {
             port = 2112;
         }
+    }
+
+    /** Returns true if this server requires encrypted connections. */
+    public boolean isUseSSL()
+    {
+        return useSSL;
     }
 
     /**
@@ -161,7 +184,8 @@ public class Server implements Runnable
                 }
                 catch (InterruptedException e)
                 {
-                    logger.warn("Connector handler close interrupted unexpectedly");
+                    logger.warn(
+                            "Connector handler close interrupted unexpectedly");
                 }
                 catch (Throwable t)
                 {
@@ -231,26 +255,33 @@ public class Server implements Runnable
 
     /**
      * Start up the THL server, which spawns a service thread.
+     * 
      * @throws GeneralSecurityException
+     * @throws ConfigurationException
      */
-    public void start() throws IOException, GeneralSecurityException
+    public void start()
+            throws IOException, GeneralSecurityException, ConfigurationException
     {
         // --- Retrieve and use SecurityInfo if needed ---
         String keystoreAlias = null;
-
-        TungstenProperties replicatorProperties = this.context.getReplicatorProperties();
-
-        // --- Get SecurityInfo
-        // Safe unmarshalling. Will retrun null if it fails
-        // TUC-2339
-        String jsonAuthenticationInfo = replicatorProperties
-                .getString(AuthenticationInfo.SECURITY_INFO_PROPERTY);
-        AuthenticationInfo securityInfo = AuthenticationInfo
-                ._loadFromJSON(jsonAuthenticationInfo);
-        if (securityInfo != null)
+        AuthenticationInfo authenticationInfo = null;
+        if (useSSL)
         {
-            keystoreAlias = securityInfo
-                    .getKeystoreAliasForConnectionType(SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+            authenticationInfo = SecurityHelper.loadAuthenticationInformation(
+                    TUNGSTEN_APPLICATION_NAME.REPLICATOR);
+
+            if (authenticationInfo != null)
+            {
+                keystoreAlias = authenticationInfo
+                        .getKeystoreAliasForConnectionType(
+                                SecurityConf.KEYSTORE_ALIAS_REPLICATOR_MASTER_TO_SLAVE);
+
+                // Instantiate a password manager to authenticate clients.
+                logger.info(
+                        "Setting up password manager to authenticate encrypted connections");
+                passwordManager = new PasswordManager(
+                        authenticationInfo.getParentPropertiesFileLocation());
+            }
         }
 
         logger.info("Opening THL server: store name=" + storeName + " host="
@@ -258,18 +289,19 @@ public class Server implements Runnable
 
         socketService = new ServerSocketService();
         socketService.setAddress(new InetSocketAddress(host, port));
-        socketService.setUseSSL(useSSL, keystoreAlias, securityInfo);
+        socketService.setUseSSL(useSSL, keystoreAlias, authenticationInfo);
         socketService.bind();
-        logger.info("Opened socket: host=" + socketService.getAddress()
-                + " port=" + socketService.getLocalPort() + " useSSL=" + useSSL);
+        logger.info(
+                "Opened socket: host=" + socketService.getAddress() + " port="
+                        + socketService.getLocalPort() + " useSSL=" + useSSL);
 
-        thd = new Thread(this, "THL Server [" + storeName + ":" + host + ":"
-                + port + "]");
+        thd = new Thread(this,
+                "THL Server [" + storeName + ":" + host + ":" + port + "]");
         thd.start();
     }
 
     /**
-     * Stop the THL server, which cancels the service thread. 
+     * Stop the THL server, which cancels the service thread.
      */
     public void stop() throws InterruptedException
     {
@@ -299,5 +331,41 @@ public class Server implements Runnable
     public LinkedList<ConnectorHandler> getClients()
     {
         return clients;
+    }
+
+    /**
+     * Return true if the proposed credentials are authenticated.
+     * 
+     * @param login A client login
+     * @param password A client password
+     * @return
+     */
+    public int authenticate(String login, String password)
+    {
+        // Make sure authentication is supported.
+        if (!useSSL || passwordManager == null)
+        {
+            throw new UnsupportedOperationException(
+                    "Attempt to authenticate unencrypted connection");
+        }
+
+        try
+        {
+            String expectedPassword = passwordManager
+                    .getClearTextPasswordForUser(login);
+            if (expectedPassword == null)
+                return AUTH_FAILED_NO_SUCH_USER;
+            else if (expectedPassword.equals(password))
+                return AUTH_OK;
+            else
+                return AUTH_FAILED_BAD_PASSWORD;
+        }
+        catch (ConfigurationException e)
+        {
+            logger.warn(
+                    "Unable to retrieve password for THL login: login=" + login,
+                    e);
+            return AUTH_FAILED_UNKNOWN;
+        }
     }
 }

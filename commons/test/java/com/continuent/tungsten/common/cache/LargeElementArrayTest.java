@@ -39,18 +39,18 @@ public class LargeElementArrayTest
             .getLogger(LargeElementArrayTest.class);
 
     /**
-     * Verify that we can create a large object array, add an element, and read
-     * it back.
+     * Verify that we can create a large object array when caching is enabled,
+     * add an element, and read it back.
      */
     @Test
-    public void testArraySimple() throws Exception
+    public void testArraySimpleLocal() throws Exception
     {
         // Create the array.
-        File testDir = this.prepareTestDir("testArraySimple");
+        File testDir = this.prepareTestDir("testArraySimpleCache");
         RawByteCache cache = new RawByteCache(testDir, 10000, 1000, 5);
         cache.prepare();
         LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
-                cache);
+                cache, 10);
         Assert.assertEquals("Empty array size", 0, loa.size());
 
         // Add and read back an object.
@@ -67,6 +67,83 @@ public class LargeElementArrayTest
     }
 
     /**
+     * Verify that we can create a large object array when caching is enabled,
+     * add an element, and read it back.
+     */
+    @Test
+    public void testArraySimpleCache() throws Exception
+    {
+        // Create the array.
+        File testDir = this.prepareTestDir("testArraySimpleCache");
+        RawByteCache cache = new RawByteCache(testDir, 10000, 1000, 5);
+        cache.prepare();
+        LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
+                cache, 0);
+        Assert.assertEquals("Empty array size", 0, loa.size());
+
+        // Add and read back an object.
+        SampleObject object1 = new SampleObject(1, "string", -0.5);
+        logger.info("Object1: " + object1.toString());
+        loa.add(object1);
+        Assert.assertEquals("Single element array size", 1, loa.size());
+        SampleObject object2 = loa.get(0);
+        logger.info("Object2: " + object2.toString());
+        Assert.assertEquals("Original vs. storage object", object1, object2);
+
+        // Release the cache.
+        cache.release();
+    }
+
+    /**
+     * Verify that we can create and read back arrays of various sizes.
+     */
+    @Test
+    public void testArrayBufferAndCache() throws Exception
+    {
+        // Create the array.
+        File testDir = this.prepareTestDir("testArrayMulti");
+        RawByteCache cache = new RawByteCache(testDir, 10000, 1000, 5);
+        cache.prepare();
+
+        for (int size = 1; size < 40; size++)
+        {
+            createAndCompareList(cache, 20, size);
+        }
+
+        // Release the cache.
+        cache.release();
+    }
+
+    /** Creates a list and compares values. */
+    public void createAndCompareList(RawByteCache cache, int localBufferSize,
+            int objectCount) throws IOException
+    {
+        // Create an array and add objects.
+        LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
+                cache, localBufferSize);
+        List<SampleObject> objects = this.createObjectList(loa, objectCount);
+
+        LargeObjectScanner<SampleObject> scanner = loa.scanner();
+        int count = 0;
+        while (scanner.hasNext())
+        {
+            SampleObject original = objects.get(count);
+            SampleObject stored = scanner.next();
+            Assert.assertEquals(
+                    "Original vs. stored object: object=" + original, original,
+                    stored);
+            if (count > 0 && (count + 1) % 50 == 0)
+                logger.info("Checked objects: " + count);
+
+            count++;
+        }
+
+        Assert.assertEquals("Checking scanned object count", objects.size(),
+                count);
+        loa.release();
+    }
+
+    /**
      * Verify that we can create a very large array of objects and read them
      * back using the index.
      */
@@ -78,7 +155,7 @@ public class LargeElementArrayTest
         RawByteCache cache = new RawByteCache(testDir, 10000, 1000, 5);
         cache.prepare();
         LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
-                cache);
+                cache, 100);
 
         // Insert 1000 objects.
         List<SampleObject> objects = this.createObjectList(loa, 1000);
@@ -111,7 +188,7 @@ public class LargeElementArrayTest
         RawByteCache cache = new RawByteCache(testDir, 25000000, 12500000, 5);
         cache.prepare();
         LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
-                cache);
+                cache, 0);
 
         // Insert 100K objects.
         List<SampleObject> objects = this.createObjectList(loa, 100000);
@@ -157,16 +234,22 @@ public class LargeElementArrayTest
         RawByteCache cache = new RawByteCache(testDir, 100000, 1000, 5);
         cache.prepare();
 
-        // Verify different resizing cases.
-        allocateAndResizeList(cache, 4, 0);
-        allocateAndResizeList(cache, 4, 2);
-        allocateAndResizeList(cache, 4, 4);
-        allocateAndResizeList(cache, 10, 0);
-        allocateAndResizeList(cache, 10, 5);
-        allocateAndResizeList(cache, 10, 10);
-        allocateAndResizeList(cache, 100, 0);
-        allocateAndResizeList(cache, 100, 50);
-        allocateAndResizeList(cache, 100, 100);
+        // Verify different resizing cases where the array is still buffered as
+        // Java objects.
+        allocateAndResizeList(cache, 5, 4, 0);
+        allocateAndResizeList(cache, 5, 4, 2);
+        allocateAndResizeList(cache, 5, 4, 4);
+
+        // Verify different resizing cases where the array has spilled to cache.
+        allocateAndResizeList(cache, 2, 4, 0);
+        allocateAndResizeList(cache, 2, 4, 2);
+        allocateAndResizeList(cache, 2, 4, 4);
+        allocateAndResizeList(cache, 5, 10, 0);
+        allocateAndResizeList(cache, 5, 10, 5);
+        allocateAndResizeList(cache, 5, 10, 10);
+        allocateAndResizeList(cache, 20, 100, 0);
+        allocateAndResizeList(cache, 20, 100, 50);
+        allocateAndResizeList(cache, 20, 100, 100);
 
         // Release the cache.
         cache.release();
@@ -195,12 +278,12 @@ public class LargeElementArrayTest
     /**
      * Allocates a list and resizes it.
      */
-    private void allocateAndResizeList(RawByteCache cache, int size1, int size2)
-            throws IOException
+    private void allocateAndResizeList(RawByteCache cache, int localBufferSize,
+            int size1, int size2) throws IOException
     {
         // Generate object list.
         LargeObjectArray<SampleObject> loa = new LargeObjectArray<SampleObject>(
-                cache);
+                cache, localBufferSize);
         List<SampleObject> originals = createObjectList(loa, size1);
         logger.info("Pre-resize list added: size=" + size1 + " cache: "
                 + cache.toString());

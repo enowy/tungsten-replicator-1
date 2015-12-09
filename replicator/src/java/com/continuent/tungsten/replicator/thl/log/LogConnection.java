@@ -217,7 +217,6 @@ public class LogConnection
             cursor = null;
         }
         pendingEvent.clear();
-        ;
         pendingSeqno = UNINITIALIZED;
 
         // Find the log file that contains our sequence number.

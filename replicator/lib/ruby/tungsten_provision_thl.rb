@@ -50,7 +50,7 @@ class TungstenReplicatorProvisionTHL
       TU.cmd_result("#{opt(:mysql_dir)}/use -u root -e \"grant all on *.* to #{opt(:sandbox_user)} identified by '#{opt(:sandbox_password)}' with grant option\"")
     rescue CommandError => ce
       TU.debug(ce)
-      raise "There were issues configure the sandbox MySQL server"
+      raise "There were issues configuring the sandbox MySQL server"
     end
     
     # Calculate the base directory for the binaries so we can include it as
@@ -138,6 +138,7 @@ class TungstenReplicatorProvisionTHL
       script.puts("#{cmd} | tee >(egrep \"^-- CHANGE MASTER\" > #{opt(:change_master_file)}) | #{mysql}")
       script.close()
       File.chmod(0755, script.path())
+      TU.limit_file_permissions(script.path())
       TU.cmd_result("#{script.path()}")
     rescue CommandError => ce
       TU.debug(ce)
@@ -620,7 +621,7 @@ class TungstenReplicatorProvisionTHL
     additional_properties = []
     
     # Options to read from the existing tpm configuration
-    tpm_options = {
+    tpm_host_options = {
       "repl-java-file-encoding" => "repl_java_file_encoding",
       "repl-java-user-timezone" => "repl_java_user_timezone"
     }
@@ -639,10 +640,10 @@ class TungstenReplicatorProvisionTHL
     end    
     
     # Read settings from tpm and include them using the tpm option
-    tpm_options.each{
+    tpm_host_options.each{
       |prop,key|
-      value = TI.setting(TI.setting_key(REPL_SERVICES, opt(:service), key))
-      if value != ""
+      value = TI.setting(key)
+      if value.to_s() != ""
         additional_properties << "#{prop}=#{value}"
       end
     }
@@ -697,7 +698,8 @@ class TungstenReplicatorProvisionTHL
 
       # Use a unique source-id for each iteration so the extractor starts
       # from the current binary log position
-      "property=replicator.source_id=#{TI.hostname()}.sandbox.#{Process.pid}"
+      "property=replicator.source_id=#{TI.hostname()}.sandbox.#{Process.pid}",
+      "svc-reposition-on-source-id-change=true"
     ] + additional_properties
   end
   
@@ -788,6 +790,10 @@ class TungstenReplicatorProvisionTHL
   
   def get_dsctl_set_command(svc, position)
     "dsctl -service #{svc} set -seqno #{position["seqno"]} -epoch #{position["epoch_number"]} -event-id #{position["eventid"].split(";")[0]} -source-id #{position["source_id"]}"
+  end
+  
+  def clear_logs_during_prepare
+    true
   end
   
   def self.interrupted?(val = nil)

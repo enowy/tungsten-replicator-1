@@ -5,6 +5,10 @@ class DirectTopology
     REPL_ROLE_DI
   end
   
+  def enable_dedicated_extractor_datasource?
+    true
+  end
+  
   def self.get_name
     'direct'
   end

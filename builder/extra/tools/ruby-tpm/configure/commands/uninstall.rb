@@ -43,7 +43,7 @@ class UninstallClusterCommand
   
   def get_validation_checks
     [
-      CurrentReleaseDirectoryCheck.new()
+      CurrentReleaseDirectoryWarning.new()
     ]
   end
   
@@ -51,6 +51,14 @@ class UninstallClusterCommand
     [
       UninstallClusterDeploymentStep
     ]
+  end
+  
+  def use_remote_package?
+    true
+  end
+  
+  def get_default_remote_package_path
+    false
   end
   
   def self.display_command
@@ -133,13 +141,16 @@ module UninstallClusterDeploymentStep
           @config.getProperty([REPL_SERVICES, rs_alias, REPL_LOG_DIR])
         ].each{
           |dir|
-          
+          # Don't delete the base directory if it's not under the home
+          # directory. This prevents deleting a symlink or special path
           if dir =~ /#{@config.getProperty(HOME_DIRECTORY)}/
             FileUtils.rmtree(dir)
           else
             FileUtils.rmtree(Dir.glob(dir + "/*"))
           end
         }
+        
+        trigger_event(:uninstall_replication_service, rs_alias)
       }
       
       if replicator_started == true
@@ -148,27 +159,47 @@ module UninstallClusterDeploymentStep
     end
     
     # Only remove the files in the share directory that we put in place
-    sharedir = Regexp.new("^#{@config.getProperty(HOME_DIRECTORY)}/share")
-    watchedfiles = @config.getProperty(CURRENT_RELEASE_DIRECTORY) + "/.watchfiles"
-    if File.exist?(watchedfiles)
-      File.open(watchedfiles, 'r') do |file|
-        file.read.each_line do |line|
-          line.strip!
-          if line =~ sharedir
-            FileUtils.rm_f(line)
-            original_file = File.dirname(line) + "/." + File.basename(line) + ".orig"
-            FileUtils.rm_f(original_file)
-          end
-        end
+    Dir.glob("#{@config.getProperty(HOME_DIRECTORY)}/share/.*.orig").each{
+      |file|
+      original_dir = File.dirname(file)
+      original_filename = File.basename(file)
+      
+      match = original_filename.match(/\.(.*)\.orig/)
+      if match != nil
+        watched_filename = match[1]
+        debug("Remove #{watched_filename} and #{original_filename}")
+        FileUtils.rm_f("#{original_dir}/#{watched_filename}")
+        FileUtils.rm_f("#{original_dir}/#{original_filename}")
+      else
+        debug("Unable to find a watched file for #{original_filename}")
       end
-    end
+    }
     
     if File.exist?("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
+      Configurator.instance.debug("Remove MySQL Connector/J")
       linked = File.readlink("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
       FileUtils.rm_f(linked)
       FileUtils.rm_f("#{@config.getProperty(HOME_DIRECTORY)}/share/mysql-connector-java.jar")
     end
+    
+    # Look for the deployed files for each of these and delete if present
+    [JAVA_TLS_KEYSTORE_PATH, JAVA_JGROUPS_KEYSTORE_PATH].each {
+      |key|
+      source_file = @config.getProperty(key)
+      target_file = @config.getTemplateValue(key)
+      
+      if source_file == target_file
+        # Do not delete the file because it was provided to the installation
+        next
+      end
+      
+      if File.exist?(target_file)
+        Configurator.instance.debug("Remove #{target_file}")
+        File.unlink(target_file)
+      end
+    }
 
+    Configurator.instance.debug("Remove home directory contents")
     FileUtils.rmtree("#{@config.getProperty(HOME_DIRECTORY)}/#{LOGS_DIRECTORY_NAME}")
     FileUtils.rmtree("#{@config.getProperty(HOME_DIRECTORY)}/#{METADATA_DIRECTORY_NAME}")
     FileUtils.rmtree(@config.getProperty(CONFIG_DIRECTORY))
@@ -204,6 +235,29 @@ module UninstallClusterDeploymentStep
       }
     rescue Timeout::Error
       raise "The MySQL server has taken too long to start"
+    end
+  end
+end
+
+class CurrentReleaseDirectoryWarning < ConfigureValidationCheck
+  include LocalValidationCheck
+  
+  def set_vars
+    @title = "Current release directory"
+  end
+  
+  def validate
+    validation_directory = @config.getProperty(CURRENT_RELEASE_DIRECTORY)
+    debug "Checking #{validation_directory}"
+    
+    user = @config.getProperty(USERID)
+    
+    # The -D flag will tell us if it is a directory
+    is_directory = ssh_result("if [ -d #{validation_directory} ]; then echo 0; else echo 1; fi", @config.getProperty(HOST), user)
+    unless is_directory == "0"
+      warning "#{validation_directory} does not exist"
+    else
+      debug "#{validation_directory} exists"
     end
   end
 end

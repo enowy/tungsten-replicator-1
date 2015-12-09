@@ -64,15 +64,16 @@ import com.continuent.tungsten.replicator.thl.log.LogConnection;
  */
 public class THLParallelQueueBasicTest
 {
-    private static Logger             logger = Logger.getLogger(THLParallelQueueBasicTest.class);
+    private static Logger             logger = Logger
+            .getLogger(THLParallelQueueBasicTest.class);
     private static TungstenProperties testProperties;
 
     // Each test uses this pipeline and runtime.
-    private Pipeline                  pipeline;
-    private ReplicatorRuntime         runtime;
+    private Pipeline          pipeline;
+    private ReplicatorRuntime runtime;
 
     // Test helper instance.
-    private THLParallelQueueHelper    helper = new THLParallelQueueHelper();
+    private THLParallelQueueHelper helper = new THLParallelQueueHelper();
 
     /** Define a commit action to introduce delay into commit operations. */
     class RandomCommitAction implements CommitAction
@@ -108,7 +109,8 @@ public class THLParallelQueueBasicTest
         if (testPropertiesName == null)
         {
             testPropertiesName = "test.properties";
-            logger.info("Setting test.properties file name to default: test.properties");
+            logger.info(
+                    "Setting test.properties file name to default: test.properties");
         }
 
         // Load properties file.
@@ -151,8 +153,8 @@ public class THLParallelQueueBasicTest
         logger.info("##### testPipelineStartStop #####");
 
         // Set up and start pipelines.
-        TungstenProperties conf = helper.generateTHLParallelQueueProps(
-                "testPipelineStartStop", 1);
+        TungstenProperties conf = helper
+                .generateTHLParallelQueueProps("testPipelineStartStop", 1);
         runtime = new ReplicatorRuntime(conf, new MockOpenReplicatorContext(),
                 ReplicatorMonitor.getInstance());
         runtime.configure();
@@ -175,8 +177,8 @@ public class THLParallelQueueBasicTest
         logger.info("##### testSingleChannel #####");
 
         // Set up and start pipelines.
-        TungstenProperties conf = helper.generateTHLParallelQueueProps(
-                "testSingleChannel", 1);
+        TungstenProperties conf = helper
+                .generateTHLParallelQueueProps("testSingleChannel", 1);
         runtime = new ReplicatorRuntime(conf, new MockOpenReplicatorContext(),
                 ReplicatorMonitor.getInstance());
         runtime.configure();
@@ -199,8 +201,8 @@ public class THLParallelQueueBasicTest
         logger.info("##### testMultipleChannels #####");
 
         // Set up and start pipelines.
-        TungstenProperties conf = helper.generateTHLParallelQueueProps(
-                "testMultipleChannels", 1);
+        TungstenProperties conf = helper
+                .generateTHLParallelQueueProps("testMultipleChannels", 1);
         runtime = new ReplicatorRuntime(conf, new MockOpenReplicatorContext(),
                 ReplicatorMonitor.getInstance());
         runtime.configure();
@@ -344,10 +346,12 @@ public class THLParallelQueueBasicTest
                         + " milliseconds");
                 break;
             }
-            else
-                Thread.sleep(1000);
+
+            logger.info("Sleeping 1 second to wait for stage shutdown");
+            Thread.sleep(1000);
         }
-        Assert.assertTrue("Final stage should be shut down", qToMq.isShutdown());
+        Assert.assertTrue("Final stage should be shut down",
+                qToMq.isShutdown());
 
         // Confirm that no event greater than 49 reaches the multi-queue
         // even if we wait for it.
@@ -573,7 +577,8 @@ public class THLParallelQueueBasicTest
                     {
                         ReplDBMSEvent rde = helper.createEvent(seqno,
                                 (short) fragno, (fragno >= 2), shard, ts);
-                        THLEvent thlEvent = new THLEvent(rde.getSourceId(), rde);
+                        THLEvent thlEvent = new THLEvent(rde.getSourceId(),
+                                rde);
                         conn.store(thlEvent, false);
                     }
                     break;
@@ -611,10 +616,10 @@ public class THLParallelQueueBasicTest
     // Verify that events are committed to a particular store.
     private void verifyStoredEvents(Pipeline pipeline, Store store,
             long firstSeqno, long lastSeqno) throws InterruptedException,
-            ExecutionException, TimeoutException
+                    ExecutionException, TimeoutException
     {
-        Future<ReplDBMSHeader> wait = pipeline.watchForCommittedSequenceNumber(
-                lastSeqno, false);
+        Future<ReplDBMSHeader> wait = pipeline
+                .watchForCommittedSequenceNumber(lastSeqno, false);
         ReplDBMSHeader lastEvent = wait.get(5, TimeUnit.SECONDS);
         Assert.assertEquals("Expected " + (lastSeqno + 1) + " server events",
                 lastSeqno, lastEvent.getSeqno());
@@ -851,8 +856,8 @@ public class THLParallelQueueBasicTest
                             shardTotal++;
 
                         if (shardTotal % 30000 == 0)
-                            logger.info("Tracked shard entries read:"
-                                    + shardTotal);
+                            logger.info(
+                                    "Tracked shard entries read:" + shardTotal);
                     }
                 }
             }

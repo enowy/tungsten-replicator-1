@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Vit Spinka
- * Contributor(s):
+ * Contributor(s): Stephane Giron, Robert Hodges
  */
 
 package com.continuent.tungsten.replicator.extractor.oracle.redo;
@@ -44,7 +44,7 @@ import com.continuent.tungsten.replicator.dbms.RowChangeData.ActionType;
 import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
 
 /**
- * Represents one logical change record (=one entry in the plog). 
+ * Represents one logical change record (=one entry in the plog).
  */
 class PlogLCR implements Serializable
 {
@@ -70,6 +70,7 @@ class PlogLCR implements Serializable
     public java.sql.Timestamp timestamp;
     public String             tableOwner   = "";
     public String             tableName    = "";
+    public int                tableId      = -1;
     ArrayList<oneColVal>      columnValues = new ArrayList<oneColVal>();
 
     public String SQLText       = "";
@@ -214,7 +215,7 @@ class PlogLCR implements Serializable
          *             SerialException, SQLException
          */
         public void parseValue() throws UnsupportedEncodingException,
-                ReplicatorException, SerialException, SQLException
+                ReplicatorException, SQLException
         {
 
             if (alreadyParsedValue)
@@ -290,13 +291,15 @@ class PlogLCR implements Serializable
                                     ((int) barr[dataoff + o] & 0xff) - 1));
                     }
                     BigDecimal bd = new BigDecimal(rtval.toString());
-                    /*
-                     * +2 because we put . before all digits; but Oracle format
-                     * puts if after first pair. +2 in scale offsets this
-                     */
+                    // +2 because we put . before all digits; but Oracle format
+                    // puts if after first pair. +2 in scale offsets this. Also
+                    // we recreate the big decimal to avoid triggering
+                    // scientific notation on printing.
                     bd = bd.scaleByPowerOfTen(shift * 2 + 2);
-                    columnVal.setValue(bd);
-                    columnSpec.setLength(bd.toPlainString().length());
+                    String bdPlainString = bd.toPlainString();
+                    BigDecimal bd2Rescaled = new BigDecimal(bdPlainString);
+                    columnVal.setValue(bd2Rescaled);
+                    columnSpec.setLength(bdPlainString.length());
                 }
             }
             else
@@ -649,8 +652,6 @@ class PlogLCR implements Serializable
      * Fill in the given oneRowChange with info from this LCR
      * 
      * @param oneRowChange where to set all the data
-     * @throws UnsupportedEncodingException, ReplicatorException,
-     *             SerialException, SQLException
      */
     public void parseDataTypes(OneRowChange oneRowChange)
             throws UnsupportedEncodingException, ReplicatorException,
@@ -821,5 +822,21 @@ class PlogLCR implements Serializable
             hexChars[j * 2 + 1] = hexArray[v & 0x0F];
         }
         return new String(hexChars);
+    }
+
+    /**
+     * Print summary of LCR contents.
+     */
+    public String toString()
+    {
+        StringBuffer sb = new StringBuffer();
+        sb.append(this.getClass().getSimpleName()).append(":");
+        sb.append(" XID=").append(XID);
+        sb.append(" type=").append(type);
+        sb.append(" subtype=").append(subtype);
+        sb.append(" SCN=").append(SCN);
+        sb.append(" owner=").append(tableOwner);
+        sb.append(" table=").append(tableName);
+        return sb.toString();
     }
 }

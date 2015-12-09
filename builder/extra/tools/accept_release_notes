@@ -1,0 +1,180 @@
+#!/bin/bash
+# VMware Continuent Tungsten Replicator
+# Copyright (C) 2015 VMware, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+#      
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+findWritableDirectory() {
+	local testdir=$1
+	if [ "${testdir}" != "" ]; then
+		if [ -d $testdir ]; then
+			if [ -w $testdir ]; then
+				DIR=$testdir
+			fi
+		fi
+	fi
+}
+
+markAccepted() {
+	local filename=$1
+	STAMP=`/bin/date '+%Y%m%d%H%M%S'`
+	echo $STAMP > $filename
+}
+
+markUnaccepted() {
+	local filename=$1
+	if [ -f $filename ]; then
+		if [ -w $filename ]; then
+			rm $filename
+		fi
+	fi
+	
+	echo "
+Release Notes NOT accepted, exiting.
+
+"
+}
+
+usage() {
+	local code=$1
+	echo "USAGE: $0 [-test] [-accept|-y] [-h|-help]"
+	exit $code
+}
+
+TEST_ACCEPTANCE=0
+AUTO_ACCEPT=0
+if [ $# -gt 1 ]; then
+	>&2 echo "ERROR: there may only be a maximum of one argument"
+	usage 1
+elif [ $# -eq 1 ]; then
+	if [ "$1" == "-test" ]; then
+		TEST_ACCEPTANCE=1
+	elif [ "$1" == "-accept" ]; then
+		AUTO_ACCEPT=1
+	elif [ "$1" == "-y" ]; then
+		AUTO_ACCEPT=1
+	elif [ "$1" == "-help" ]; then
+		usage 0
+	elif [ "$1" == "-h" ]; then
+		usage 0
+	else
+		usage 1
+	fi
+fi
+
+BASE=`dirname $0`/..
+CODE=`cat ${BASE}/.manifest | grep "PRODUCT CODE:" | awk -F":" '{print $2}' | tr -d " "`
+VERSION=`cat ${BASE}/.manifest | grep "FULL VERSION:" | awk -F":" '{print $2}' | tr -d " "`
+RELEASE_NOTES="${BASE}/RELEASE_NOTES"
+
+if [ ! -f $RELEASE_NOTES ]; then
+	exit 0
+fi
+
+DIR=""
+
+if [ "$DIR" == "" ]; then
+	findWritableDirectory "/etc/tungsten"
+fi
+
+if [ "$DIR" == "" ]; then
+	findWritableDirectory $CONTINUENT_PROFILES
+fi
+
+if [ "$DIR" == "" ]; then
+	findWritableDirectory $CONTINUENT_ROOT
+fi
+
+if [ "$DIR" == "" ]; then
+	findWritableDirectory "/tmp"
+fi
+
+if [ "$DIR" == "" ]; then
+	echo "ERROR: Unable to find a writable directory to store acceptance markers"
+	exit 1
+fi
+
+### define dot file
+DOTFILE="$DIR/.tpm_release_accepted-$CODE-$VERSION"
+
+if [ $AUTO_ACCEPT -eq 1 ]; then
+	markAccepted $DOTFILE
+	exit 0
+fi
+
+### check for existing dot file
+if [ -r "$DOTFILE" ]; then
+	COUNT=`cat $DOTFILE | wc -c`
+	if [ $COUNT = 15 ]; then
+		exit 0
+	else
+		>&2 echo ERROR: INVALID release acceptance file $DOTFILE, exiting. You can delete or rename that file to get past this error.
+		exit 1
+	fi
+fi
+
+# If test-mode is enabled, exit with an error at this point because
+# the release notes have not been accepted
+if [ $TEST_ACCEPTANCE -eq 1 ]; then
+	exit 1
+fi
+
+### check for whiptail interactive GUI tools
+WT=`which whiptail`
+### disabling whiptail use until 5.1.0
+WT=""
+if [ -x "$WT" ]; then
+
+	#BUTTON="Proceed to Acceptance Question"
+	BUTTON="NEXT >>";
+
+	LINES=`tput lines`
+	COLS=`tput cols`
+	whiptail --title "RELEASE NOTES" --scrolltext --fb --ok-button "$BUTTON" --textbox $RELEASE_NOTES $LINES $COLS
+
+	if (whiptail --title "RELEASE ACCEPTANCE" --defaultno --fb --yesno "Do you accept the $VERSION release as presented?" 10 $COLS) then
+		#echo "You chose Yes - Exit status was $?."
+		ANSWER="yes"
+	else
+		#echo "You chose No - Exit status was $?."
+		ANSWER="no"
+	fi
+else
+	MORE=`which more`
+	#LESS=`which less`
+	if [ -x "$MORE" ]; then
+		$MORE -d $RELEASE_NOTES
+	#elif [ -x "x$LESS" ]; then
+		#$LESS $RELEASE_NOTES
+	else
+		cat $TEXTFILE
+	fi
+	echo "
+	
+Do you accept the $VERSION release as presented?
+
+If so, please type 'yes', followed by the 'Enter/Return' key. Any other response exits without acceptance.
+
+"
+	echo -n "Your response? "
+	read ANSWER
+fi
+
+if [ "$ANSWER" = "yes" ]; then
+	markAccepted $DOTFILE
+	exit 0
+else
+	markUnaccepted $DOTFILE
+	exit 1
+fi
+

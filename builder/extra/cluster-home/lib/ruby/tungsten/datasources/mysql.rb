@@ -8,6 +8,10 @@ class TungstenScriptMySQLDatasource < TungstenScriptDatasource
     end
   end
   
+  def title
+    "MySQL"
+  end
+  
   def _stop_server
     begin
       pid_file = get_variable("pid_file")

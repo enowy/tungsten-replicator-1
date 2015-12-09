@@ -79,6 +79,14 @@ module Topology
     end
   end
   
+  def disable_extractor?
+    false.to_s()
+  end
+  
+  def enable_dedicated_extractor_datasource?
+    false
+  end
+  
   def get_dataservice_alias
     nil
   end

@@ -34,8 +34,8 @@ import com.continuent.tungsten.replicator.conf.ReplicatorConf;
 
 /**
  * This class defines a OpenReplicatorSignaler that implements a simple utility
- * to access ReplicatorManager JMX interface and send signal for the replicator manager. 
- * See the printHelp() command for a description of current commands.
+ * to access ReplicatorManager JMX interface and send signal for the replicator
+ * manager. See the printHelp() command for a description of current commands.
  * 
  * @author <a href="mailto:seppo.jaakola@continuent.com">Seppo Jaakola</a>
  * @version 1.0
@@ -43,17 +43,17 @@ import com.continuent.tungsten.replicator.conf.ReplicatorConf;
 public class OpenReplicatorSignaler
 {
     // Statics to read from stdin.
-    static InputStreamReader converter            = new InputStreamReader(
-                                                          System.in);
-    static BufferedReader    stdin                = new BufferedReader(
-                                                          converter);
+    static InputStreamReader    converter            = new InputStreamReader(
+                                                             System.in);
+    static BufferedReader       stdin                = new BufferedReader(
+                                                             converter);
 
-    private static final String RMI_HOST = "localhost";
-    private static final int    RMI_PORT = 10000;
-    
+    private static final String RMI_HOST             = "localhost";
+    private static final int    RMI_PORT             = 10000;
+
     // Instance variables.
-    private boolean          expectLostConnection = false;
-    private ArgvIterator     argvIterator;
+    private boolean             expectLostConnection = false;
+    private ArgvIterator        argvIterator;
 
     OpenReplicatorSignaler(String[] argv)
     {
@@ -98,7 +98,7 @@ public class OpenReplicatorSignaler
         // Set defaults for properties.
         String rmiHost = RMI_HOST;
         int rmiPort = RMI_PORT;
-        
+
         boolean verbose = false;
         String command = null;
 
@@ -142,10 +142,11 @@ public class OpenReplicatorSignaler
             try
             {
                 // Connect.
-                JMXConnector conn = JmxManager.getRMIConnector(rmiHost,
-                        rmiPort, ReplicatorConf.RMI_DEFAULT_SERVICE_NAME);
-                manager = (OpenReplicatorManagerMBean) JmxManager.getMBeanProxy(
-                        conn, OpenReplicatorManager.class, false);
+                JmxManager jmxManager = new JmxManager(rmiHost, rmiPort,
+                        ReplicatorConf.RMI_DEFAULT_SERVICE_NAME);
+                JMXConnector conn = jmxManager.getLocalRMIConnector();
+                manager = (OpenReplicatorManagerMBean) JmxManager
+                        .getMBeanProxy(conn, OpenReplicatorManager.class, false);
             }
             catch (ServerRuntimeException e)
             {
@@ -164,7 +165,8 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalError, msg.toString());
+                    manager.signal(OpenReplicatorManagerMBean.signalError,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.SYNCED))
                 {
@@ -173,7 +175,8 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalSynced, msg.toString());
+                    manager.signal(OpenReplicatorManagerMBean.signalSynced,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.RESTORED))
                 {
@@ -182,7 +185,8 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalRestored, msg.toString());
+                    manager.signal(OpenReplicatorManagerMBean.signalRestored,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.OFFLINE))
                 {
@@ -191,7 +195,9 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalOfflineReached, msg.toString());
+                    manager.signal(
+                            OpenReplicatorManagerMBean.signalOfflineReached,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.SHUTDOWN))
                 {
@@ -200,7 +206,8 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalShutdown, msg.toString());
+                    manager.signal(OpenReplicatorManagerMBean.signalShutdown,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.CONSISTENCY))
                 {
@@ -209,7 +216,9 @@ public class OpenReplicatorSignaler
                     {
                         msg.append(argvIterator.next());
                     }
-                    manager.signal(OpenReplicatorManagerMBean.signalConsistencyFail, msg.toString());
+                    manager.signal(
+                            OpenReplicatorManagerMBean.signalConsistencyFail,
+                            msg.toString());
                 }
                 else if (command.equals(Commands.HELP))
                 {

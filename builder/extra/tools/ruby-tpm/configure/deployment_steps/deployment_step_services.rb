@@ -6,7 +6,7 @@ module ConfigureDeploymentStepServices
       ConfigureCommitmentMethod.new("stop_replication_services", -1, 1),
       ConfigureDeploymentMethod.new("apply_config_services", 0, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT),
       ConfigureCommitmentMethod.new("update_metadata", 1, 0),
-      ConfigureCommitmentMethod.new("deploy_services", 1, 1),
+      ConfigureCommitmentMethod.new("deploy_services", 1, 40),
       ConfigureCommitmentMethod.new("start_replication_services_unless_provisioning", 2, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT-1, ConfigureDeploymentStepParallelization::BY_SERVICE),
       ConfigureCommitmentMethod.new("wait_for_manager", 2, ConfigureDeploymentStepMethod::FINAL_STEP_WEIGHT, ConfigureDeploymentStepParallelization::BY_SERVICE),
       ConfigureCommitmentMethod.new("start_connector", 4, 1, ConfigureDeploymentStepParallelization::NONE),
@@ -188,9 +188,10 @@ module ConfigureDeploymentStepServices
     out.puts "# Start all services using local service scripts"
     out.puts "THOME=`dirname $0`/../.."
     out.puts "cd $THOME"
-    @services.sort.reverse.each { |svc| out.puts svc + " start" }
+    get_services().each { |svc| out.puts svc + " start" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     info "GENERATED FILE: " + script
   end
@@ -203,9 +204,10 @@ module ConfigureDeploymentStepServices
     out.puts "# Stop all services using local service scripts"
     out.puts "THOME=`dirname $0`/../.."
     out.puts "cd $THOME"
-    @services.sort.each { |svc| out.puts svc + " stop" }
+    get_services().reverse.each { |svc| out.puts svc + " stop" }
     out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
     out.chmod(0755)
+    Configurator.instance.limit_file_permissions(out.path())
     out.close
     info "GENERATED FILE: " + script
   end
@@ -220,7 +222,7 @@ module ConfigureDeploymentStepServices
       out.puts "THOME=`dirname $0`/../.."
       out.puts "cd $THOME"
       priority=80
-      @services.each { |svc|
+      get_services().each { |svc|
         svcname = File.basename svc
         out.puts get_svc_command("ln -fs $PWD/" + svc + " /etc/init.d/t" + svcname)
         if Configurator.instance.distro?() == OS_DISTRO_REDHAT
@@ -232,6 +234,7 @@ module ConfigureDeploymentStepServices
       }
       out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
       out.chmod(0755)
+      Configurator.instance.limit_file_permissions(out.path())
       out.close
       info "GENERATED FILE: " + script
     end
@@ -246,7 +249,7 @@ module ConfigureDeploymentStepServices
       out.puts "# Remove services from /etc directories"
       out.puts "THOME=`dirname $0`/../.."
       out.puts "cd $THOME"
-      @services.each { |svc|
+      get_services().each { |svc|
         svcname = File.basename svc
         if Configurator.instance.distro?() == OS_DISTRO_REDHAT
           out.puts get_svc_command("/sbin/chkconfig --del t" + svcname)
@@ -258,6 +261,7 @@ module ConfigureDeploymentStepServices
       }
       out.puts "# AUTO-CONFIGURED: #{DateTime.now}"
       out.chmod(0755)
+      Configurator.instance.limit_file_permissions(out.path())
       out.close
       info "GENERATED FILE: " + script
     end
@@ -372,10 +376,13 @@ module ConfigureDeploymentStepServices
         if File.exists?(source_replicator_properties)
           info("Upgrade the previous replicator dynamic properties")
           FileUtils.mv(source_replicator_properties, target_dynamic_properties)
+          Configurator.instance.limit_file_permissions(target_dynamic_properties)
         end
         
         Dir[thl_directory + "/thl.*"].sort().each do |file| 
+          file_target = service_thl_directory + '/' + File.basename(file)
           FileUtils.mv(file, service_thl_directory)
+          Configurator.instance.limit_file_permissions(file_target)
         end
       rescue IgnoreError
       end

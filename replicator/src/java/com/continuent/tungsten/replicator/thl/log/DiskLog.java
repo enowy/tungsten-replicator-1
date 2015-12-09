@@ -513,18 +513,13 @@ public class DiskLog
                                         "Last log file consists of header plus rotate log event only: "
                                                 + fileName);
                             }
-
-                            // Update the index as this completes the current
-                            // index entry.
+                            // Truncate the new last log file after the last
+                            // complete event (preceding the rotate event).
+                            // The rotate event will be inserted again when THL
+                            // needs it, as it stores a new event.
+                            logFile.setLength(lastCompleteEventOffset);
+                            // Update the max indexed event
                             index.setMaxIndexedSeqno(maxSeqno);
-
-                            // Create the next file.
-                            logFileIndexPos = fileName.lastIndexOf(".");
-                            fileIndex = Long.valueOf(fileName
-                                    .substring(logFileIndexPos + 1));
-                            fileIndex = (fileIndex + 1) % Integer.MAX_VALUE;
-                            logFile = this.startNewLogFile(maxSeqno + 1);
-                            logFileIsEmpty = false;
                         }
 
                         // Nothing left to read, so we break from inner

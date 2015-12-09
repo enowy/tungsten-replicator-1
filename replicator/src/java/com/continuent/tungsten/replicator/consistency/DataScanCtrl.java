@@ -1369,9 +1369,10 @@ public class DataScanCtrl
     {
         try
         {
-            JMXConnector connMaster = JmxManager.getRMIConnector(rmiHost,
+            JmxManager jmxManager = new JmxManager(rmiHost,
                     Integer.valueOf(rmiPort),
                     ReplicatorConf.RMI_DEFAULT_SERVICE_NAME, null);
+            JMXConnector connMaster = jmxManager.getLocalRMIConnector();
             OpenReplicatorManagerMBean replicator = (OpenReplicatorManagerMBean) JmxManager
                     .getMBeanProxy(connMaster, OpenReplicatorManager.class,
                             OpenReplicatorManagerMBean.class, service, false,

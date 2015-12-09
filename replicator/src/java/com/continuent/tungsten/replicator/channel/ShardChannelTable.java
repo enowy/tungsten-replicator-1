@@ -107,7 +107,7 @@ public class ShardChannelTable
 
         // Create the table if it does not exist.
         if (database
-                .findTable(channelTable.getSchema(), channelTable.getName()) == null)
+                .findTungstenTable(channelTable.getSchema(), channelTable.getName()) == null)
         {
             database.createTable(this.channelTable, false, tableType);
         }

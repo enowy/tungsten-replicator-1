@@ -25,7 +25,13 @@ class DeploySingleConfigCommand
   
   def get_deployment_object_modules(config)
     if (klass = command_class())
-      Module.const_get(klass).new(@config).get_deployment_object_modules(config)
+      # Create a mockup of the initial command using the global configuration
+      actual_command = Module.const_get(klass).new(@config)
+     
+      # Ask for a list of modules using a host-specific configuration
+      base = actual_command.get_deployment_object_modules(config)
+      additional = AdditionalDeploymentStep.get(actual_command, config)
+      return base + additional
     else
       super()
     end

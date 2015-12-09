@@ -20,7 +20,7 @@
 
 package com.continuent.tungsten.common.file;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.junit.Test;
 

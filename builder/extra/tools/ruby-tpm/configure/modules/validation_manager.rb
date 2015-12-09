@@ -36,6 +36,10 @@ module ManagerCheck
     return [DATASERVICES, get_dataservice, key]
   end
   
+  def get_group_option_key(key)
+    [DATASERVICE_MANAGER_OPTIONS, get_dataservice(), key]
+  end
+  
   def self.included(subclass)
     @submodules ||= []
     @submodules << subclass
