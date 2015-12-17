@@ -197,6 +197,7 @@ class Configurator
       :paranoid => false
     }
     @options.ssh_options = {}
+    @options.retry_rsync_return_codes = []
     @options.config = nil
     @options.log_name = nil
     
@@ -506,7 +507,15 @@ class Configurator
 
                                           @options.ssh_options[val_parts[0].to_sym] = val_parts[1]
                                         }
-    
+
+      opts.on("--retry-rsync-return-code String") { |val|
+                                          code = val.to_i()
+                                          if code.to_s() != val
+                                            error "Invalid value #{val} given for '--retry-rsync-return-code'. The value should be an integer."
+                                          else
+                                            @options.retry_rsync_return_codes << code
+                                          end
+                                        }
       # Argument used by the validation and deployment handlers
       opts.on("--stream")               {@options.stream_output = true }
       opts.on("--tty")                  {@options.fake_tty = true }
@@ -1540,6 +1549,11 @@ class Configurator
     end
     
     extra_options
+  end
+  
+  def rsync_retry_return_codes
+    # Return return codes 12, 23 and any provided on the command line
+    [12, 23] + @options.retry_rsync_return_codes
   end
   
   def start_alive_thread
