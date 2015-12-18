@@ -2153,13 +2153,14 @@ class MySQLMyISAMCheck < ConfigureValidationCheck
     if datadir == nil
       warning "Unable to determine datadir"
     else
-      # Define the find command start
-      find_cmd = "find '#{datadir}' -path '#{datadir}mysql' -prune -o -path '#{datadir}performance_schema' -prune -o -path '#{datadir}information_schema' "
+      # Strip trailing slash if it exists - OSX find didn't like it
+      datadir = datadir.chomp("/")
+      find_cmd = "find '#{datadir}' -path '#{datadir}/mysql' -prune -o -path '#{datadir}/performance_schema' -prune -o -path '#{datadir}/information_schema' "
 
       mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
       if mysql_version >= 5.7
         # Add the sys schema to the exlusions in the find command. It is new in 5.7 and we don't need to search it.
-        find_cmd = find_cmd + "-prune -o -path '#{datadir}sys' "
+        find_cmd = find_cmd + "-prune -o -path '#{datadir}/sys' "
       end
 
       # Now complete the find command with the filename we are looking for.
