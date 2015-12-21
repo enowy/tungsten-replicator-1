@@ -264,7 +264,7 @@ class MatchingHomeDirectoryCheck < ConfigureValidationCheck
     unless File.exists?("#{@config.getProperty(HOME_DIRECTORY)}/tungsten")
       error("You are running from a configured directory but the new configuration does not update the current directory.")
     else
-      unless File.readlink("#{@config.getProperty(HOME_DIRECTORY)}/tungsten") == Configurator.instance.get_base_path()
+      unless File.expand_path(File.readlink("#{@config.getProperty(HOME_DIRECTORY)}/tungsten")) == File.expand_path(Configurator.instance.get_base_path())
         error("You are running from a configured directory but the new configuration does not update the current directory.")
       end
     end
