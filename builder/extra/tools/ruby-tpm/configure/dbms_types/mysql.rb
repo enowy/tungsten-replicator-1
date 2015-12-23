@@ -2252,3 +2252,67 @@ class MySQLSuperReadOnlyCheck < ConfigureValidationCheck
     super() && mysql_version >= 5.7
   end
 end
+
+class MySQLLoadDataInfilePermissionsCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL Load Data Infile permissions check"
+  end
+
+  def validate
+    info("Checking that MySQL will have permissions to read a replicated load data infile")
+
+    error_text = %{
+      The OS user that runs MySQL Server needs to be a member of the tungsten user's primary group.
+      This is required in order to support 'LOAD DATA LOCAL INFILE', if you know that you do not use that command,
+      you may skip this check by adding 'skip-validation-check=MySQLLoadDataInfilePermissionsCheck' to your tpm configuration.
+    }.gsub(/\s+/, " ").strip
+
+    # Get the user that mysqld is running as
+    conf_file = @config.getProperty(get_applier_key(REPL_MYSQL_CONF))
+    begin
+      mysqld_user = cmd_result("my_print_defaults --config-file=#{conf_file} mysqld|grep '^--user='").split("=")[-1].strip()
+      if mysqld_user.to_s() == ""
+        mysqld_user = 'mysql'
+      end
+    rescue CommandError
+        mysqld_user = 'mysql'
+    end
+
+    # Find the tungsten user from the configuration
+    tungsten_user = @config.getProperty("user")
+
+    # Get the tungsten user's primary group
+    tungsten_group  = cmd_result("id -ng #{tungsten_user}")
+
+    # Check that the mysql user is a member of the tungsten users primary group
+    begin
+      cmd_result("id -nG #{mysqld_user} | grep -qw #{tungsten_group}")
+    rescue CommandError
+      error(error_text)
+    end
+  end
+
+  def enabled?
+    # This check is only needed on slaves unless running on a cluster, in which case all members should be checked.
+    if get_topology().is_a?(ClusterSlaveTopology) == true || @config.getProperty(REPL_ROLE) == "slave"
+      is_enabled = true
+
+      # If DISABLE_SECURITY_CONTROLS is set disable check
+      if @config.getProperty(DISABLE_SECURITY_CONTROLS) == "true"
+        is_enabled = false
+      end
+
+      # If FILE_PROTECTION_LEVEL is set to none disable check
+      if @config.getProperty(FILE_PROTECTION_LEVEL) == "none"
+        is_enabled = false
+      end
+    else
+      is_enabled = false
+    end
+    super() && get_applier_datasource().is_a?(MySQLDatabasePlatform) && is_enabled
+  end
+end
+
