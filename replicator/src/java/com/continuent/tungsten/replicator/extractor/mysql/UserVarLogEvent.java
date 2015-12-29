@@ -136,6 +136,12 @@ public class UserVarLogEvent extends LogEvent
                 variableType = LittleEndianConversion.convert1ByteToInt(buffer,
                         offset);
                 offset = offset + MysqlBinlog.UV_VAL_TYPE_SIZE;
+                
+                int charset =  LittleEndianConversion.convert4BytesToInt(buffer, offset);
+                if (logger.isDebugEnabled())
+                    logger.debug("Found charset = " + charset + " / "
+                            + MysqlBinlog.getMySQLCharset(charset)); 
+                
                 offset = offset + MysqlBinlog.UV_CHARSET_NUMBER_SIZE;
                 variableValueLength = (int) LittleEndianConversion
                         .convert4BytesToLong(buffer, offset);
@@ -152,11 +158,18 @@ public class UserVarLogEvent extends LogEvent
                 switch (variableType)
                 {
                     case STRING_RESULT :
-                        // TODO: use charset info
-                        value = "'"
-                                + new String(buffer, variableValueIndex,
-                                        variableValueLength).replaceAll("'",
-                                        "''") + "'";
+                        if (MysqlBinlog.getMySQLCharset(charset).length() == 0)
+                            value = "'" + new String(buffer, variableValueIndex,
+                                    variableValueLength).replaceAll("'", "''")
+                                    + "'";
+                        else
+                            value = "_" + MysqlBinlog.getMySQLCharset(charset)
+                                    + " 0x"
+                                    + hexdump(buffer, variableValueIndex,
+                                            variableValueLength)
+                                    + " COLLATE `"
+                                    + MysqlBinlog.getMySQLCollation(charset)
+                                    + "`";
                         break;
                     case REAL_RESULT :
                         if (variableValueLength != 8)

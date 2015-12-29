@@ -43,7 +43,7 @@ class ConfigureDeploymentHandler
           debug("Transfer validation tools to #{@config.getProperty(HOST)}")
           
           ssh_result("mkdir -p #{validation_temp_directory}/#{Configurator.instance.get_basename}; ls -al #{validation_temp_directory}; ls -al #{validation_temp_directory}/#{Configurator.instance.get_basename}", @config.getProperty(HOST), ssh_user)
-          cmd_result("rsync -aze 'ssh #{Configurator.instance.get_ssh_command_options()}' --delete --exclude='tungsten-connector' --exclude='tungsten-manager' --exclude='gossiprouter' --exclude='bristlecone' #{Configurator.instance.get_base_path()}/ #{ssh_user}@#{@config.getProperty(HOST)}:#{validation_temp_directory}/#{Configurator.instance.get_basename}")
+          rsync_release_package(@config.getProperty(HOST), ssh_user, validation_temp_directory, false)
           @config.setProperty(REMOTE_PACKAGE_PATH, "#{get_validation_temp_directory()}/#{Configurator.instance.get_basename()}")
         end
         
@@ -192,8 +192,8 @@ class ConfigureDeploymentHandler
           if user != ssh_user
             ssh_result("sudo -n chown -R #{ssh_user} #{validation_temp_directory}", @config.getProperty(HOST), ssh_user)
           end
-
-          cmd_result("rsync -aze 'ssh #{Configurator.instance.get_ssh_command_options()}' --delete #{Configurator.instance.get_base_path()}/ #{ssh_user}@#{@config.getProperty(HOST)}:#{@config.getProperty(REMOTE_PACKAGE_PATH)}")
+          
+          rsync_release_package(@config.getProperty(HOST), ssh_user, validation_temp_directory)
         
           if user != ssh_user
             ssh_result("sudo -n chown -R #{user} #{validation_temp_directory}", @config.getProperty(HOST), ssh_user)
@@ -299,5 +299,34 @@ class ConfigureDeploymentHandler
   
   def get_message_host_key
     @config.getProperty([DEPLOYMENT_CONFIGURATION_KEY])
+  end
+  
+  def rsync_release_package(host, user, target_dir, full_release_package = true, retry_rsync = true)
+    opts = []
+    if full_release_package == false
+      opts << "--delete"
+      opts << "--exclude='tungsten-connector' --exclude='tungsten-manager' --exclude='gossiprouter' --exclude='bristlecone'"
+    end
+    
+    begin
+      cmd_result("rsync -aze 'ssh #{Configurator.instance.get_ssh_command_options()}' #{opts.join(" ")} #{Configurator.instance.get_base_path()}/ #{user}@#{host}:#{target_dir}/#{Configurator.instance.get_basename}")
+    rescue CommandError => ce
+      # If we are asked to retry the rsync and the return code matches
+      # the return codes we are asked to retry, trigger the rsync again
+      # but disable any attempt to retry the rsync again
+      if retry_rsync == false
+        debug(ce)
+        raise "There was an issue transferring the release package to #{host}. The rsync command gave an error code of #{ce.rc}. This is the second failure and the command will not be retried. Check #{Configurator.instance.get_log_filename()} for more details."
+      else
+        retry_codes = Configurator.instance.rsync_retry_return_codes()
+        if retry_codes.include?(ce.rc)
+          warning("There was an issue transfering the release package to #{host}. The rsync command gave an error code of #{ce.rc}. The transfer will be attempted one more time.")
+          rsync_release_package(host, user, target_dir, full_release_package, false)
+        else
+          debug(ce)
+          raise "There was an issue transferring the release package to #{host}. The rsync command gave an error code of #{ce.rc}. If you would like tpm to retry the rsync for this error add '--retry-rsync-return-code=#{ce.rc}' to the `tpm` command or check #{Configurator.instance.get_log_filename()} for more details."
+        end
+      end
+    end
   end
 end
