@@ -18,7 +18,7 @@ replicator.applier.dbms.timezone=GMT+0:00
 #replicator.applier.dbms.charset=UTF-8
 
 # Location for writing CSV files. 
-replicator.applier.dbms.stageDirectory=/tmp/staging/${service.name}
+replicator.applier.dbms.stageDirectory=@{HOME_DIRECTORY}/tmp/staging/${service.name}
 
 # Prefixes for stage table and schema names.  These are added to the base
 # table and schema respectively. 
