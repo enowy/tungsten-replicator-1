@@ -1416,4 +1416,51 @@ public class MySQLIOs
     {
         return stateMapConfig;
     }
+
+    /**
+     * Extracts the server side socket of a give connection
+     * 
+     * @param connection the (connected) connection to get socket from
+     * @return the server side socket object
+     */
+    public static Socket getSocketToServer(Connection connection)
+    {
+        String className;
+        try
+        {
+            Object realConnection = extractInnerConnection(connection);
+
+            if (realConnection == null)
+            {
+                return null;
+            }
+
+            // Here we know that realConnection is not null
+            className = realConnection.getClass().getName();
+
+            if (className.startsWith(MYSQL_CONNECTION_CLASSNAME_PREFIX))
+            {
+                Object ioObj = getMySQLConnectionIOField(realConnection);
+                if (ioObj == null)
+                {
+                    // IOs already closed
+                    return null;
+                }
+                return (Socket) getFieldFromMysqlIO(ioObj, "mysqlConnection");
+            }
+            else if (className.startsWith(DRIZZLE_CONNECTION_CLASSNAME))
+            {
+                Object protocolObj = getDrizzleConnectionProtocolObject(realConnection);
+                Field writerField = protocolObj.getClass().getDeclaredField(
+                        "socket");
+                writerField.setAccessible(true);
+                return (Socket) writerField.get(protocolObj);
+            }
+        }
+        catch (Exception e)
+        {
+            logger.error("Couldn't get connection server thread ID", e);
+        }
+        return null;
+    }
 }
