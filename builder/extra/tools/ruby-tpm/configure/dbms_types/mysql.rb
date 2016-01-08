@@ -2297,7 +2297,7 @@ class MySQLLoadDataInfilePermissionsCheck < ConfigureValidationCheck
 
   def enabled?
     # This check is only needed on slaves unless running on a cluster, in which case all members should be checked.
-    if get_topology().is_a?(ClusterSlaveTopology) == true || @config.getProperty(REPL_ROLE) == "slave"
+    if get_topology().is_a?(ClusterTopology) == true || @config.getProperty(REPL_ROLE) == "slave"
       is_enabled = true
 
       # If DISABLE_SECURITY_CONTROLS is set disable check
