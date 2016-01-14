@@ -25,6 +25,7 @@ ROUTER_GATEWAY_PORT = "router_gateway_port"
 ROUTER_GATEWAY_RETURN_PORT = "router_gateway_return_port"
 ROUTER_WAITFOR_DISCONNECT_TIMEOUT = "connector_disconnect_timeout"
 ROUTER_KEEP_ALIVE_TIMEOUT = "connector_keepalive_timeout"
+ROUTER_DELAY_BEFORE_ONHOLD = "connector_delay_before_onhold"
 ROUTER_DELAY_BEFORE_OFFLINE = "connector_delay_before_offline"
 CONN_JAVA_MEM_SIZE = "conn_java_mem_size"
 CONN_JAVA_ENABLE_CONCURRENT_GC = "conn_java_enable_concurrent_gc"
@@ -575,12 +576,22 @@ class ConnectorKeepaliveTimeout < ConfigurePrompt
   end
 end
 
-class ConnectorDelayBeforeOffline < ConfigurePrompt
+class ConnectorDelayBeforeOnhold < ConfigurePrompt
   include ConnectorPrompt
   include HiddenValueModule
   
   def initialize
-    super(ROUTER_DELAY_BEFORE_OFFLINE, "Time to wait to take a router offline after losing the connection to a manager", PV_INTEGER, "30")
+    # Value can be negative. Using PV_ANY_INTEGER allows that (PV_INTEGER doesn't)
+    super(ROUTER_DELAY_BEFORE_ONHOLD, "Time to wait to take a router onhold after losing the connection to a manager", PV_ANY_INTEGER, "0")
+  end
+end
+
+class ConnectorDelayBeforeOffline < ConfigurePrompt
+  include ConnectorPrompt
+  include HiddenValueModule  
+  def initialize
+    # Value can be negative. Using PV_ANY_INTEGER allows that (PV_INTEGER doesn't)
+    super(ROUTER_DELAY_BEFORE_OFFLINE, "Time to wait to take a router offline after losing the connection to a manager", PV_ANY_INTEGER, "30")
   end
 end
 

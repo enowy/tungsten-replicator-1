@@ -64,8 +64,10 @@ public class ConfigurationConstants
 
     static public final int    KEEP_ALIVE_TIMEOUT_DEFAULT                                     = 30000;
     static public final int    KEEP_ALIVE_TIMEOUT_MAX                                         = 300000;
+    public static final int    DELAY_BEFORE_ONHOLD_IF_NO_MANAGER_DEFAULT                      = 0;
     public static final int    DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_DEFAULT                     = 30;
-    public static final int    DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_MAX                         = 60;
+    // no longer valid since CONT-1485
+    // public static final int    DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_MAX                         = 60;
     public static final int    DELAY_BEFORE_OFFLINE_IN_MAINTENANCE_MODE_IF_NO_MANAGER_DEFAULT = 5 * 60;
     public static final int    GATEWAY_CONNECT_TIMEOUT_MS_DEFAULT                             = 5000;
     public static final int    GATEWAY_CONNECT_TIMEOUT_MS_MAX                                 = 30000;
