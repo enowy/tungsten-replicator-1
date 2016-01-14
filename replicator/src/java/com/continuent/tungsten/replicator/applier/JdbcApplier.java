@@ -1157,7 +1157,7 @@ public class JdbcApplier implements RawApplier
     {
         try
         {
-            if (getColumnInformationFromDB)
+            if (needsColumnNames(oneRowChange) || getColumnInformationFromDB)
             {
                 int colCount = fillColumnNames(oneRowChange);
                 if (colCount <= 0)
@@ -1171,6 +1171,24 @@ public class JdbcApplier implements RawApplier
         {
             logger.error("column name information could not be retrieved");
         }
+    }
+    
+    private boolean needsColumnNames(OneRowChange oneRowChange)
+    {
+        // If there is column a column specification, check if the name is
+        // already defined
+        if (oneRowChange.getColumnSpec().size() > 0)
+            return (oneRowChange.getColumnSpec().get(0).getName() == null
+                    || oneRowChange.getColumnSpec().get(0).getName()
+                            .length() == 0);
+
+        // Else check the key specification
+        if (oneRowChange.getKeySpec().size() > 0)
+            return (oneRowChange.getKeySpec().get(0).getName() == null
+                    || oneRowChange.getKeySpec().get(0).getName()
+                            .length() == 0);
+
+        return true;
     }
 
     protected String logFailedRowChangeSQL(String stmt,
