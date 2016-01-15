@@ -1241,15 +1241,15 @@ public class SecurityHelper
      * @throws ConfigurationException
      */
     public static void doRandomSleepOnFailedLoginAttempt(
-            AuthenticationInfo authenticationInfo) throws ConfigurationException
+            AuthenticationInfo authenticationInfo)
     {
         try
         {
             // Load security properties
             if (authenticationInfo == null)
             {
-                authenticationInfo = SecurityHelper
-                        .loadAuthenticationInformation();
+                    authenticationInfo = SecurityHelper
+                            .loadAuthenticationInformation();   
             }
             // Generate a random number between
             // security.randomWaitOnFailedLogin.min and
@@ -1271,6 +1271,12 @@ public class SecurityHelper
         catch (InterruptedException e)
         {
             logger.error(MessageFormat.format("Could not sleep !: {0}", e));
+        }
+        catch (ConfigurationException e)
+        {
+            logger.error(MessageFormat.format(
+                    "Could not get security information. Will use default values: {0}",
+                    e));
         }
     }
 
