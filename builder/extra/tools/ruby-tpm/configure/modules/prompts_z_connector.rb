@@ -47,6 +47,7 @@ CONN_MAX_SLAVE_LATENCY = "connector_max_slave_latency"
 CONN_MAX_CONNECTIONS = "connector_max_connections"
 CONN_DROP_AFTER_MAX_CONNECTIONS = "connector_drop_after_max_connections"
 CONN_DISABLE_CONNECTION_WARNINGS = "connector_disable_connection_warnings"
+CONN_AUTORECONNECT_KILLED_CONNECTIONS = "connector_autoreconnect_killed_connections"
 
 class Connectors < GroupConfigurePrompt
   def initialize
@@ -1065,5 +1066,13 @@ class ConnectorDropAfterMaxConnections < ConfigurePrompt
   
   def initialize
     super(CONN_DROP_AFTER_MAX_CONNECTIONS, "Instantly drop connections that arrive after --connector-max-connections has been reached", PV_BOOLEAN, "false")
+  end
+end
+
+class ConnectorAutoReconnectKilledConnections < ConfigurePrompt
+  include ConnectorPrompt
+  
+  def initialize
+    super(CONN_AUTORECONNECT_KILLED_CONNECTIONS, "Disable connctor auto-reconnect outside switch and failover", PV_BOOLEAN, "true")
   end
 end
