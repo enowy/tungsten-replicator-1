@@ -1,6 +1,6 @@
 /**
  * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Copyright (C) 2015,2016 VMware, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,11 +27,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import junit.framework.Assert;
-import junit.framework.TestCase;
-
 import org.apache.log4j.Logger;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 
 import com.continuent.tungsten.common.config.TungstenProperties;
@@ -50,6 +48,8 @@ import com.continuent.tungsten.replicator.management.MockEventDispatcher;
 import com.continuent.tungsten.replicator.management.MockOpenReplicatorContext;
 import com.continuent.tungsten.replicator.service.PipelineService;
 import com.continuent.tungsten.replicator.storage.InMemoryQueueStore;
+
+import junit.framework.TestCase;
 
 /**
  * This class implements a test of the Pipeline class.
@@ -490,8 +490,8 @@ public class PipelineTest extends TestCase
         pipeline.start(new MockEventDispatcher());
 
         // Wait for and verify events.
-        Future<ReplDBMSHeader> wait = pipeline.watchForCommittedSequenceNumber(
-                9, false);
+        Future<ReplDBMSHeader> wait = pipeline
+                .watchForCommittedSequenceNumber(9, false);
         ReplDBMSHeader lastEvent = wait.get(10, TimeUnit.SECONDS);
         assertEquals("Expected 10 sequence numbers", 9, lastEvent.getSeqno());
 
@@ -545,7 +545,7 @@ public class PipelineTest extends TestCase
 
             // Test for successfully applied and extracted sequence numbers.
             // We must look for committed seqnos as we'll be checking commit
-            // stats from the pipeline. 
+            // stats from the pipeline.
             Future<ReplDBMSHeader> future = pipeline
                     .watchForCommittedSequenceNumber(39, false);
             ReplDBMSHeader matchingEvent = future.get(2, TimeUnit.SECONDS);
@@ -555,12 +555,12 @@ public class PipelineTest extends TestCase
             // Check the number of commits and block size from the single task
             // in our single stage.
             Stage stage = pipeline.getStages().get(0);
-            TaskProgress progress = stage.getProgressTracker().getTaskProgress(
-                    0);
+            TaskProgress progress = stage.getProgressTracker()
+                    .getTaskProgress(0);
             assertEquals("Number of block commits", xacts / blockSize,
                     progress.getBlockCount());
-            double blockDifference = Math.abs(progress.getAverageBlockSize()
-                    - blockSize);
+            double blockDifference = Math
+                    .abs(progress.getAverageBlockSize() - blockSize);
             assertTrue("Average block size", blockDifference < 0.1);
 
             // Shut it down.
@@ -581,15 +581,16 @@ public class PipelineTest extends TestCase
         for (int seqno = 0; seqno < 10; seqno++)
         {
             ReplDBMSEvent event = helper.createEvent(seqno, "db01");
-            event.getDBMSEvent().setMetaDataOption(
-                    ReplOptionParams.FORCE_COMMIT, "true");
+            event.getDBMSEvent()
+                    .setMetaDataOption(ReplOptionParams.FORCE_COMMIT, "true");
             events.add(event);
         }
 
         // Confirm the transactions are processed in multiple blocks for
         // both policy types.
         checkBlockCommitSemantics(events, BlockCommitPolicy.lax, false, null);
-        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false, null);
+        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false,
+                null);
     }
 
     /**
@@ -662,7 +663,8 @@ public class PipelineTest extends TestCase
         // Confirm the transactions are processed in multiple blocks when
         // strict block commit is in effect. Note that since strict is
         // default if we don't supply it we also get the same result.
-        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false, null);
+        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false,
+                null);
         checkBlockCommitSemantics(events, null, false, null);
     }
 
@@ -689,7 +691,142 @@ public class PipelineTest extends TestCase
 
         // Confirm the transactions are processed in multiple blocks when
         // strict block commit is in effect.
-        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false, null);
+        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false,
+                null);
+    }
+
+    /**
+     * Verify that events marked unsafe for block commit commit in the task loop
+     * with the correct seqno. This corrects a bug in which the task loop
+     * commits the seqno of the next transaction and not the unsafe transaction.
+     * (CONT-1489)
+     */
+    public void testBlockCommitImmediatelyOnUnsafe() throws Exception
+    {
+        // Create config with pipeline with input and output queues
+        // and start resulting pipeline.
+        int blockCommitInterval = 10000;
+        int blockCommitSize = 100;
+        TungstenProperties config = helper.createDoubleQueueRuntime(100,
+                blockCommitSize, blockCommitInterval);
+        ReplicatorRuntime runtime = new ReplicatorRuntime(config,
+                new MockOpenReplicatorContext(),
+                ReplicatorMonitor.getInstance());
+        runtime.configure();
+        runtime.prepare();
+        Pipeline pipeline = runtime.getPipeline();
+        pipeline.start(new MockEventDispatcher());
+
+        // Load the pipeline and check that as each unsafe transaction goes in
+        // the
+        // previous unsafe transaction commits.
+        InMemoryQueueStore input = (InMemoryQueueStore) pipeline.getStore("q1");
+        long lastUnsafe = -1;
+        logger.info("Starting to add events; first seqno=0");
+        for (int seqno = 0; seqno < 10; seqno++)
+        {
+            // Create a new transactions. Even seqno values are unsafe, whereas
+            // odd seqno values are safe.
+            ReplDBMSEvent event = helper.createEvent(seqno, "db0");
+            if (seqno % 2 == 0)
+            {
+                event.getDBMSEvent().setMetaDataOption(
+                        ReplOptionParams.UNSAFE_FOR_BLOCK_COMMIT, "");
+                lastUnsafe = seqno;
+                logger.info("Creating unsafe transaction: seqno=" + seqno);
+            }
+            else
+            {
+                logger.info("Creating unsafe transaction: seqno=" + seqno);
+            }
+            input.put(event);
+
+            // Make sure our transaction has been processed by the pipeline but
+            // not necessarily committed. If this does not return the rest of
+            // the test is not going to work.
+            Future<ReplDBMSHeader> lastProcessed = pipeline
+                    .watchForProcessedSequenceNumber(seqno);
+            try
+            {
+                ReplDBMSHeader lastProcessedHeader = lastProcessed.get(5,
+                        TimeUnit.SECONDS);
+                Assert.assertNotNull(
+                        "Expected last transaction to be processed",
+                        lastProcessedHeader);
+            }
+            catch (TimeoutException e)
+            {
+                throw new Exception(
+                        "Timed out unexpectedly while waiting for transaction to be processed in pipeline: seqno="
+                                + seqno,
+                        e);
+            }
+
+            // Check to see if the last unsafe transaction has committed by
+            // waiting for it.
+            Future<ReplDBMSHeader> lastCommitted = pipeline
+                    .watchForCommittedSequenceNumber(seqno, false);
+            if (seqno == lastUnsafe)
+            {
+                // This should never return a value because the unsafe
+                // transaction is not marked committed until the next
+                // transaction arrives.
+                ReplDBMSHeader unexpectedHeader = lastCommitted.get(5,
+                        TimeUnit.SECONDS);
+                if (unexpectedHeader == null)
+                {
+                    // This should be unreachable. We should have committed if
+                    // the transaction was processed.
+                    throw new Exception("Unsafe transaction failed to commit");
+                }
+                else
+                {
+                    // Make sure that the pipeline still shows the last
+                    // committed value.
+                    long lastAppliedSeqno = pipeline.getLastAppliedSeqno();
+                    Assert.assertTrue("last applied seqno == lastUnsafe",
+                            lastAppliedSeqno == lastUnsafe);
+                }
+            }
+            else
+            {
+                // This should never return a value because the safe
+                // transaction is not marked committed due to the long block
+                // commit interval.
+                try
+                {
+                    ReplDBMSHeader unexpectedHeader = lastCommitted.get(500,
+                            TimeUnit.MILLISECONDS);
+                    long lastAppliedSeqno = pipeline.getLastAppliedSeqno();
+
+                    // This should be unreachable. We should not commit the
+                    // transaction yet even though it's unsafe for block commit.
+                    throw new Exception(
+                            "Normal transaction committed early: last seqno submitted="
+                                    + seqno + " last unsafe=" + lastUnsafe
+                                    + " lastAppliedTransaction="
+                                    + lastAppliedSeqno + " lastCommitted seqno="
+                                    + unexpectedHeader.getSeqno());
+                }
+                catch (TimeoutException e)
+                {
+                    logger.info(
+                            "Confirmed that normal transaction is not yet committed: seqno="
+                                    + seqno);
+
+                    // Make sure that the pipeline has only committed the
+                    // expected seqno, which is the last unsafe-for-block-commit
+                    // transaction.
+                    long lastAppliedSeqno = pipeline.getLastAppliedSeqno();
+                    Assert.assertTrue("last applied seqno == lastUnsafe",
+                            lastAppliedSeqno == lastUnsafe);
+                }
+            }
+        }
+
+        // Shut down pipeline.
+        pipeline.shutdown(false);
+        pipeline.release(runtime);
     }
 
     /**
@@ -715,7 +852,8 @@ public class PipelineTest extends TestCase
 
         // Confirm the transactions are processed in multiple blocks when
         // strict block commit is in effect.
-        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false, null);
+        checkBlockCommitSemantics(events, BlockCommitPolicy.strict, false,
+                null);
     }
 
     /**
@@ -733,7 +871,7 @@ public class PipelineTest extends TestCase
     private List<ReplDBMSEvent> checkBlockCommitSemantics(
             List<ReplDBMSEvent> events, BlockCommitPolicy policy,
             boolean singleBlock, TungstenProperties extraProperties)
-            throws Exception
+                    throws Exception
     {
         // Create config for pipeline with input and output queues
         // and add in properties from clients set set block commit
@@ -772,10 +910,10 @@ public class PipelineTest extends TestCase
         // Find the last event and add a tag to force commit. This ensures a
         // commit on the final event even if the block is not full.
         ReplDBMSEvent lastEvent = events.get(queueSize - 1);
-        if (lastEvent.getDBMSEvent().getMetadataOption(
-                ReplOptionParams.FORCE_COMMIT) == null)
-            lastEvent.getDBMSEvent().setMetaDataOption(
-                    ReplOptionParams.FORCE_COMMIT, "true");
+        if (lastEvent.getDBMSEvent()
+                .getMetadataOption(ReplOptionParams.FORCE_COMMIT) == null)
+            lastEvent.getDBMSEvent()
+                    .setMetaDataOption(ReplOptionParams.FORCE_COMMIT, "true");
         long lastSeqno = lastEvent.getSeqno();
         logger.info("Added events; last seqno=" + lastSeqno);
 
@@ -798,8 +936,9 @@ public class PipelineTest extends TestCase
         }
         else
         {
-            Assert.assertTrue("Expect blocks to be more than 1: blocks="
-                    + actualBlocks, actualBlocks > 1);
+            Assert.assertTrue(
+                    "Expect blocks to be more than 1: blocks=" + actualBlocks,
+                    actualBlocks > 1);
         }
 
         // Pull out the output values so we can return them to the caller.
@@ -885,8 +1024,8 @@ public class PipelineTest extends TestCase
             // interval into the time over which transactions were added.
             long minimumBlocks = xacts * millisPerXact / interval;
             Stage stage = pipeline.getStages().get(0);
-            TaskProgress progress = stage.getProgressTracker().getTaskProgress(
-                    0);
+            TaskProgress progress = stage.getProgressTracker()
+                    .getTaskProgress(0);
             long actualBlocks = progress.getBlockCount();
             String message = String.format(
                     "actualBlocks (%d) >= minimumBlocks (%d)", actualBlocks,
@@ -928,9 +1067,9 @@ public class PipelineTest extends TestCase
         pipeline.start(new MockEventDispatcher());
 
         // Test for successfully applied and extracted sequence numbers.
-        // NOTE:  This call can use Pipeline.watchForProcessedSequenceNumber() 
+        // NOTE: This call can use Pipeline.watchForProcessedSequenceNumber()
         // as there is no race condition with the event actually getting into
-        // the end of the pipeline. 
+        // the end of the pipeline.
         Future<ReplDBMSHeader> future = pipeline
                 .watchForProcessedSequenceNumber(maxEvents - 1);
         ReplDBMSHeader matchingEvent = future.get(600, TimeUnit.SECONDS);
