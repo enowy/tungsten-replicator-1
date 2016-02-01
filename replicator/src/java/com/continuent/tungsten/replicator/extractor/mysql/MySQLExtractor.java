@@ -100,6 +100,7 @@ public class MySQLExtractor implements RawExtractor
     private int                             relayLogRetention         = 3;
     private String                          relayLogDir               = null;
     private int                             serverId                  = 1;
+    private int                             binlogReadTimeout         = 120;
 
     private static long                     binlogPositionMaxLength   = 10;
     BinlogReader                            binlogPosition            = null;
@@ -322,6 +323,22 @@ public class MySQLExtractor implements RawExtractor
         bufferSize = size;
     }
 
+    /**
+     * @return the binlogReadTimeout
+     */
+    public int getBinlogReadTimeout()
+    {
+        return binlogReadTimeout;
+    }
+
+    /**
+     * @param binlogReadTimeout the binlogReadTimeout to set
+     */
+    public void setBinlogReadTimeout(int binlogReadTimeout)
+    {
+        this.binlogReadTimeout = binlogReadTimeout;
+    }
+
     // Reads the next log from the file.
     private LogEvent processFile(BinlogReader position)
             throws ReplicatorException, InterruptedException
@@ -381,7 +398,7 @@ public class MySQLExtractor implements RawExtractor
             // Read from the log.
             LogEvent event = LogEvent.readLogEvent(runtime, position,
                     descriptionEvent, parseStatements, useBytesForStrings,
-                    prefetchSchemaNameLDI);
+                    prefetchSchemaNameLDI, binlogReadTimeout);
 
             if (event instanceof FormatDescriptionLogEvent)
             {
@@ -1389,6 +1406,9 @@ public class MySQLExtractor implements RawExtractor
         nativeSlaveTakeover = context.nativeSlaveTakeover();
         if (nativeSlaveTakeover)
             logger.info("Native slave takeover is enabled");
+
+        logger.info("Using binlog read timeout of " + binlogReadTimeout
+                + " seconds.");
 
         // Prepare accordingly based on whether we are replicating from a master
         // or MySQL slave relay logs.

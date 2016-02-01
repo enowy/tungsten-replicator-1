@@ -50,3 +50,9 @@ replicator.extractor.dbms.relayLogRetention=10
 # values are different or MySQL will kill the earlier session with the 
 # same server ID. 
 replicator.extractor.dbms.serverId=@{REPL_MYSQL_SERVER_ID}
+
+# Reading from binlog will block until everything expected was read or 
+# throw an exception when this timeout is reached
+# This defines the timeout in seconds
+replicator.extractor.dbms.binlogReadTimeout=120
+

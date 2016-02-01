@@ -293,7 +293,7 @@ public abstract class LogEvent
     public static LogEvent readLogEvent(ReplicatorRuntime runtime,
             BinlogReader position, FormatDescriptionLogEvent descriptionEvent,
             boolean parseStatements, boolean useBytesForString,
-            boolean prefetchSchemaNameLDI) throws ReplicatorException,
+            boolean prefetchSchemaNameLDI, int binlogReadTimeout) throws ReplicatorException,
             InterruptedException
     {
         int eventLength = 0;
@@ -305,7 +305,7 @@ public abstract class LogEvent
 
             // read the header part
             // timeout is set to 2 minutes.
-            readDataFromBinlog(runtime, position, header, 0, header.length, 120);
+            readDataFromBinlog(runtime, position, header, 0, header.length, binlogReadTimeout);
 
             // Extract event length
             eventLength = (int) LittleEndianConversion.convert4BytesToLong(
@@ -318,7 +318,7 @@ public abstract class LogEvent
             // read the event data part
             // timeout is set to 2 minutes
             readDataFromBinlog(runtime, position, fullEvent, header.length,
-                    eventLength, 120);
+                    eventLength, binlogReadTimeout);
 
             System.arraycopy(header, 0, fullEvent, 0, header.length);
 
@@ -355,7 +355,7 @@ public abstract class LogEvent
                     if (tmpHeader[MysqlBinlog.EVENT_TYPE_OFFSET] == MysqlBinlog.EXECUTE_LOAD_QUERY_EVENT)
                     {
                         fullEvent = extractFullEvent(runtime, eventLength,
-                                tempPosition, tmpHeader);
+                                tempPosition, tmpHeader, binlogReadTimeout);
 
                         LogEvent tempEvent = readLogEvent(parseStatements,
                                 tempPos, fullEvent, fullEvent.length,
@@ -380,7 +380,7 @@ public abstract class LogEvent
                     else if (tmpHeader[MysqlBinlog.EVENT_TYPE_OFFSET] == MysqlBinlog.ROTATE_EVENT)
                     {
                         fullEvent = extractFullEvent(runtime, eventLength,
-                                tempPosition, tmpHeader);
+                                tempPosition, tmpHeader, binlogReadTimeout);
 
                         LogEvent tempEvent = readLogEvent(parseStatements,
                                 tempPos, fullEvent, fullEvent.length,
@@ -420,7 +420,7 @@ public abstract class LogEvent
                         .setNextEventCanBeAppended(checkNextEventIsPartOfSameLDI(
                                 runtime, position, descriptionEvent,
                                 parseStatements, useBytesForString,
-                                currentEvent.getFileID()));
+                                currentEvent.getFileID(), binlogReadTimeout));
             }
 
             return event;
@@ -447,6 +447,8 @@ public abstract class LogEvent
      * @param parseStatements
      * @param useBytesForString
      * @param fileId The file ID of current event
+     * @param binlogReadTimeout Maximum time in seconds to wait for a full event
+     *            to be written to the binlog
      * @return true if next event is part of the same load data infile command,
      *         false otherwise
      * @throws ReplicatorException
@@ -457,7 +459,8 @@ public abstract class LogEvent
     private static boolean checkNextEventIsPartOfSameLDI(
             ReplicatorRuntime runtime, BinlogReader position,
             FormatDescriptionLogEvent descriptionEvent,
-            boolean parseStatements, boolean useBytesForString, int fileID)
+            boolean parseStatements, boolean useBytesForString,
+            int fileID, int binlogReadTimeout)
             throws ReplicatorException, InterruptedException, IOException,
             ExtractorException
     {
@@ -492,7 +495,7 @@ public abstract class LogEvent
                     // the file ID?
                     found = true;
                     fullEvent = extractFullEvent(runtime, eventLength,
-                            tempPosition, tmpHeader);
+                            tempPosition, tmpHeader, binlogReadTimeout);
 
                     LogEvent tempEvent = readLogEvent(parseStatements, tempPos,
                             fullEvent, fullEvent.length, descriptionEvent,
@@ -512,7 +515,7 @@ public abstract class LogEvent
                 else if (tmpHeader[MysqlBinlog.EVENT_TYPE_OFFSET] == MysqlBinlog.ROTATE_EVENT)
                 {
                     fullEvent = extractFullEvent(runtime, eventLength,
-                            tempPosition, tmpHeader);
+                            tempPosition, tmpHeader, binlogReadTimeout);
 
                     LogEvent tempEvent = readLogEvent(parseStatements, tempPos,
                             fullEvent, fullEvent.length, descriptionEvent,
@@ -558,19 +561,22 @@ public abstract class LogEvent
      * @param tempPosition Current position in the binlog. It matches the
      *            beginning of the event to be read
      * @param tmpHeader Header of the event to be read
+     * @param binlogReadTimeout Maximum time in seconds to wait for a full event
+     *            to be written to the binlog
      * @return The byte array read from the binlog
      * @throws IOException
      * @throws ReplicatorException
      * @throws InterruptedException
      */
     private static byte[] extractFullEvent(ReplicatorRuntime runtime,
-            int eventLength, BinlogReader tempPosition, byte[] tmpHeader)
+            int eventLength, BinlogReader tempPosition, byte[] tmpHeader,
+            int binlogReadTimeout)
             throws IOException, ReplicatorException, InterruptedException
     {
         byte[] fullEvent;
         fullEvent = new byte[tmpHeader.length + eventLength];
         readDataFromBinlog(runtime, tempPosition, fullEvent, tmpHeader.length,
-                eventLength, 120);
+                eventLength, binlogReadTimeout);
 
         System.arraycopy(tmpHeader, 0, fullEvent, 0, tmpHeader.length);
         return fullEvent;
