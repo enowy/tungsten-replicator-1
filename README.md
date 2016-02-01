@@ -1,11 +1,11 @@
 #TUNGSTEN REPLICATOR
-Copyright (C) 2015 VMware, Inc. -- Updated 6 August 2015
+Copyright (C) 2015 VMware, Inc. -- Updated 1 February 2016
 
 ##1 INTRODUCTION
 
 Tungsten Replicator is an open source replication engine supporting a variety of different extractor and applier modules. 
 Data can be extracted from MySQL, Oracle and Amazon RDS, and applied to transactional stores, including MySQL, Oracle, and 
-Amazon RDS; NoSQL stores such as MongoDB, and datawarehouse stores such as Vertica, Hadoop, and Amazon rDS.  
+Amazon RDS; NoSQL stores such as MongoDB, and datawarehouse stores such as Vertica, Hadoop, and Amazon RDS.  
 
 During replication, Tungsten Replication assigns data a unique global transaction ID, and enables flexible statement 
 and/or row-based replication of data. This enables data to be exchanged between different databases and different database 
@@ -38,7 +38,7 @@ Currently there are no builds from the new code available, they will be made ava
 
 ##5 DOCUMENTATION
 
-Documentation for Tungsten Replicator is located [on the VMware website]( http://pubs.vmware.com/continuent/tungsten-replicator-4.0/index.html).
+Documentation for Tungsten Replicator is located [on the VMware website]( http://pubs.vmware.com/continuent/tungsten-replicator-5.0-oss/).
 
 ##6 INSTALLATION
 
