@@ -346,7 +346,7 @@ public class RawByteCache
                     if (output == null)
                     {
                         // Create and store the output stream.
-                        output = new FileOutputStream(alloc.cacheFile);
+                        output = new FileOutputStream(alloc.cacheFile, true);
                         outputStreamCache.put(key, output);
                     }
 
