@@ -33,9 +33,11 @@ public interface ProtocolHandshakeResponseValidator
     /**
      * Executes implementation-defined logic to validate the client response.
      * 
+     * @param masterId Id of this replicator
      * @param handshakeResponse Response received from client
      * @throws ReplicatorException Thrown if validation fails
      */
-    public void validateResponse(ProtocolHandshakeResponse handshakeResponse)
-            throws ReplicatorException, InterruptedException;
+    public void validateResponse(String masterId,
+            ProtocolHandshakeResponse handshakeResponse)
+                    throws ReplicatorException, InterruptedException;
 }
