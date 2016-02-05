@@ -151,4 +151,10 @@ public class ReplDBMSHeaderData implements ReplDBMSHeader
     {
         return taskId;
     }
+
+    @Override
+    public long getLastSeqno()
+    {
+        return -1;
+    }
 }

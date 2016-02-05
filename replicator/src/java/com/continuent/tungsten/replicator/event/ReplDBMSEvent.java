@@ -246,4 +246,10 @@ public class ReplDBMSEvent extends ReplEvent implements ReplDBMSHeader
     {
         return null;
     }
+
+    @Override
+    public long getLastSeqno()
+    {
+        return -1;
+    }
 }

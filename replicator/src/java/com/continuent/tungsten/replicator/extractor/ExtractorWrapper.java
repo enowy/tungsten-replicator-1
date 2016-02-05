@@ -181,7 +181,10 @@ public class ExtractorWrapper implements Extractor
             if (logger.isDebugEnabled())
                 logger.debug("Source ID of max event verified: "
                         + header.getSourceId());
-            seqno = header.getSeqno() + 1;
+            if (header.getLastSeqno() == -1)
+                seqno = header.getSeqno() + 1;
+            else
+                seqno = header.getLastSeqno() + 1;
             eventId = header.getEventId();
         }
         else
