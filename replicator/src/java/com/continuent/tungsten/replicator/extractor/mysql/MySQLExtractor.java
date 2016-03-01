@@ -1351,17 +1351,16 @@ public class MySQLExtractor implements RawExtractor
 
             String binlogFileIndex = eventId.substring(0, colonIndex);
 
-            int binlogOffset;
+            long binlogOffset;
 
             if (semicolonIndex != -1)
             {
-                binlogOffset = Integer.valueOf(eventId.substring(
-                        colonIndex + 1, semicolonIndex));
+                binlogOffset = Long.valueOf(
+                        eventId.substring(colonIndex + 1, semicolonIndex));
             }
             else
             {
-                binlogOffset = Integer.valueOf(eventId
-                        .substring(colonIndex + 1));
+                binlogOffset = Long.valueOf(eventId.substring(colonIndex + 1));
             }
 
             // We tolerate the event ID with or without the binlog prefix.
