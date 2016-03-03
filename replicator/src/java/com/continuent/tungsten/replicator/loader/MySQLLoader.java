@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import org.apache.log4j.Logger;
 
 import com.continuent.tungsten.replicator.ReplicatorException;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
 
 public class MySQLLoader extends JdbcLoader
@@ -229,5 +230,12 @@ public class MySQLLoader extends JdbcLoader
         }
 
         return currentResourceEventId;
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 }

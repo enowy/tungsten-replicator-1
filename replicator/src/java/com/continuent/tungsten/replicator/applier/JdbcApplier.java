@@ -1840,7 +1840,7 @@ public class JdbcApplier implements RawApplier
      * 
      * @throws SQLException if a problem occurs.
      */
-    private void commitTransaction() throws SQLException
+    protected void commitTransaction() throws SQLException
     {
         try
         {

@@ -35,6 +35,7 @@ import com.continuent.tungsten.replicator.database.DatabaseFactory;
 import com.continuent.tungsten.replicator.dbms.DBMSData;
 import com.continuent.tungsten.replicator.dbms.StatementData;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.extractor.ExtractorException;
 import com.continuent.tungsten.replicator.extractor.RawExtractor;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -581,5 +582,12 @@ public class PostgreSQLSlonyExtractor implements RawExtractor
         }
         if (conn != null)
             conn.close();
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 }

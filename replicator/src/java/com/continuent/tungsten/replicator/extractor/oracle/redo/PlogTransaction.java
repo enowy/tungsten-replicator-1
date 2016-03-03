@@ -451,7 +451,10 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param LCR LCR to process
      */
-    private DBMSData convertLCRtoDBMSDataDML(PlogLCR LCR)
+    // TODO Review
+    // Need to be able to convert LCR into DBMSData outside of this class
+    // for the extractor thread to check whether we reached the desired restart point.
+    public static DBMSData convertLCRtoDBMSDataDML(PlogLCR LCR)
             throws ReplicatorException, UnsupportedEncodingException,
             SerialException, SQLException
     {

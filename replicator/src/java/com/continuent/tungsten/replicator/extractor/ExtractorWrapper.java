@@ -41,6 +41,7 @@ import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.event.EventMetadataFilter;
 import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
 import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
+import com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor;
 import com.continuent.tungsten.replicator.filter.Filter;
 import com.continuent.tungsten.replicator.heartbeat.HeartbeatFilter;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -174,8 +175,7 @@ public class ExtractorWrapper implements Extractor
             seqno = 0;
             eventId = null;
         }
-        else if (sourceId.equals(header.getSourceId())
-                )
+        else if (sourceId.equals(header.getSourceId()))
         {
             // Continuing local extraction. Ask for next event.
             if (logger.isDebugEnabled())
@@ -217,7 +217,20 @@ public class ExtractorWrapper implements Extractor
         }
 
         // Tell the extractor.
-        setLastEventId(eventId);
+        // TODO Review
+        // With a PlogExtractor, we auto-reposition the replicator using the
+        // event header (to get all needed information at the extractor level)
+        // This logic could probably be moved down into the extractor itself
+        // by adding a new method setRestartPosition which would have eventId
+        // and header as parameters 
+        if (eventId == null && extractor instanceof PlogExtractor)
+        {
+            extractor.setLastEvent(header);
+        }
+        else
+        {
+            setLastEventId(eventId);
+        }
         epochNumber = seqno;
     }
 

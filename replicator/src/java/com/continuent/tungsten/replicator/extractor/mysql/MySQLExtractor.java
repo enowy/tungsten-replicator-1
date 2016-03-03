@@ -55,6 +55,7 @@ import com.continuent.tungsten.replicator.dbms.RowIdData;
 import com.continuent.tungsten.replicator.dbms.StatementData;
 import com.continuent.tungsten.replicator.event.DBMSEmptyEvent;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.event.ReplOption;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
 import com.continuent.tungsten.replicator.extractor.ExtractorException;
@@ -1953,5 +1954,12 @@ public class MySQLExtractor implements RawExtractor
     public void setPrefetchSchemaNameLDI(boolean prefetchSchemaNameLDI)
     {
         this.prefetchSchemaNameLDI = prefetchSchemaNameLDI;
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 }
