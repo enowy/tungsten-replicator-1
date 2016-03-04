@@ -1098,7 +1098,10 @@ public class PlogReaderThread extends Thread
                             logger.debug("Wait for more data in plog.");
                     }
                 }
-
+                // TODO Review
+                // Set retry count to 0 to avoid misleading messages
+                retryCount = 0;
+                
                 // This is header information for the plog. We just read it to
                 // find out which features are enabled.
                 if (r1.type == PlogLCR.ETYPE_CONTROL
