@@ -401,29 +401,37 @@ public class PlogExtractor implements RawExtractor
             if (this.lastEventId != null)
             {
                 // Check to see the kind of last event ID and position redo
-                if (lastEventId.equalsIgnoreCase("NOW"))
+                if (lastEventId.startsWith("ora:"))
                 {
-                    // Position to current SCN, whatever that may be.
                     logger.info(
-                            "Positioning redo reader to start from current SCN");
-                    vmrrMgr.reset("NOW");
-                }
-                else if (lastEventId.matches("^[0-9]+$"))
-                {
-                    // Position to an explicit SCN.
-                    logger.info(
-                            "Positioning redo reader to start from explicit SCN: "
-                                    + lastEventId);
-                    vmrrMgr.reset(lastEventId);
+                            "Starting redo reader after provisioning at SCN "
+                                    + lastEventId.substring("ora:".length()));
                 }
                 else
                 {
-                    logger.info(
-                            "Starting from previous eventId: " + lastEventId);
+                    if (lastEventId.equalsIgnoreCase("NOW"))
+                    {
+                        // Position to current SCN, whatever that may be.
+                        logger.info(
+                                "Positioning redo reader to start from current SCN");
+                        vmrrMgr.reset("NOW");
+                    }
+                    else if (lastEventId.matches("^[0-9]+$"))
+                    {
+                        // Position to an explicit SCN.
+                        logger.info(
+                                "Positioning redo reader to start from explicit SCN: "
+                                        + lastEventId);
+                        vmrrMgr.reset(lastEventId);
+                    }
+                    else
+                    {
+                        logger.info("Starting from previous eventId: "
+                                + lastEventId);
+                    }
+                    // Set the redo reader thread restart position.
+                    readerThread.setLastEventId(lastEventId);
                 }
-
-                // Set the redo reader thread restart position.
-                readerThread.setLastEventId(lastEventId);
             }
             // TODO Review
             // This happens when switching --> if source change is detected, 
