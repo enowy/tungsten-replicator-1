@@ -152,9 +152,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
             commitTime = LCR.timestamp;
 
         }
-        else
-            if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
-                    && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK)
+        else if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
+                && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK)
         {
             // Rollback tran: say we are done, but we are empty.
             // We may want to release LCRList but resizing to 0 is OK too.
@@ -162,18 +161,25 @@ class PlogTransaction implements Comparable<PlogTransaction>
             LCRList.resize(0);
             committed = true;
         }
-        else
-                if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
-                        && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK_TO_SAVEPOINT)
+        else if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
+                && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK_TO_SAVEPOINT)
         {
             // Rollback to savepoint: discard rolled back changes by resizing to
             // before the last value that is at or above save point ID.
-            int last = LCRList.size() - 1;
-            while (last > 0 && LCRList.get(last).LCRid >= LCR.LCRSavepointId)
+            // TODO Review
+            // BUG CONT-1556
+            // resize method expects the new size, not the new last index !
+            int newSize = LCRList.size();            
+            for (int i = LCRList.size() - 1 ; i >= 0; i--)
             {
-                last--;
+                if(LCRList.get(i).LCRid >= LCR.LCRSavepointId)
+                {
+                    newSize--;
+                }
+                else
+                    break;
             }
-            LCRList.resize(last);
+            LCRList.resize(newSize);
         }
         else if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
         {
