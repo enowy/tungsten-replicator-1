@@ -953,6 +953,7 @@ public class PlogReaderThread extends Thread
                         r1 = readRawLCR();
 
                         if (skipEvents)
+                        {
                             // TODO Review
                             // We are skipping events. Check when we have DML
                             // into TREP_COMMIT_SEQNO table whether it is the
@@ -1001,8 +1002,8 @@ public class PlogReaderThread extends Thread
                                             {
                                                 logger.info("Searching for "
                                                         + lastEvent.getEventId()
-                                                        + " - Found "
-                                                        + value);
+                                                        + " - Found : "
+                                                        + r1);
                                                 r1 = null;
                                                 skipEvents = false;
                                             }
@@ -1021,7 +1022,23 @@ public class PlogReaderThread extends Thread
                                                 continue;
                                             }                                            
                                         }
+                                        else
+                                        {
+                                        	// TODO Review
+                                        	// CONT-1560
+                                            // If columnVal.getValue() was not a
+                                            // string (null for example), this
+                                            // was creating a transaction that
+                                            // would remain opened forever
+                                            r1 = null;
+                                            continue;                                            
+                                        }
                                     }
+                                    else
+                                    {
+                                        r1 = null;
+                                        continue;                                            
+                                    }                                        
                                 }
                             }
                             else if (r1.type == PlogLCR.ETYPE_CONTROL)
@@ -1034,25 +1051,28 @@ public class PlogReaderThread extends Thread
                                 r1 = null;
                                 continue;
                             }
-
+                        }
                         else
-                        // Test this update to see if it is a change to the
-                        // Tungsten TREP_COMMIT_SEQNO table, which should
-                        // not be replicated.
-                        if (tungstenSchema != null)
                         {
-                            if (tungstenSchema.equalsIgnoreCase(r1.tableOwner)
-                                    && "trep_commit_seqno"
-                                            .equalsIgnoreCase(r1.tableName))
+                            // Test this update to see if it is a change to the
+                            // Tungsten TREP_COMMIT_SEQNO table, which should
+                            // not be replicated.
+                            if (tungstenSchema != null)
                             {
-                                if (logger.isDebugEnabled())
+                                if (tungstenSchema
+                                        .equalsIgnoreCase(r1.tableOwner)
+                                        && "trep_commit_seqno"
+                                                .equalsIgnoreCase(r1.tableName))
                                 {
-                                    logger.debug(
-                                            "Ignoring update to trep_commit_seqno: scn="
-                                                    + r1.LCRid);
+                                    if (logger.isDebugEnabled())
+                                    {
+                                        logger.debug(
+                                                "Ignoring update to trep_commit_seqno: scn="
+                                                        + r1.LCRid);
+                                    }
+                                    r1 = null;
+                                    continue;
                                 }
-                                r1 = null;
-                                continue;
                             }
                         }
                     }
