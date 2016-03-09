@@ -234,7 +234,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
     /**
      * Post all committed changes to given queue
      * 
-     * @param q Queue to post
+     * @param queue Queue to post
      * @param minSCN Minimal SCN among all open transactions
      * @param skipSeq If only part of the transaction should be posted, this is
      *            the last seq to skip
@@ -242,7 +242,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
      *            open transactions - 1)
      * @return lastProcessedEventId
      */
-    public String pushContentsToQueue(BlockingQueue<DBMSEvent> q, long minSCN,
+    public String pushContentsToQueue(BlockingQueue<DBMSEvent> queue, long minSCN,
             int transactionFragSize, long lastObsoletePlogSeq)
                     throws UnsupportedEncodingException, ReplicatorException,
                     SerialException, InterruptedException, SQLException
@@ -290,7 +290,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                                     ReplOptionParams.TIME_ZONE_AWARE, "true");
                             event.setMetaDataOption(ReplOptionParams.STRINGS,
                                     "utf8");
-                            q.put(event);
+                            queue.put(event);
 
                             // Clear array for next fragment.
                             data = new ArrayList<DBMSData>();
@@ -367,7 +367,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                         "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
 
-                q.put(event);
+                queue.put(event);
             }
 
             return lastProcessedEventId;
@@ -433,7 +433,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                 event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
                         "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
-                q.put(event);
+                queue.put(event);
             }
             return lastProcessedEventId;
         }
