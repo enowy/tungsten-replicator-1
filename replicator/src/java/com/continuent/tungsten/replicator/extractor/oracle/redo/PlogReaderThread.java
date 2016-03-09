@@ -290,7 +290,7 @@ public class PlogReaderThread extends Thread
         logger.info("File " + filename + " opened.");
         if (logger.isDebugEnabled())
         {
-            logger.info("Last processed event ID=" + this.lastProcessedEventId);
+            logger.debug("Last processed event ID=" + this.lastProcessedEventId);
         }
         logger.info("Open transactions=" + openTransactions.size());
         logger.info("Transaction cache statistics: " + cache.toString());
