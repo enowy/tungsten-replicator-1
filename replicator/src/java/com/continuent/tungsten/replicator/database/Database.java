@@ -78,6 +78,11 @@ public interface Database extends UniversalConnection
      */
     @Override
     public void setAutoCommit(boolean autoCommit) throws SQLException;
+    
+    /**
+     * Returns autocommit state.
+     */
+    public boolean isAutoCommit() throws SQLException;
 
     // END UNIVERSALCONNECTOR API.
 

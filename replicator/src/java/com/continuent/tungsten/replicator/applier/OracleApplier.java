@@ -781,6 +781,16 @@ public class OracleApplier extends JdbcApplier
         }
     }    
     
+    @Override
+    protected void rollbackTransaction() throws SQLException
+    {
+        if (!conn.isAutoCommit())
+            super.rollbackTransaction();
+        else
+            logger.warn(
+                    "Connection is set as auto-commit : impossible to rollback");
+    }
+
     private void reportObsoleteFiles()
     {
     	// TODO Review

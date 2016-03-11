@@ -1865,7 +1865,7 @@ public class JdbcApplier implements RawApplier
      * 
      * @throws SQLException if a problem occurs.
      */
-    private void rollbackTransaction() throws SQLException
+    protected void rollbackTransaction() throws SQLException
     {
         try
         {
