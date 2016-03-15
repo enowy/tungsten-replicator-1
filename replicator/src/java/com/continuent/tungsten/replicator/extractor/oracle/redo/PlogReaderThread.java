@@ -29,6 +29,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -150,15 +151,20 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * For start with no eventId, search a directory and find oldest (=lowest
-     * sequence) plog
+     * For start with no eventId, search a directory and find oldest (= lowest
+     * sequence) plog.
+     * 
+     * TODO Review : This is now done in reverse order : find
+     * the latest file with no gaps in the sequence of files and which is
+     * greater than the last .gz file (if any).
      * 
      * @param path Directory to search
      * @return first sequence found. Integer.MAX_VALUE if no file present at
      *         all.
+     * @throws ReplicatorException 
      */
     private static int findOldestPlogSequence(String path)
-            throws FileNotFoundException
+            throws FileNotFoundException, ReplicatorException
     {
         if (path == null)
         {
@@ -169,7 +175,6 @@ public class PlogReaderThread extends Thread
         if (logger.isDebugEnabled())
             logger.debug("findOldestPlogSequence: " + path);
 
-        int rtval = Integer.MAX_VALUE;
         File dir = new File(path);
         if (!dir.canRead())
         {
@@ -182,32 +187,81 @@ public class PlogReaderThread extends Thread
                 String file = name.toLowerCase();
                 // TODO Review
                 // Skip .gz files as this could break the extraction
-                return file.contains(".plog.") && !file.endsWith(".gz");
+                return file.contains(".plog."); // && !file.endsWith(".gz");
             }
         });
-        for (File mf : matchingFiles)
+
+        Arrays.sort(matchingFiles);
+        int minPlogSeq = Integer.MAX_VALUE;
+        for (int i = matchingFiles.length - 1; i >= 0; i--)
         {
-            String p = null;
-            try
+            File mf = matchingFiles[i];
+            if (minPlogSeq == Integer.MAX_VALUE && mf.getName().endsWith(".gz"))
             {
-                p = mf.getName();
-                p = p.substring(0, p.indexOf(".plog."));
-                int s = Integer.parseInt(p);
-                if (s < rtval)
+                // This should not happen : the last file here is obsolete !
+                throw new ReplicatorException(
+                        "Unable to identify last plog. Last file "
+                                + mf.getName()
+                                + "is obsolete. Unable to start extraction. Try resetting !");
+            }
+            else
+            {
+                // We reached the first obsolete file, return sequence number
+                // from previous normal plog file.
+                if (mf.getName().endsWith(".gz"))
                 {
-                    rtval = s;
+                    break;
+                }
+                // Handling first normal plog.
+                else if (minPlogSeq == Integer.MAX_VALUE)
+                {
+                    minPlogSeq = getPlogSequenceNumber(mf);
+                }
+                // Handling next plog files.
+                else
+                {
+                    int currentPlogSeq = getPlogSequenceNumber(mf);
+                    
+                    if(currentPlogSeq == minPlogSeq)
+                    {
+                        // Just another plog with same sequence number (and
+                        // different timestamp). Just check next file.
+                        continue;
+                    }
+                    else if (currentPlogSeq == minPlogSeq - 1)
+                    {
+                        // No gap
+                        minPlogSeq = currentPlogSeq;
+                    }
+                    else
+                        // Gap : just return the previous file, for which there
+                        // is no gap in the sequence
+                        break;
                 }
             }
-            catch (NumberFormatException e)
-            {
-                logger.warn(p + " is not really a time number");
-            }
-            catch (IndexOutOfBoundsException e)
-            {
-                logger.warn(p + " malformed, did not find .plog extension.");
-            }
         }
-        return rtval;
+        return minPlogSeq;
+    }
+
+    private static int getPlogSequenceNumber(File mf)
+    {
+        int s = 0;
+        String p = null;
+        try
+        {
+            p = mf.getName();
+            p = p.substring(0, p.indexOf(".plog."));
+            s = Integer.parseInt(p);
+        }
+        catch (NumberFormatException e)
+        {
+            logger.warn(p + " is not really a time number");
+        }
+        catch (IndexOutOfBoundsException e)
+        {
+            logger.warn(p + " malformed, did not find .plog extension.");
+        }
+        return s;
     }
 
     /**
@@ -891,14 +945,14 @@ public class PlogReaderThread extends Thread
         // If we don't have a plog ID we need to find one.
         // TODO Review
         // This looks like a bug in current code : 
-        // retries should be intialized outside of the loop 
+        // retries should be initialized outside of the loop 
         int retries = 0;
         while (firstSequence == Integer.MAX_VALUE)
         {
             if (retries == 0)
             {
                 // Just print this once.
-                logger.info("Seeking oldest plog file to commence extraction");
+                logger.info("Seeking oldest plog file to start extraction");
             }
 
             // Find oldest plog; check for interrupt on thread
