@@ -192,9 +192,10 @@ public class OracleApplier extends JdbcApplier
             .getLogger(OracleApplier.class);
 
     // TODO Review
-    // This should probably a new setting or it could be derived from other settings
-    // For this initial commit, it is hard coded
-    private boolean           hasPlogs = true;
+    // This is derived from other property (replicator.extractor.dbms exists and
+    // is equal to
+    // com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor).
+    private boolean           hasPlogs = false;
     private RedoReaderManager vmrrMgr;
 
     private String            replicateApplyName;
@@ -219,14 +220,22 @@ public class OracleApplier extends JdbcApplier
     {
         super.configure(context);
 
+        String property = context.getReplicatorProperties().getProperty("replicator.extractor.dbms", "");
+        hasPlogs = property.length() > 0 && property.equals("com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor");
+        
         if (hasPlogs)
         {
+            logger.info("Plog extractor is configured for this applier.");
             if (this.replicateApplyName == null)
             {
                 replicateApplyName = context.getServiceName();
             }
             this.retainedPlogs = context.getReplicatorProperties().getInt("replicator.extractor.dbms.retainedPlogs");
             this.plogPath = context.getReplicatorProperties().get("replicator.extractor.dbms.plogDirectory");
+        }
+        else
+        {
+            logger.info("Plog extractor is not configured for this applier. Skipping.");
         }
     }
 
