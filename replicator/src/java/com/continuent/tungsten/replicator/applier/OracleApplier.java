@@ -44,6 +44,7 @@ import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.FailurePolicy;
 import com.continuent.tungsten.replicator.database.AdditionalTypes;
+import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.datatypes.MySQLUnsignedNumeric;
 import com.continuent.tungsten.replicator.datatypes.Numeric;
 import com.continuent.tungsten.replicator.dbms.OneRowChange;
@@ -280,14 +281,14 @@ public class OracleApplier extends JdbcApplier
      * Applies one or more sets of row changes with JDBC batching.
      */
     @Override
-    protected void applyOneRowChangePrepared(OneRowChange oneRowChange)
+    protected void applyOneRowChangePrepared(OneRowChange oneRowChange, String sourceDbmsType)
             throws ReplicatorException
     {
         // This method only handles event batching, which has specific Oracle
         // semantics.
         if (!optimizeRowEvents)
         {
-            super.applyOneRowChangePrepared(oneRowChange);
+            super.applyOneRowChangePrepared(oneRowChange, sourceDbmsType);
             return;
         }
 
@@ -383,7 +384,7 @@ public class OracleApplier extends JdbcApplier
                 if (columnValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(pendingPreparedStatement,
-                            columnValues.get(row), bindLoc, columns, false);
+                            columnValues.get(row), bindLoc, columns, false, sourceDbmsType);
                 }
                 /* bind key values */
                 // Do not try to bind key values, which have been added to make
@@ -393,7 +394,7 @@ public class OracleApplier extends JdbcApplier
                         && keyValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(pendingPreparedStatement,
-                            keyValues.get(row), bindLoc, key, true);
+                            keyValues.get(row), bindLoc, key, true, sourceDbmsType);
                 }
 
                 // Now add the batch.
@@ -666,7 +667,7 @@ public class OracleApplier extends JdbcApplier
      */
     @Override
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            ColumnVal value, ColumnSpec columnSpec) throws SQLException
+            ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType) throws SQLException
     {
         int type = columnSpec.getType();
         try
@@ -687,26 +688,23 @@ public class OracleApplier extends JdbcApplier
                 ((OraclePreparedStatement) prepStatement).setObject(bindLoc,
                         clob);
             }
-            else
-                if (type == Types.DATE
-                        && (value.getValue() instanceof java.sql.Timestamp))
+            else if (type == Types.DATE
+                    && (value.getValue() instanceof java.sql.Timestamp))
             { // Issue 704 - unsuccessful DATETIME to DATE conversion
                 Timestamp ts = (Timestamp) value.getValue();
                 ((OraclePreparedStatement) prepStatement).setTimestamp(bindLoc,
                         ts, Calendar.getInstance(TimeZone.getTimeZone("GMT")));
             }
-            else
-                    if (type == Types.DATE
-                            && (value.getValue() instanceof java.lang.Long))
+            else if (type == Types.DATE
+                    && (value.getValue() instanceof java.lang.Long))
             { // TENT-311 - no conversion is needed if the underlying value is
               // Date.
                 Timestamp ts = new Timestamp((Long) (value.getValue()));
                 ((OraclePreparedStatement) prepStatement).setObject(bindLoc,
                         ts);
             }
-            else
-                        if (type == Types.BLOB || (type == Types.NULL
-                                && value.getValue() instanceof SerialBlob))
+            else if (type == Types.BLOB || (type == Types.NULL
+                    && value.getValue() instanceof SerialBlob))
             { // ______^______
               // Blob in the incoming event masked as NULL,
               // though this happens with a non-NULL value!
@@ -714,12 +712,16 @@ public class OracleApplier extends JdbcApplier
 
                 SerialBlob blob = (SerialBlob) value.getValue();
 
-                if (columnSpec.isBlob())
+                if (columnSpec.isBlob() || (sourceDbmsType != null
+                        && sourceDbmsType.equals(Database.ORACLE)))
                 {
                     // Blob in the incoming event and in Oracle table.
                     // IMPORTANT: the bellow way only fixes INSERTs.
                     // Blobs in key lookups of DELETEs and UPDATEs is
                     // not supported.
+                    // Warning : isBlob is set only if metadata is fetched from
+                    // the underlying database, which is not the default anymore.
+                	// Added a workaround to make it work in Oracle to Oracle case.
                     prepStatement.setBytes(bindLoc,
                             blob.getBytes(1, (int) blob.length()));
                     if (logger.isDebugEnabled())
@@ -747,7 +749,7 @@ public class OracleApplier extends JdbcApplier
                 if (columnSpec.isUnsigned() && numeric.isNegative())
                 {
                     // We assume that if column is unsigned - it's MySQL on the
-                    // master side, as Oralce doesn't have UNSIGNED modifier.
+                    // master side, as Oracle doesn't have UNSIGNED modifier.
                     valToInsert = MySQLUnsignedNumeric
                             .negativeToMeaningful(numeric);
                     prepStatement.setObject(bindLoc, valToInsert);

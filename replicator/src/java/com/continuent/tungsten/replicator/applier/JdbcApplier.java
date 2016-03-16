@@ -546,8 +546,8 @@ public class JdbcApplier implements RawApplier
 
     protected int bindColumnValues(PreparedStatement prepStatement,
             ArrayList<OneRowChange.ColumnVal> values, int startBindLoc,
-            ArrayList<OneRowChange.ColumnSpec> specs, boolean skipNulls)
-                    throws SQLException
+            ArrayList<OneRowChange.ColumnSpec> specs, boolean skipNulls,
+            String sourceDbmsType) throws SQLException
     {
         int bindLoc = startBindLoc; /*
                                      * prepared stmt variable index starts from
@@ -564,7 +564,7 @@ public class JdbcApplier implements RawApplier
                 if (conn.nullsBoundDifferently(specs.get(idx)))
                     continue;
             }
-            setObject(prepStatement, bindLoc, value, specs.get(idx));
+            setObject(prepStatement, bindLoc, value, specs.get(idx), sourceDbmsType);
 
             bindLoc += 1;
         }
@@ -572,7 +572,7 @@ public class JdbcApplier implements RawApplier
     }
 
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            OneRowChange.ColumnVal value, ColumnSpec columnSpec)
+            OneRowChange.ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType)
                     throws SQLException
     {
         // By default, type is not used. If specific operations have to be done,
@@ -985,7 +985,7 @@ public class JdbcApplier implements RawApplier
         return false;
     }
 
-    protected void applyOneRowChangePrepared(OneRowChange oneRowChange)
+    protected void applyOneRowChangePrepared(OneRowChange oneRowChange, String sourceDbmsType)
             throws ReplicatorException
     {
         PreparedStatement prepStatement = null;
@@ -1038,7 +1038,7 @@ public class JdbcApplier implements RawApplier
                 if (columnValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(prepStatement,
-                            columnValues.get(row), bindLoc, columns, false);
+                            columnValues.get(row), bindLoc, columns, false, sourceDbmsType);
                 }
                 /* bind key values */
                 // Do not try to bind key values, which have been added to make
@@ -1048,7 +1048,7 @@ public class JdbcApplier implements RawApplier
                         && keyValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(prepStatement,
-                            keyValues.get(row), bindLoc, key, true);
+                            keyValues.get(row), bindLoc, key, true, sourceDbmsType);
                 }
 
                 try
@@ -1175,7 +1175,7 @@ public class JdbcApplier implements RawApplier
     
     private boolean needsColumnNames(OneRowChange oneRowChange)
     {
-        // If there is column a column specification, check if the name is
+        // If there is column specification, check if the name is
         // already defined
         if (oneRowChange.getColumnSpec().size() > 0)
             return (oneRowChange.getColumnSpec().get(0).getName() == null
@@ -1305,9 +1305,10 @@ public class JdbcApplier implements RawApplier
      * 
      * @param data Row change data, containing changes on one or more tables
      * @param options Metadata options for this transaction fragment
+     * @param sourceDbmsType TODO
      */
     protected void applyRowChangeData(RowChangeData data,
-            List<ReplOption> options) throws ReplicatorException
+            List<ReplOption> options, String sourceDbmsType) throws ReplicatorException
     {
         if (options != null)
         {
@@ -1360,7 +1361,7 @@ public class JdbcApplier implements RawApplier
 
         for (OneRowChange row : data.getRowChanges())
         {
-            applyOneRowChangePrepared(row);
+            applyOneRowChangePrepared(row, sourceDbmsType);
         }
     }
 
@@ -1459,7 +1460,9 @@ public class JdbcApplier implements RawApplier
                     if (dataElem instanceof RowChangeData)
                     {
                         applyRowChangeData((RowChangeData) dataElem,
-                                event.getOptions());
+                                event.getOptions(),
+                                event.getMetadataOptionValue(
+                                        ReplOptionParams.DBMS_TYPE));
                         continue;
                     }
 
