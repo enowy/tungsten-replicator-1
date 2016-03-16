@@ -22,6 +22,7 @@ package com.continuent.tungsten.replicator.extractor.parallel;
 
 import java.io.Serializable;
 import java.math.BigInteger;
+import java.sql.Blob;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -30,8 +31,6 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
-
-import oracle.sql.TIMESTAMPTZ;
 
 import org.apache.log4j.Logger;
 
@@ -49,6 +48,9 @@ import com.continuent.tungsten.replicator.dbms.RowChangeData;
 import com.continuent.tungsten.replicator.event.DBMSEmptyEvent;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
+import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
+
+import oracle.sql.TIMESTAMPTZ;
 
 /**
  * @author <a href="mailto:stephane.giron@continuent.com">Stephane Giron</a>
@@ -317,6 +319,10 @@ public class ParallelExtractorThread extends Thread
                                                     connection.getConnection(),
                                                     timestampTZ.getBytes()));
                                         }
+                                        break;
+                                    case Types.BLOB :
+                                        Blob blob = rs.getBlob(columnName);
+                                        val = new SerialBlob(blob.getBytes(1, (int) blob.length()));
                                         break;
                                     default :
                                         val = rs.getObject(column.getName());
