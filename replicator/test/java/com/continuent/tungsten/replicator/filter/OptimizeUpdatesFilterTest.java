@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Linas Virbalas
- * Contributor(s):
+ * Contributor(s): Stephane Giron
  */
 
 package com.continuent.tungsten.replicator.filter;
@@ -23,6 +23,7 @@ package com.continuent.tungsten.replicator.filter;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Iterator;
 
 import junit.framework.Assert;
 import junit.framework.TestCase;
@@ -43,6 +44,7 @@ import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
  * 
  * @author <a href="mailto:linas.virbalas@continuent.com">Linas Virbalas</a>
  */
+@SuppressWarnings("deprecation")
 public class OptimizeUpdatesFilterTest extends TestCase
 {
 //    private static Logger  logger = Logger.getLogger(OptimizeUpdatesFilterTest.class);
@@ -70,6 +72,7 @@ public class OptimizeUpdatesFilterTest extends TestCase
     /**
      * Test UPDATE which has some columns changed and some - static.
      */
+    @SuppressWarnings("deprecation")
     public void testUPDATEWith1of3ColChange() throws Exception
     {
         OptimizeUpdatesFilter filter = new OptimizeUpdatesFilter();
@@ -105,6 +108,7 @@ public class OptimizeUpdatesFilterTest extends TestCase
      * Issue 355 - Oracle UPDATEs that change no columns lead to
      * OptimizeUpdatesFilter removing too much.
      */
+    @SuppressWarnings("deprecation")
     public void testUPDATEWithoutChanges() throws Exception
     {
         OptimizeUpdatesFilter filter = new OptimizeUpdatesFilter();
@@ -135,6 +139,58 @@ public class OptimizeUpdatesFilterTest extends TestCase
         Assert.assertEquals("All key specs are in place", 3, orc.getKeySpec().size());
         Assert.assertEquals("All key values are in place", 3, orc.getKeyValues().get(0).size());
     }
+    
+    /**
+     * Test UPDATE which has some columns changed and some - static.
+     */
+    @SuppressWarnings("deprecation")
+    public void testUPDATEWithDiffKeysValuesCount() throws Exception
+    {
+        OptimizeUpdatesFilter filter = new OptimizeUpdatesFilter();
+        
+        // Create table change header.
+        OneRowChange oneRowChange = generateRowChange("foo", "bar",
+                RowChangeData.ActionType.UPDATE);
+
+        // Add specifications and values for columns. This is the after value.
+        oneRowChange.setColumnSpec(generateSpec(oneRowChange));
+        oneRowChange.setColumnValues(generateValues(oneRowChange, 333, "two", "const"));
+
+        // Add specifications and values for keys. This is the before value.
+        ArrayList<ColumnSpec> keySpec = generateSpec(oneRowChange);
+        // Remove last column
+        keySpec.remove(keySpec.size() - 1);
+        oneRowChange.setKeySpec(keySpec);
+        ArrayList<ArrayList<ColumnVal>> keyValues = generateValues(oneRowChange, 333, "two", "const");
+        for (Iterator<ArrayList<ColumnVal>> iterator = keyValues.iterator(); iterator.hasNext();)
+        {
+            ArrayList<ColumnVal> arrayList = (ArrayList<ColumnVal>) iterator
+                    .next();
+            arrayList.remove(arrayList.size()-1);
+            
+        }
+        oneRowChange.setKeyValues(keyValues);
+        
+        // Two identical events for comparison.
+        ReplDBMSEvent event = generateReplDBMSEvent(oneRowChange);
+        
+        // Filter and verify results!
+        filter.filter(event);
+        
+        RowChangeData rdata = (RowChangeData)event.getDBMSEvent().getData().get(0);
+        OneRowChange orc = rdata.getRowChanges().get(0);
+        System.out.println(orc.getKeySpec());
+        System.out.println(orc.getKeyValues());
+        System.out.println(orc.getColumnSpec());
+        System.out.println(orc.getColumnValues());
+        
+        Assert.assertEquals("Two column specs were removed", 1, orc.getColumnSpec().size());
+        Assert.assertEquals("Two column values were removed", 1, orc.getColumnValues().get(0).size());
+        Assert.assertEquals("All key specs are in place", 2, orc.getKeySpec().size());
+        Assert.assertEquals("All key values are in place", 2, orc.getKeyValues().get(0).size());
+    }
+
+    
     
     
     /**
