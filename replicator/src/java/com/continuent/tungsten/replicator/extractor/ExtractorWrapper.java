@@ -181,10 +181,9 @@ public class ExtractorWrapper implements Extractor
             if (logger.isDebugEnabled())
                 logger.debug("Source ID of max event verified: "
                         + header.getSourceId());
-            if (header.getLastSeqno() == -1)
-                seqno = header.getSeqno() + 1;
-            else
-                seqno = header.getLastSeqno() + 1;
+            
+            seqno = getStartingSeqno(header);
+            
             eventId = header.getEventId();
         }
         else
@@ -192,7 +191,8 @@ public class ExtractorWrapper implements Extractor
             // Master source ID has shifted; remember the seqno. 
             logger.info("Local source ID differs from last stored source ID: local="
                     + sourceId + " stored=" + header.getSourceId());
-            seqno = header.getSeqno() + 1;
+            
+            seqno = getStartingSeqno(header);
 
             // If auto repositioning is enabled, reposition.  Otherwise, print a
             // warning and try to use the source ID. 
@@ -232,6 +232,25 @@ public class ExtractorWrapper implements Extractor
             setLastEventId(eventId);
         }
         epochNumber = seqno;
+    }
+    
+    /**
+     * Returns the starting sequence number, which is the sequence number of the
+     * provided event + 1 for a normal event or the last sequence number of a
+     * filtered event + 1.
+     */
+    private long getStartingSeqno(ReplDBMSHeader header)
+    {    
+        if (header.getLastSeqno() == -1)
+        {
+            // This is not a filtered event. Return the seqno + 1.
+            return header.getSeqno() + 1;
+        }
+        else
+        {
+            // this is a filtered event (only events with getLastSeqno != -1) : return the last seqno + 1.
+            return header.getLastSeqno() + 1;
+        }
     }
 
     // Override base sequence number if different from current base.

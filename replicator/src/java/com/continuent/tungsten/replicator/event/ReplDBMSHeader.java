@@ -38,7 +38,7 @@ public interface ReplDBMSHeader
     public long getSeqno();
     
     /**
-     * Returns the last log sequence number for a filtered event or -1 for other
+     * Returns the last sequence number for a filtered event or -1 for other
      * normal events
      */
     public long getLastSeqno();
