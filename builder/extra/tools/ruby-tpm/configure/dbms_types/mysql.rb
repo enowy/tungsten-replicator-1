@@ -2316,3 +2316,22 @@ class MySQLLoadDataInfilePermissionsCheck < ConfigureValidationCheck
   end
 end
 
+class MySQLUnsopportedDataTypesCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL unsupported data types check"
+  end
+
+  def validate
+    info("Warning regarding the use MySQL 5.7 or greater unsupported datatypes")
+    warning("Please note, the replicator is unable to replicate tables that have columns defined as type JSON or that utilise VIRTUAL GENERATED values. It is the customer's responsibility to ensure that these are not being used, tpm does not check for these.")
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version >= 5.7
+  end
+end
