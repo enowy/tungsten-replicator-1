@@ -1346,7 +1346,7 @@ public class THLManagerCtrl
         println("       [-no-checksum]               Suppress checksums");
         println("       [-timezone timezone]         Time used zone for time-related data");
         println("  index [-no-checksum]            - Display index of log files");
-        println("  purge [-low #] [-high #]        - Delete THL files identified by the given range");
+        println("  purge [-low #] [-high #]        - Delete events identified by the given range from THL files");
         println("        [-no-checksum] [-y]         Use -y to suppress prompt");
         println("  info [-no-checksum]             - Display minimum, maximum sequence number");
         println("                                    and other summary information about log");
