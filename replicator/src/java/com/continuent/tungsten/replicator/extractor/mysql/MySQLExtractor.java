@@ -1640,17 +1640,42 @@ public class MySQLExtractor implements RawExtractor
 
     private void checkInnoDBSupport(Database conn) throws ReplicatorException
     {
+        boolean hasInnoDB = true;
         Statement st = null;
         ResultSet rs = null;
         try
         {
+            String sql;
+
             st = conn.createStatement();
-            rs = st.executeQuery("show variables like 'have_innodb'");
-            if (!rs.next()
-                    || rs.getString(2).compareToIgnoreCase("disabled") == 0)
+            sql = "show variables like 'have_innodb'";
+            rs = st.executeQuery(sql);
+            if (rs.next())
             {
-                logger.warn("Warning! InnoDB support does not seem to be activated (check mysql have_innodb variable)");
+                if (rs.getString(2).compareToIgnoreCase("disabled") == 0)
+                {
+                    hasInnoDB = false;
+                }
             }
+            else
+            {
+                rs.close();
+                if (conn.findTable("information_schema", "engines") != null)
+                {
+                    rs = st.executeQuery(
+                            "select IF(SUPPORT, 'DEFAULT', 'YES') as Value  from information_schema.engines where engine='InnoDB'");
+                    if (!(rs.next() && rs.getString("Value").equals("YES")))
+                        hasInnoDB = false;
+                }
+                else
+                    hasInnoDB = false;
+            }
+
+            if (!hasInnoDB)
+                logger.warn(
+                        "Warning! InnoDB support does not seem to be activated or cannot be checked.");
+            else
+                logger.info("InnoDB support seems to be activated");
         }
         catch (SQLException e)
         {
