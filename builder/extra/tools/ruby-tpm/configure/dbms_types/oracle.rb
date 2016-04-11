@@ -196,7 +196,7 @@ class OracleDatabasePlatform < ConfigureDatabasePlatform
     if @config.getPropertyOr(@prefix + [REPL_ORACLE_SCAN], "") != ""
       # Oracle scan gets no extra filters. 
       super()
-    elsif method == "cdc"
+    elsif ["cdc", "cdcasync"].include?(method)
       # CDC gets CDC filter. 
       super() + ["CDC"]
     elsif method == "redo"
@@ -495,9 +495,12 @@ end
 
 module OracleCDCCheck
   def enabled?
-    if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
+    disable_extractor = get_member_value(REPL_DISABLE_EXTRACTOR)
+    extractor_method = get_member_value(REPL_ORACLE_EXTRACTOR_METHOD)
+
+    if disable_extractor == "true"
       false
-    elsif @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) != "cdc"
+    elsif ["cdc", "cdcasync"].include?(extractor_method) != true
       false
     else
       super()
@@ -507,9 +510,12 @@ end
 
 module OracleRedoReaderCheck
   def enabled?
-    if @config.getProperty(get_member_key(REPL_DISABLE_EXTRACTOR)) == "true"
+    disable_extractor = get_member_value(REPL_DISABLE_EXTRACTOR)
+    extractor_method = get_member_value(REPL_ORACLE_EXTRACTOR_METHOD)
+
+    if disable_extractor == "true"
       false
-    elsif @config.getProperty(get_member_key(REPL_ORACLE_EXTRACTOR_METHOD)) != "redo"
+    elsif ["redo"].include?(extractor_method) != true
       false
     else
       super()
@@ -533,7 +539,7 @@ class OracleVersionCheck < ConfigureValidationCheck
       extractor_method = get_member_property(REPL_ORACLE_EXTRACTOR_METHOD)
       if extractor_method == "redo"
         supported_versions = [10, 11, 12]
-      elsif extractor_method == "cdc"
+      elsif ["cdc", "cdcasync"].include?(extractor_method)
         supported_versions = [10, 11]
       end
     end
