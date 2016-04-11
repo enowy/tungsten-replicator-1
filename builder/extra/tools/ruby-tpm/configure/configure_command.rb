@@ -1383,6 +1383,11 @@ module ConfigureCommand
     
     basepath = Configurator.instance.get_base_path()
     cmd = "#{basepath}/tools/accept_release_notes"
+    
+    unless File.exist?(cmd)
+      return
+    end
+    
     begin
       cmd_result("#{cmd} -test")
       accepted = true

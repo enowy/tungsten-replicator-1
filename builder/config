@@ -1,7 +1,7 @@
 # Build version.
 VERSION_MAJOR=5
 VERSION_MINOR=0
-VERSION_REVISION=0
+VERSION_REVISION=1
 
 # Set to 1 to skip the build.
 SKIP_BUILD=0
