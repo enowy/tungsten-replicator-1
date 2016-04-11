@@ -79,10 +79,11 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
          * Ensure that if the client has supplied log position information we
          * validate that the last epoch number and seqno match our log.
          * 
+         * @param masterId Id of this replicator
          * @param handshakeResponse Response from client
          * @throws ReplicatorException Thrown if logs appear to diverge
          */
-        public void validateResponse(
+        public void validateResponse(String masterId,
                 ProtocolHandshakeResponse handshakeResponse)
                         throws InterruptedException, ReplicatorException
         {
@@ -224,10 +225,12 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                         if (event == null)
                         {
                             throw new THLException(
-                                    "Master log does not contain requested transaction: client source ID="
+                                    "Master log does not contain requested transaction: "
+                                            + "master source ID=" + masterId
+                                            + " client source ID="
                                             + handshakeResponse.getSourceId()
-                                            + " seqno=" + clientLastSeqno
-                                            + " epoch number="
+                                            + " requested seqno=" + clientLastSeqno
+                                            + " client epoch number="
                                             + clientLastEpochNumber
                                             + " master min seqno="
                                             + masterMinSeqno
@@ -246,7 +249,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                     else if (event.getEpochNumber() != clientLastEpochNumber)
                     {
                         throw new THLException(
-                                "Log epoch numbers do not match: client source ID="
+                                "Log epoch numbers do not match: "
+                                        + "master source ID=" + masterId
+                                        + " client source ID="
                                         + handshakeResponse.getSourceId()
                                         + " seqno=" + clientLastSeqno
                                         + " server epoch number="
@@ -256,12 +261,12 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                     }
                     else
                     {
-                        logger.info(
-                                "Log epoch numbers checked and match: client source ID="
-                                        + handshakeResponse.getSourceId()
-                                        + " seqno=" + clientLastSeqno
-                                        + " epoch number="
-                                        + clientLastEpochNumber);
+                        logger.info("Log epoch numbers checked and match: "
+                                + "master source ID=" + masterId
+                                + " client source ID="
+                                + handshakeResponse.getSourceId() + " seqno="
+                                + clientLastSeqno + " epoch number="
+                                + clientLastEpochNumber);
                     }
 
                     // If we have an event ID, we need to search forward to find
@@ -274,7 +279,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                         if (eventId == null || !eventId.isValid())
                         {
                             throw new THLException(
-                                    "Unable to parse eventId requested by client: client source ID="
+                                    "Unable to parse eventId requested by client: "
+                                            + "master source ID=" + masterId
+                                            + " client source ID="
                                             + handshakeResponse.getSourceId()
                                             + " requested event ID=" + eventId);
                         }
@@ -314,7 +321,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                             else
                             {
                                 throw new THLException(
-                                        "Client seeking event ID that does not exist or may be too old: client source ID="
+                                        "Client seeking event ID that does not exist or may be too old: "
+                                                + "master source ID=" + masterId
+                                                + " client source ID="
                                                 + handshakeResponse
                                                         .getSourceId()
                                                 + " requested event ID="
@@ -331,7 +340,9 @@ public class ConnectorHandler implements ReplicatorPlugin, Runnable
                             if (event == null)
                             {
                                 throw new THLException(
-                                        "Client seeking non-existent event ID: client source ID="
+                                        "Client seeking non-existent event ID: "
+                                                + "master source ID=" + masterId
+                                                + " client source ID="
                                                 + handshakeResponse
                                                         .getSourceId()
                                                 + " requested event ID="

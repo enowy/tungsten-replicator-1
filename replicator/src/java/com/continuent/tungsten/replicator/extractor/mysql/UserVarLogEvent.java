@@ -158,7 +158,8 @@ public class UserVarLogEvent extends LogEvent
                 switch (variableType)
                 {
                     case STRING_RESULT :
-                        if (MysqlBinlog.getMySQLCharset(charset).length() == 0)
+                        if (variableValueLength == 0 || MysqlBinlog
+                                .getMySQLCharset(charset).length() == 0)
                             value = "'" + new String(buffer, variableValueIndex,
                                     variableValueLength).replaceAll("'", "''")
                                     + "'";

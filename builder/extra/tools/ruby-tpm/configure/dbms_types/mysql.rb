@@ -67,11 +67,19 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
   end
   
   # Execute mysql command and return result to client. 
-  def run(command)
+  def run(command, user="tungsten_user")
     if Configurator.instance.get_ip_addresses(@host) == false
       return ""
     end
     
+    if user == "application_user"
+      username = @config.getProperty(CONN_CLIENTLOGIN)
+      password = @config.getProperty(CONN_CLIENTPASSWORD)
+    else
+      username = @username
+      password = @password
+    end
+
     begin
       if Configurator.instance.is_localhost?(@host)
         mysql_cmd = @config.getProperty(@prefix + [REPL_MYSQL_COMMAND])
@@ -85,8 +93,8 @@ class MySQLDatabasePlatform < ConfigureDatabasePlatform
       # Provisional workaround for MySQL 5.6 non-removable warning (Issue#445)
       tmp = Tempfile.new('options')
       tmp << "[client]\n"
-      tmp << "user=#{@username}\n"
-      tmp << "password=#{@password}\n"
+      tmp << "user=#{username}\n"
+      tmp << "password=#{password}\n"
       tmp << "port=#{@port}\n"
       
       if @sslca != ""
@@ -2053,14 +2061,11 @@ class MySQLConnectorPermissionsCheck < ConfigureValidationCheck
         end
 
         # Check MySQL password() returns 
-        if get_applier_datasource.get_value("select password('#{connpassword}')")  == nil
-          error("Password specified for #{connuser}@#{host} is not acceptable to MySQL password function on #{get_applier_datasource.get_connection_summary()}. This may indicate that the password contravenes settings for the MySQL Password Validation Plugin.")
-        else
-          if get_applier_datasource.get_value("select 'OK' from mysql.user where user='#{connuser}' and host='#{host}' and  password=password('#{connpassword}')")  != 'OK'
-            error("Password specified for #{connuser}@#{host} does not match the running instance on #{get_applier_datasource.get_connection_summary()}. This may indicate that the user has a password using the old format.")
-          end
-        end        
-        
+        result = get_applier_datasource.run("SELECT 'OK' AS 'RESULT' \\G", "application_user")
+        unless result.include? "OK"
+          error("Unable to connect to MySQL as #{connuser}@#{host}.")
+        end
+
         if @config.getProperty('connector_smartscale') == 'true'
           if get_applier_datasource.get_value("select Repl_client_priv from mysql.user where user='#{connuser}' and host='#{host}'") == 'N'
             error("The user specified in --application-user (#{connuser}@#{host}) does not have REPLICATION CLIENT privileges and SMARTSCALE in enabled")
@@ -2316,3 +2321,22 @@ class MySQLLoadDataInfilePermissionsCheck < ConfigureValidationCheck
   end
 end
 
+class MySQLUnsopportedDataTypesCheck < ConfigureValidationCheck
+  include ReplicationServiceValidationCheck
+  include MySQLApplierCheck
+
+  def set_vars
+    @title = "MySQL unsupported data types check"
+  end
+
+  def validate
+    info("Warning regarding the use MySQL 5.7 or greater unsupported datatypes")
+    warning("Please note, the replicator is unable to replicate tables that have columns defined as type JSON or that utilise VIRTUAL GENERATED values. It is the customer's responsibility to ensure that these are not being used, tpm does not check for these.")
+  end
+
+  def enabled?
+    # Only run this check if the MySQL version is 5.7 or higher
+    mysql_version = get_applier_datasource.getVersion()[0..2].to_f()
+    super() && mysql_version >= 5.7
+  end
+end

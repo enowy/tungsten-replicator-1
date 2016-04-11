@@ -56,17 +56,17 @@ $col.getTypeDescription()($col.getLength())##
 #elseif ( $col.getTypeDescription().startsWith("VARCHAR") )
 VARCHAR($col.getLength()) /* $col.getTypeDescription()($col.getLength()) */##
 #elseif ( $col.getTypeDescription().equals("LONG") )
-LONGTEXT /* ERROR: $col.getTypeDescription() is unsupported by Oracle CDC */##
+LONGTEXT ##
 #elseif ( $col.getTypeDescription().equals("BFILE") )
-VARCHAR(1024) /* ERROR: $col.getTypeDescription() is unsupported by Oracle CDC */##
+VARCHAR(1024) ##
 #elseif ( $col.getTypeDescription().startsWith("CHAR") )
 $col.getTypeDescription()($col.getLength())##
 #elseif ( $col.getTypeDescription().contains("CLOB") )## CLOB, NCLOB
-LONGTEXT /* WARN: $col.getTypeDescription()($col.getLength()) is unsupported by Oracle 10g CDC */##
+LONGTEXT ##
 #elseif ( $col.getTypeDescription().contains("BLOB") )
-LONGBLOB /* WARN: $col.getTypeDescription()($col.getLength()) is unsupported by Oracle 10g CDC */##
+LONGBLOB ##
 #elseif ( $col.getTypeDescription().equals("LONG RAW") )
-LONGBLOB /* ERROR: $col.getTypeDescription() is unsupported by Oracle CDC */##
+LONGBLOB ##
 #elseif ( $col.getTypeDescription().contains("TIMESTAMP") )
 TIMESTAMP /* $col.getTypeDescription() */##
 #elseif ( $col.getTypeDescription().equals("RAW") )

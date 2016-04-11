@@ -152,9 +152,8 @@ class PlogTransaction implements Comparable<PlogTransaction>
             commitTime = LCR.timestamp;
 
         }
-        else
-            if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
-                    && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK)
+        else if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
+                && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK)
         {
             // Rollback tran: say we are done, but we are empty.
             // We may want to release LCRList but resizing to 0 is OK too.
@@ -162,18 +161,25 @@ class PlogTransaction implements Comparable<PlogTransaction>
             LCRList.resize(0);
             committed = true;
         }
-        else
-                if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
-                        && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK_TO_SAVEPOINT)
+        else if (LCR.type == PlogLCR.ETYPE_TRANSACTIONS
+                && LCR.subtype == PlogLCR.ESTYPE_TRAN_ROLLBACK_TO_SAVEPOINT)
         {
             // Rollback to savepoint: discard rolled back changes by resizing to
             // before the last value that is at or above save point ID.
-            int last = LCRList.size() - 1;
-            while (last > 0 && LCRList.get(last).LCRid >= LCR.LCRSavepointId)
+            // TODO Review
+            // BUG CONT-1556
+            // resize method expects the new size, not the new last index !
+            int newSize = LCRList.size();            
+            for (int i = LCRList.size() - 1 ; i >= 0; i--)
             {
-                last--;
+                if(LCRList.get(i).LCRid >= LCR.LCRSavepointId)
+                {
+                    newSize--;
+                }
+                else
+                    break;
             }
-            LCRList.resize(last);
+            LCRList.resize(newSize);
         }
         else if (LCR.type == PlogLCR.ETYPE_LCR_DATA)
         {
@@ -228,7 +234,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
     /**
      * Post all committed changes to given queue
      * 
-     * @param q Queue to post
+     * @param queue Queue to post
      * @param minSCN Minimal SCN among all open transactions
      * @param skipSeq If only part of the transaction should be posted, this is
      *            the last seq to skip
@@ -236,7 +242,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
      *            open transactions - 1)
      * @return lastProcessedEventId
      */
-    public String pushContentsToQueue(BlockingQueue<DBMSEvent> q, long minSCN,
+    public String pushContentsToQueue(BlockingQueue<DBMSEvent> queue, long minSCN,
             int transactionFragSize, long lastObsoletePlogSeq)
                     throws UnsupportedEncodingException, ReplicatorException,
                     SerialException, InterruptedException, SQLException
@@ -284,7 +290,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                                     ReplOptionParams.TIME_ZONE_AWARE, "true");
                             event.setMetaDataOption(ReplOptionParams.STRINGS,
                                     "utf8");
-                            q.put(event);
+                            queue.put(event);
 
                             // Clear array for next fragment.
                             data = new ArrayList<DBMSData>();
@@ -361,7 +367,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                         "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
 
-                q.put(event);
+                queue.put(event);
             }
 
             return lastProcessedEventId;
@@ -427,7 +433,7 @@ class PlogTransaction implements Comparable<PlogTransaction>
                 event.setMetaDataOption(ReplOptionParams.TIME_ZONE_AWARE,
                         "true");
                 event.setMetaDataOption(ReplOptionParams.STRINGS, "utf8");
-                q.put(event);
+                queue.put(event);
             }
             return lastProcessedEventId;
         }
@@ -451,7 +457,10 @@ class PlogTransaction implements Comparable<PlogTransaction>
      * 
      * @param LCR LCR to process
      */
-    private DBMSData convertLCRtoDBMSDataDML(PlogLCR LCR)
+    // TODO Review
+    // Need to be able to convert LCR into DBMSData outside of this class
+    // for the extractor thread to check whether we reached the desired restart point.
+    public static DBMSData convertLCRtoDBMSDataDML(PlogLCR LCR)
             throws ReplicatorException, UnsupportedEncodingException,
             SerialException, SQLException
     {

@@ -27,6 +27,7 @@ import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.dbms.DBMSData;
 import com.continuent.tungsten.replicator.dbms.StatementData;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
 
 /**
@@ -187,5 +188,10 @@ public class DummyExtractor implements RawExtractor
             InterruptedException
     {
         return new Integer(trxIndex - 1).toString();
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {        
     }
 }

@@ -1837,6 +1837,7 @@ def cmd_result(command, ignore_fail = false, hide_result = false)
     }
     
     threads.each{|t| t.join() }
+    [stdout, stderr].each{|stream| stream.close()}
   end
   
   result.strip!()

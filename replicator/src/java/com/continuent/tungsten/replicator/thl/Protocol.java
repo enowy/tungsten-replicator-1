@@ -223,7 +223,8 @@ public class Protocol
                     InterruptedException
     {
         ProtocolHandshake handshake = new ProtocolHandshake();
-        handshake.setCapability(SOURCE_ID, pluginContext.getSourceId());
+        String masterSourceId = pluginContext.getSourceId();
+        handshake.setCapability(SOURCE_ID, masterSourceId);
         handshake.setCapability(ROLE, pluginContext.getRoleName());
         handshake.setCapability(VERSION,
                 ManifestParser.parseReleaseWithBuildNumber());
@@ -244,7 +245,7 @@ public class Protocol
             this.clientSourceId = handshakeResponse.getSourceId();
             try
             {
-                validator.validateResponse(handshakeResponse);
+                validator.validateResponse(masterSourceId, handshakeResponse);
                 writeMessage(
                         new ProtocolOK(new SeqNoRange(minSeqNo, maxSeqNo)));
             }

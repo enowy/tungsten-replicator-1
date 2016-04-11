@@ -36,6 +36,7 @@ import com.continuent.tungsten.replicator.conf.ReplicatorRuntimeConf;
 import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.datasource.SqlDataSource;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.extractor.RawExtractor;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
 
@@ -119,6 +120,8 @@ public class PlogExtractor implements RawExtractor
     // Flag so that we log information on first transaction to ensure good
     // diagnostics for restart issues.
     private boolean firstXactLatch = true;
+
+    private ReplDBMSHeader lastEvent;
 
     /**
      * {@inheritDoc}
@@ -231,18 +234,21 @@ public class PlogExtractor implements RawExtractor
         // Make a best effort to stop the redo reader process.
         if (vmrrMgr != null)
         {
-            try
-            {
-                vmrrMgr.stop();
-            }
-            catch (ReplicatorException e)
-            {
-                logger.warn("Unable to stop vmrr process", e);
-            }
-            finally
-            {
-                vmrrMgr = null;
-            }
+        	// TODO Review
+            // Not stopping the VMRR anymore -- it should be kept running even
+            // after replicator goes offline
+//            try
+//            {
+//                vmrrMgr.stop();
+//            }
+//            catch (ReplicatorException e)
+//            {
+//                logger.warn("Unable to stop vmrr process", e);
+//            }
+//            finally
+//            {
+//                vmrrMgr = null;
+//            }
         }
     }
 
@@ -383,6 +389,10 @@ public class PlogExtractor implements RawExtractor
     @Override
     public DBMSEvent extract() throws ReplicatorException, InterruptedException
     {
+        // TODO Review
+        // Should NOW be dropped as it resets the VMRR, which should not be needed
+        // Not changing that part for now.
+        
         // Perform first time initialization.
         if (!readerThread.isAlive())
         {
@@ -391,29 +401,44 @@ public class PlogExtractor implements RawExtractor
             if (this.lastEventId != null)
             {
                 // Check to see the kind of last event ID and position redo
-                if (lastEventId.equalsIgnoreCase("NOW"))
+                if (lastEventId.startsWith("ora:"))
                 {
-                    // Position to current SCN, whatever that may be.
                     logger.info(
-                            "Positioning redo reader to start from current SCN");
-                    vmrrMgr.reset("NOW");
-                }
-                else if (lastEventId.matches("^[0-9]+$"))
-                {
-                    // Position to an explicit SCN.
-                    logger.info(
-                            "Positioning redo reader to start from explicit SCN: "
-                                    + lastEventId);
-                    vmrrMgr.reset(lastEventId);
+                            "Starting redo reader after provisioning at SCN "
+                                    + lastEventId.substring("ora:".length()));
                 }
                 else
                 {
-                    logger.info(
-                            "Starting from previous eventId: " + lastEventId);
+                    if (lastEventId.equalsIgnoreCase("NOW"))
+                    {
+                        // Position to current SCN, whatever that may be.
+                        logger.info(
+                                "Positioning redo reader to start from current SCN");
+                        vmrrMgr.reset("NOW");
+                    }
+                    else if (lastEventId.matches("^[0-9]+$"))
+                    {
+                        // Position to an explicit SCN.
+                        logger.info(
+                                "Positioning redo reader to start from explicit SCN: "
+                                        + lastEventId);
+                        vmrrMgr.reset(lastEventId);
+                    }
+                    else
+                    {
+                        logger.info("Starting from previous eventId: "
+                                + lastEventId);
+                    }
+                    // Set the redo reader thread restart position.
+                    readerThread.setLastEventId(lastEventId);
                 }
-
-                // Set the redo reader thread restart position.
-                readerThread.setLastEventId(lastEventId);
+            }
+            // TODO Review
+            // This happens when switching --> if source change is detected, 
+            // then the last applied event is used to determine coorect plog
+            // restart position             
+            else if (this.lastEvent != null) {
+                readerThread.setLastEvent(lastEvent);
             }
             else
             {
@@ -422,7 +447,12 @@ public class PlogExtractor implements RawExtractor
             }
 
             // Ensure the redo reader is started.
-            vmrrMgr.start();
+            // TODO Review
+            // VMRR should be started at this point. This needs more work
+            // related to the VMRR liveness checks and health checks.
+            // This will be part of a second commit.
+            if (!vmrrMgr.isRunning())
+                vmrrMgr.start();
 
             // Start the thread.
             readerThread.start();
@@ -561,5 +591,11 @@ public class PlogExtractor implements RawExtractor
         {
             conn.close();
         }
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        this.lastEvent = header;
     }
 }

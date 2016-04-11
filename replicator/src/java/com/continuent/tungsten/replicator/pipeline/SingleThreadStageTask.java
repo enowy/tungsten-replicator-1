@@ -57,27 +57,28 @@ import com.continuent.tungsten.replicator.plugin.ShutdownHook;
  */
 public class SingleThreadStageTask implements Runnable
 {
-    private static Logger      logger            = Logger.getLogger(SingleThreadStageTask.class);
+    private static Logger      logger        = Logger
+            .getLogger(SingleThreadStageTask.class);
     private Stage              stage;
     private int                taskId;
     private Extractor          extractor;
     private List<Filter>       filters;
     private Applier            applier;
-    private List<ShutdownHook> shutdownHooks     = new LinkedList<ShutdownHook>();
+    private List<ShutdownHook> shutdownHooks = new LinkedList<ShutdownHook>();
     private boolean            usingBlockCommit;
     private int                blockCommitRowsCount;
     private EventDispatcher    eventDispatcher;
     private Schedule           schedule;
     private String             name;
 
-    private long               blockEventCount   = 0;
-    private TaskProgress       taskProgress;
-    private PluginContext      context;
-    private long               lastCommitMillis;
-    private long               blockCommitIntervalMillis;
-    private boolean            strictBlockCommit = true;
+    private long          blockEventCount   = 0;
+    private TaskProgress  taskProgress;
+    private PluginContext context;
+    private long          lastCommitMillis;
+    private long          blockCommitIntervalMillis;
+    private boolean       strictBlockCommit = true;
 
-    private volatile boolean   cancelled         = false;
+    private volatile boolean cancelled = false;
 
     public SingleThreadStageTask(Stage stage, int taskId)
     {
@@ -193,8 +194,7 @@ public class SingleThreadStageTask implements Runnable
         if (lastEvent != null)
         {
             String msg = "Last successfully processed event prior to termination: seqno="
-                    + lastEvent.getSeqno()
-                    + " eventid="
+                    + lastEvent.getSeqno() + " eventid="
                     + lastEvent.getEventId();
             logInfo(msg, null);
         }
@@ -252,7 +252,8 @@ public class SingleThreadStageTask implements Runnable
                 catch (ExtractorException e)
                 {
                     String message = "Event extraction failed";
-                    if (context.getExtractorFailurePolicy() == FailurePolicy.STOP)
+                    if (context
+                            .getExtractorFailurePolicy() == FailurePolicy.STOP)
                     {
                         if (logger.isDebugEnabled())
                             logger.debug(message, e);
@@ -278,11 +279,13 @@ public class SingleThreadStageTask implements Runnable
                     continue;
                 }
 
-                // Issue #15. If we detect a change in the service name, we
-                // should commit now to prevent merging of transactions from
-                // different services in block commit. However, we need to
-                // ignore this rule for filtered events, as they are gaps
-                // rather than real transactions.
+                // There are several cases where may we need to commit previous
+                // work before moving on. Process those now. Unsafe for block
+                // commit will also force commit after the current event as well
+                // as before.
+                boolean unsafeForBlockCommit = false;
+                boolean doRollback = false;
+
                 if (usingBlockCommit && strictBlockCommit
                         && genericEvent instanceof ReplDBMSEvent
                         && !(genericEvent instanceof ReplDBMSFilteredEvent))
@@ -291,31 +294,71 @@ public class SingleThreadStageTask implements Runnable
                     String newService = re.getDBMSEvent()
                             .getMetadataOptionValue(ReplOptionParams.SERVICE);
                     if (currentService == null)
-                        currentService = newService;
-                    else if (!currentService.equals(newService))
                     {
-                        // We assume changes in service only happen on the first
-                        // fragment. Warn if this assumption is violated.
+                        currentService = newService;
+                    }
+                    unsafeForBlockCommit = re.getDBMSEvent()
+                            .getMetadataOptionValue(
+                                    ReplOptionParams.UNSAFE_FOR_BLOCK_COMMIT) != null;
+                    boolean isRollback = re.getDBMSEvent()
+                            .getMetadataOptionValue(
+                                    ReplOptionParams.ROLLBACK) != null;
+
+                    if (currentService != null
+                            && !currentService.equals(newService))
+                    {
+                        // If we detect a change in the service name, we
+                        // should commit now to prevent merging of transactions
+                        // from different services in block commit. However, we
+                        // need to ignore this rule for filtered events, as they
+                        // are gaps rather than real transactions.
+                        //
+                        // (We assume changes in service only happen on the
+                        // first fragment. Warn if this assumption is violated.)
                         if (re.getFragno() == 0)
                         {
                             if (logger.isDebugEnabled())
                             {
-                                String msg = String
-                                        .format("Committing due to service change: prev svc=%s seqno=%d new_svc=%s\n",
-                                                currentService, re.getSeqno(),
-                                                newService);
+                                String msg = String.format(
+                                        "Committing due to service change: prev svc=%s seqno=%d new_svc=%s\n",
+                                        currentService, re.getSeqno(),
+                                        newService);
                                 logger.debug(msg);
                             }
                             commit();
                         }
                         else
                         {
-                            String msg = String
-                                    .format("Service name change between fragments: prev svc=%s seqno=%d fragno=%d new_svc=%s\n",
-                                            currentService, re.getSeqno(),
-                                            re.getFragno(), newService);
+                            String msg = String.format(
+                                    "Service name change between fragments: prev svc=%s seqno=%d fragno=%d new_svc=%s\n",
+                                    currentService, re.getSeqno(),
+                                    re.getFragno(), newService);
                             logger.warn(msg);
                         }
+                    }
+                    else if (unsafeForBlockCommit)
+                    {
+                        // If the transaction is unsafe for block commit commit
+                        // any previous work now as this will
+                        // cause an implicit commit.
+                        commit();
+                    }
+                    else if (re.getFragno() == 0 && !re.getLastFrag())
+                    {
+                        // If we are starting a new fragmented transaction,
+                        // commit previous work now.
+                        commit();
+                    }
+                    else if (re.getFragno() == 0 && isRollback)
+                    {
+                        // This is a transaction that rollbacks at the end :
+                        // commit previous work, but only if it is not a
+                        // fragmented transaction, as if it is fragmented
+                        // transaction, previous work was already committed
+                        // and the whole current transaction should be
+                        // rolled back.
+                        commit();
+                        doRollback = true;
                     }
                 }
 
@@ -380,8 +423,9 @@ public class SingleThreadStageTask implements Runnable
                             {
                                 if (logger.isDebugEnabled())
                                 {
-                                    logger.debug("Event discarded by filter: name="
-                                            + f.getClass().toString());
+                                    logger.debug(
+                                            "Event discarded by filter: name="
+                                                    + f.getClass().toString());
                                 }
                                 break;
                             }
@@ -435,56 +479,16 @@ public class SingleThreadStageTask implements Runnable
                     }
                 }
 
-                boolean doRollback = false;
-                boolean unsafeForBlockCommit = event.getDBMSEvent()
-                        .getMetadataOptionValue(
-                                ReplOptionParams.UNSAFE_FOR_BLOCK_COMMIT) != null;
-                boolean forceCommit = event.getDBMSEvent()
-                        .getMetadataOptionValue(ReplOptionParams.FORCE_COMMIT) != null;
-
-                // The following rules take effect if strict block commit is in
-                // effect.
-                if (strictBlockCommit)
-                {
-                    // Handle implicit commit, if next transaction is
-                    // fragmented, if next transaction is a DDL or if next
-                    // transaction is a rollback.
-                    if (event.getFragno() == 0 && !event.getLastFrag())
-                    {
-                        // Starting a new fragmented transaction
-                        commit();
-                    }
-                    else
-                    {
-                        boolean isRollback = event.getDBMSEvent()
-                                .getMetadataOptionValue(
-                                        ReplOptionParams.ROLLBACK) != null;
-                        if (event.getFragno() == 0 && isRollback)
-                        {
-                            // This is a transaction that rollbacks at the end :
-                            // commit previous work, but only if it is not a
-                            // fragmented transaction, as if it is fragmented
-                            // transaction, previous work was already committed
-                            // and the whole current transaction should be
-                            // rolled back.
-                            commit();
-                            doRollback = true;
-                        }
-                        else if (unsafeForBlockCommit)
-                        {
-                            // Commit previous work and force transaction to
-                            // commit afterwards.
-                            commit();
-                        }
-                    }
-                }
-
                 // Should commit when :
                 // 1. block commit is not used AND this is the last
                 // fragment of the transaction
                 // 2. (When maximum number of events is reached
                 // OR when queue is empty)
                 // AND this is the last fragment of the transaction
+
+                boolean forceCommit = event.getDBMSEvent()
+                        .getMetadataOptionValue(
+                                ReplOptionParams.FORCE_COMMIT) != null;
                 boolean doCommit = false;
 
                 if (unsafeForBlockCommit && strictBlockCommit)
@@ -546,9 +550,7 @@ public class SingleThreadStageTask implements Runnable
                 else
                 {
                     message = "Performing rollback of partial transaction: seqno="
-                            + event.getSeqno()
-                            + " fragno="
-                            + event.getFragno()
+                            + event.getSeqno() + " fragno=" + event.getFragno()
                             + " last_frag=" + event.getLastFrag();
                 }
                 logger.info(message);
@@ -715,7 +717,8 @@ public class SingleThreadStageTask implements Runnable
         {
             // Bail if the event we found is null.
             if (logger.isDebugEnabled())
-                logger.debug("Unable to update position due to null event value");
+                logger.debug(
+                        "Unable to update position due to null event value");
             return;
         }
         else if (header.getSeqno() < 0)
@@ -787,7 +790,7 @@ public class SingleThreadStageTask implements Runnable
      */
     private void apply(ReplDBMSEvent event, boolean doCommit,
             boolean doRollback, boolean syncTHL) throws ReplicatorException,
-            ConsistencyException, InterruptedException
+                    ConsistencyException, InterruptedException
     {
         try
         {
@@ -859,8 +862,8 @@ public class SingleThreadStageTask implements Runnable
             }
             else
             {
-                eventDispatcher.put(new ErrorNotification(message, event
-                        .getSeqno(), event.getEventId(), t));
+                eventDispatcher.put(new ErrorNotification(message,
+                        event.getSeqno(), event.getEventId(), t));
             }
         }
         catch (InterruptedException e)
@@ -923,7 +926,8 @@ public class SingleThreadStageTask implements Runnable
             }
             catch (ReplicatorException e)
             {
-                logger.warn("Received exception on shutdown hook invocation", e);
+                logger.warn("Received exception on shutdown hook invocation",
+                        e);
             }
             catch (Exception e)
             {

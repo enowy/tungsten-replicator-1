@@ -20,6 +20,9 @@
 
 package com.continuent.tungsten.replicator.applier;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FilenameFilter;
 import java.io.Writer;
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
@@ -29,15 +32,19 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.TimeZone;
 
 import org.apache.log4j.Logger;
 
+import com.continuent.tungsten.common.config.cluster.ClusterConfiguration;
+import com.continuent.tungsten.common.config.cluster.ConfigurationException;
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.conf.FailurePolicy;
 import com.continuent.tungsten.replicator.database.AdditionalTypes;
+import com.continuent.tungsten.replicator.database.Database;
 import com.continuent.tungsten.replicator.datatypes.MySQLUnsignedNumeric;
 import com.continuent.tungsten.replicator.datatypes.Numeric;
 import com.continuent.tungsten.replicator.dbms.OneRowChange;
@@ -45,6 +52,8 @@ import com.continuent.tungsten.replicator.dbms.OneRowChange.ColumnSpec;
 import com.continuent.tungsten.replicator.dbms.OneRowChange.ColumnVal;
 import com.continuent.tungsten.replicator.dbms.RowChangeData;
 import com.continuent.tungsten.replicator.extractor.mysql.SerialBlob;
+import com.continuent.tungsten.replicator.extractor.oracle.redo.RedoReaderManager;
+import com.continuent.tungsten.replicator.plugin.PluginContext;
 
 import oracle.jdbc.OraclePreparedStatement;
 import oracle.sql.CLOB;
@@ -55,20 +64,231 @@ import oracle.sql.CLOB;
  */
 public class OracleApplier extends JdbcApplier
 {
-    private static Logger logger = Logger.getLogger(OracleApplier.class);
+	
+	// TODO Review
+    // Thread that marks plogs obsolete
+	// This is done asynchronously in order to avoid commit being delayed by VMRR
+    private class ObsoletePlogThread extends Thread
+    {
+        public String path;
+        public int retainedPlogs;
+
+        /**
+         * Sets the path value.
+         * 
+         * @param path The path to set.
+         */
+        public void setPath(String path)
+        {
+            this.path = path;
+        }
+
+        /**
+         * Sets the retainedPlogs value.
+         * 
+         * @param retainedPlogs The retainedPlogs to set.
+         */
+        public void setRetainedPlogs(int retainedPlogs)
+        {
+            this.retainedPlogs = retainedPlogs;
+        }
+
+        public void run()
+        {
+            try
+            {
+                if(!vmrrMgr.isRunning())
+                    vmrrMgr.start();
+                    
+                vmrrMgr.registerExtractor();
+
+                int plog = findMostRecentPlogFile();
+                if(plog > 0)
+                    vmrrMgr.reportLastObsoletePlog(plog);
+                else
+                    logger.warn("No plog files found");
+            }
+            catch (FileNotFoundException e)
+            {
+                e.printStackTrace();
+            }
+            catch (ReplicatorException e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+        // TODO Review
+        // Based on the code from the extractor.
+        // This gets the first in time file sharing the same max plog number
+        private int findMostRecentPlogFile()
+                throws FileNotFoundException
+        {
+            if (path == null)
+            {
+                throw new NullPointerException(
+                        "plogDirectory was not set in properties file");
+            }
+
+            final String plog = ".plog.";
+            File dir = new File(path);
+            File[] matchingFiles = dir.listFiles(new FilenameFilter()
+            {
+                public boolean accept(File dir, String name)
+                {
+                    String file = name.toLowerCase();
+                    return file.contains(plog) && !file.endsWith(".gz");
+                }
+            });
+            Arrays.sort(matchingFiles);
+
+            long minTime = 0;
+            File minTimeFile = null;
+            int plogSequence = 0;
+
+            for (int i = matchingFiles.length - 1; i >= 0; i--)
+            {
+                String name = matchingFiles[i].getName().toLowerCase();
+                String timeStr;
+
+                int index = name.indexOf(plog);
+                if (minTimeFile == null)
+                {
+                    minTimeFile = matchingFiles[i];
+                    timeStr = name.substring(index + plog.length());
+                    minTime = Long.parseLong(timeStr);
+                    plogSequence = Integer
+                            .parseInt(name.substring(0, index));
+                }
+                else
+                {
+                    if (plogSequence == Integer
+                            .parseInt(name.substring(0, index)))
+                    {
+                        // Same sequence number... check that it is
+                        // older than currently selected file
+                        timeStr = name.substring(index + plog.length());
+                        long time = Long.parseLong(timeStr);
+                        if (time < minTime)
+                        {
+                            minTimeFile = matchingFiles[i];
+                            timeStr = name
+                                    .substring(index + plog.length());
+                            minTime = time;
+                        }
+                    }
+                    else
+                        // This is a normal plog number. Subtract the
+                        // retained plogs so
+                        // we don't delete prematurely and return.
+                        return Math.max(plogSequence - retainedPlogs,
+                                0);
+                }
+            }
+            return -1;
+        }
+    }
+
+    private static Logger     logger              = Logger
+            .getLogger(OracleApplier.class);
+
+    // TODO Review
+    // This is derived from other property (replicator.extractor.dbms exists and
+    // is equal to
+    // com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor).
+    private boolean           hasPlogs = false;
+    private RedoReaderManager vmrrMgr;
+
+    private String            replicateApplyName;
+    
+    // TODO Review
+    // Used to compute when the obsolete thread should run
+    private long              lastObsoleteTaskRunTime = 0;
+
+    // TODO Review
+    // For now, these use extractor defined parameters but the first one
+    // could/should probably be an applier setting as we may want to keep less
+    // plogs on the slave side than we do on the master side
+    private int               retainedPlogs           = 20;
+    private String            plogPath;
+
+    /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.applier.JdbcApplier#configure(com.continuent.tungsten.replicator.plugin.PluginContext)
+     */
+    @Override
+    public void configure(PluginContext context) throws ReplicatorException
+    {
+        super.configure(context);
+
+        String property = context.getReplicatorProperties().getProperty("replicator.extractor.dbms", "");
+        hasPlogs = property.length() > 0 && property.equals("com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor");
+        
+        if (hasPlogs)
+        {
+            logger.info("Plog extractor is configured for this applier.");
+            if (this.replicateApplyName == null)
+            {
+                replicateApplyName = context.getServiceName();
+            }
+            this.retainedPlogs = context.getReplicatorProperties().getInt("replicator.extractor.dbms.retainedPlogs");
+            this.plogPath = context.getReplicatorProperties().get("replicator.extractor.dbms.plogDirectory");
+        }
+        else
+        {
+            logger.info("Plog extractor is not configured for this applier. Skipping.");
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.applier.JdbcApplier#prepare(com.continuent.tungsten.replicator.plugin.PluginContext)
+     */
+    @Override
+    public void prepare(PluginContext context)
+            throws ReplicatorException, InterruptedException
+    {
+        super.prepare(context);
+        
+        if (hasPlogs)
+        {
+            // Locate the vmrr control script and use this to configure the redo
+            // reader manager.
+            String clusterHome;
+            try
+            {
+                clusterHome = ClusterConfiguration.getClusterHome();
+            }
+            catch (ConfigurationException e)
+            {
+                throw new ReplicatorException(
+                        "Unable to locate cluster-home directory; ensure replicator is properly installed",
+                        e);
+            }
+
+            String vmrrControlScriptName = "bin/vmrrd_" + context.getServiceName();
+            String vmrrControlScript = new File(clusterHome, vmrrControlScriptName)
+                    .getAbsolutePath();
+
+            vmrrMgr = new RedoReaderManager();
+            vmrrMgr.setVmrrControlScript(vmrrControlScript);
+            vmrrMgr.setReplicateApplyName(replicateApplyName);
+            vmrrMgr.initialize();
+        }
+    }
 
     /**
      * Applies one or more sets of row changes with JDBC batching.
      */
     @Override
-    protected void applyOneRowChangePrepared(OneRowChange oneRowChange)
+    protected void applyOneRowChangePrepared(OneRowChange oneRowChange, String sourceDbmsType)
             throws ReplicatorException
     {
         // This method only handles event batching, which has specific Oracle
         // semantics.
         if (!optimizeRowEvents)
         {
-            super.applyOneRowChangePrepared(oneRowChange);
+            super.applyOneRowChangePrepared(oneRowChange, sourceDbmsType);
             return;
         }
 
@@ -164,7 +384,7 @@ public class OracleApplier extends JdbcApplier
                 if (columnValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(pendingPreparedStatement,
-                            columnValues.get(row), bindLoc, columns, false);
+                            columnValues.get(row), bindLoc, columns, false, sourceDbmsType);
                 }
                 /* bind key values */
                 // Do not try to bind key values, which have been added to make
@@ -174,7 +394,7 @@ public class OracleApplier extends JdbcApplier
                         && keyValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(pendingPreparedStatement,
-                            keyValues.get(row), bindLoc, key, true);
+                            keyValues.get(row), bindLoc, key, true, sourceDbmsType);
                 }
 
                 // Now add the batch.
@@ -447,7 +667,7 @@ public class OracleApplier extends JdbcApplier
      */
     @Override
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            ColumnVal value, ColumnSpec columnSpec) throws SQLException
+            ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType) throws SQLException
     {
         int type = columnSpec.getType();
         try
@@ -468,26 +688,23 @@ public class OracleApplier extends JdbcApplier
                 ((OraclePreparedStatement) prepStatement).setObject(bindLoc,
                         clob);
             }
-            else
-                if (type == Types.DATE
-                        && (value.getValue() instanceof java.sql.Timestamp))
+            else if (type == Types.DATE
+                    && (value.getValue() instanceof java.sql.Timestamp))
             { // Issue 704 - unsuccessful DATETIME to DATE conversion
                 Timestamp ts = (Timestamp) value.getValue();
                 ((OraclePreparedStatement) prepStatement).setTimestamp(bindLoc,
                         ts, Calendar.getInstance(TimeZone.getTimeZone("GMT")));
             }
-            else
-                    if (type == Types.DATE
-                            && (value.getValue() instanceof java.lang.Long))
+            else if (type == Types.DATE
+                    && (value.getValue() instanceof java.lang.Long))
             { // TENT-311 - no conversion is needed if the underlying value is
               // Date.
                 Timestamp ts = new Timestamp((Long) (value.getValue()));
                 ((OraclePreparedStatement) prepStatement).setObject(bindLoc,
                         ts);
             }
-            else
-                        if (type == Types.BLOB || (type == Types.NULL
-                                && value.getValue() instanceof SerialBlob))
+            else if (type == Types.BLOB || (type == Types.NULL
+                    && value.getValue() instanceof SerialBlob))
             { // ______^______
               // Blob in the incoming event masked as NULL,
               // though this happens with a non-NULL value!
@@ -495,12 +712,16 @@ public class OracleApplier extends JdbcApplier
 
                 SerialBlob blob = (SerialBlob) value.getValue();
 
-                if (columnSpec.isBlob())
+                if (columnSpec.isBlob() || (sourceDbmsType != null
+                        && sourceDbmsType.equals(Database.ORACLE)))
                 {
                     // Blob in the incoming event and in Oracle table.
                     // IMPORTANT: the bellow way only fixes INSERTs.
                     // Blobs in key lookups of DELETEs and UPDATEs is
                     // not supported.
+                    // Warning : isBlob is set only if metadata is fetched from
+                    // the underlying database, which is not the default anymore.
+                	// Added a workaround to make it work in Oracle to Oracle case.
                     prepStatement.setBytes(bindLoc,
                             blob.getBytes(1, (int) blob.length()));
                     if (logger.isDebugEnabled())
@@ -528,7 +749,7 @@ public class OracleApplier extends JdbcApplier
                 if (columnSpec.isUnsigned() && numeric.isNegative())
                 {
                     // We assume that if column is unsigned - it's MySQL on the
-                    // master side, as Oralce doesn't have UNSIGNED modifier.
+                    // master side, as Oracle doesn't have UNSIGNED modifier.
                     valToInsert = MySQLUnsignedNumeric
                             .negativeToMeaningful(numeric);
                     prepStatement.setObject(bindLoc, valToInsert);
@@ -544,6 +765,62 @@ public class OracleApplier extends JdbcApplier
             logger.error("Binding column (bindLoc=" + bindLoc + ", type=" + type
                     + ") failed:");
             throw e;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * @throws SQLException 
+     * @see com.continuent.tungsten.replicator.applier.JdbcApplier#commit()
+     */
+    @Override
+    public void commitTransaction() throws SQLException
+    {
+        super.commitTransaction();
+        
+        if(hasPlogs)
+        {
+            reportObsoleteFiles();
+            
+            // TODO Review
+            // Should we check health of VMRR on a different basis here ?
+            // Under no load or if replicator is offline, VMRR health won't be
+            // checked, but it should not be a big deal (except if the
+            // replicator is offline for too long).
+            // If we want to solve this last issue, then we should probably have a
+            // wrapper project around VMRR that would do this basic health check.
+        }
+    }    
+    
+    @Override
+    protected void rollbackTransaction() throws SQLException
+    {
+        if (!conn.isAutoCommit())
+            super.rollbackTransaction();
+        else
+            logger.warn(
+                    "Connection is set as auto-commit : impossible to rollback");
+    }
+
+    private void reportObsoleteFiles()
+    {
+    	// TODO Review
+        // The time interval should be a setting with a minimum value to be
+        // defined. For now, run the job every minute or so
+        if (lastObsoleteTaskRunTime == 0 || System.currentTimeMillis()
+                - lastObsoleteTaskRunTime > 60 * 1000)
+        {
+            // Time to mark obsolete files
+            lastObsoleteTaskRunTime = System.currentTimeMillis();
+
+            // TODO Review
+            // Global vs local thread ?
+            // For now, local thread. But might be interesting to have one global thread
+            // that we run at time intervals
+            ObsoletePlogThread obsoletePlogsReporter = new ObsoletePlogThread();
+            obsoletePlogsReporter.setPath(plogPath);
+            obsoletePlogsReporter.setRetainedPlogs(retainedPlogs);
+            obsoletePlogsReporter.start();
         }
     }
 }
