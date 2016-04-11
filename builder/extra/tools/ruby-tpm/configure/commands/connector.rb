@@ -10,6 +10,10 @@ class ConnectorTerminalCommand
     false
   end
   
+  def allow_multiple_tpm_commands?
+    true
+  end
+  
   def require_dataservice?
     if Configurator.instance.is_locked?()
       false
