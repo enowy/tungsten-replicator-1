@@ -231,7 +231,7 @@ class ConfigureDatabasePlatform
     options.each{
       |o|
       begin
-        service = cmd_result("#{cmd} list-units | grep #{o} | awk -F' ' '{print $1}'")
+        service = cmd_result("#{cmd} list-unit-files | grep '#{o}\.' | awk -F' ' '{print $1}' | head -n1")
         if service.to_s() != ""
           return service
         end

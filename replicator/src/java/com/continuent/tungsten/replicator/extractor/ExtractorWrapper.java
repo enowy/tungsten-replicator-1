@@ -41,6 +41,7 @@ import com.continuent.tungsten.replicator.event.DBMSEvent;
 import com.continuent.tungsten.replicator.event.EventMetadataFilter;
 import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
 import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
+import com.continuent.tungsten.replicator.extractor.oracle.redo.PlogExtractor;
 import com.continuent.tungsten.replicator.filter.Filter;
 import com.continuent.tungsten.replicator.heartbeat.HeartbeatFilter;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -174,14 +175,15 @@ public class ExtractorWrapper implements Extractor
             seqno = 0;
             eventId = null;
         }
-        else if (sourceId.equals(header.getSourceId())
-                )
+        else if (sourceId.equals(header.getSourceId()))
         {
             // Continuing local extraction. Ask for next event.
             if (logger.isDebugEnabled())
                 logger.debug("Source ID of max event verified: "
                         + header.getSourceId());
-            seqno = header.getSeqno() + 1;
+            
+            seqno = getStartingSeqno(header);
+            
             eventId = header.getEventId();
         }
         else
@@ -189,7 +191,8 @@ public class ExtractorWrapper implements Extractor
             // Master source ID has shifted; remember the seqno. 
             logger.info("Local source ID differs from last stored source ID: local="
                     + sourceId + " stored=" + header.getSourceId());
-            seqno = header.getSeqno() + 1;
+            
+            seqno = getStartingSeqno(header);
 
             // If auto repositioning is enabled, reposition.  Otherwise, print a
             // warning and try to use the source ID. 
@@ -214,8 +217,40 @@ public class ExtractorWrapper implements Extractor
         }
 
         // Tell the extractor.
-        setLastEventId(eventId);
+        // TODO Review
+        // With a PlogExtractor, we auto-reposition the replicator using the
+        // event header (to get all needed information at the extractor level)
+        // This logic could probably be moved down into the extractor itself
+        // by adding a new method setRestartPosition which would have eventId
+        // and header as parameters 
+        if (eventId == null && extractor instanceof PlogExtractor)
+        {
+            extractor.setLastEvent(header);
+        }
+        else
+        {
+            setLastEventId(eventId);
+        }
         epochNumber = seqno;
+    }
+    
+    /**
+     * Returns the starting sequence number, which is the sequence number of the
+     * provided event + 1 for a normal event or the last sequence number of a
+     * filtered event + 1.
+     */
+    private long getStartingSeqno(ReplDBMSHeader header)
+    {    
+        if (header.getLastSeqno() == -1)
+        {
+            // This is not a filtered event. Return the seqno + 1.
+            return header.getSeqno() + 1;
+        }
+        else
+        {
+            // this is a filtered event (only events with getLastSeqno != -1) : return the last seqno + 1.
+            return header.getLastSeqno() + 1;
+        }
     }
 
     // Override base sequence number if different from current base.

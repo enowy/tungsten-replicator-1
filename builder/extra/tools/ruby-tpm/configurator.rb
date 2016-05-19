@@ -1,8 +1,19 @@
 #!/usr/bin/env ruby
 #
-# TUNGSTEN SCALE-OUT STACK
-# Copyright (C) 2010 Continuent, Inc.
-# All rights reserved
+# VMware Continuent Tungsten Replicator
+# Copyright (C) 2015 VMware, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0
+#      
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 
 # System libraries.
@@ -186,6 +197,7 @@ class Configurator
       :paranoid => false
     }
     @options.ssh_options = {}
+    @options.retry_rsync_return_codes = []
     @options.config = nil
     @options.log_name = nil
     
@@ -495,7 +507,15 @@ class Configurator
 
                                           @options.ssh_options[val_parts[0].to_sym] = val_parts[1]
                                         }
-    
+
+      opts.on("--retry-rsync-return-code String") { |val|
+                                          code = val.to_i()
+                                          if code.to_s() != val
+                                            error "Invalid value #{val} given for '--retry-rsync-return-code'. The value should be an integer."
+                                          else
+                                            @options.retry_rsync_return_codes << code
+                                          end
+                                        }
       # Argument used by the validation and deployment handlers
       opts.on("--stream")               {@options.stream_output = true }
       opts.on("--tty")                  {@options.fake_tty = true }
@@ -1531,6 +1551,11 @@ class Configurator
     extra_options
   end
   
+  def rsync_retry_return_codes
+    # Return return codes 12, 23 and any provided on the command line
+    [12, 23] + @options.retry_rsync_return_codes
+  end
+  
   def start_alive_thread
     if @command && @command.display_alive_thread?() == false
       return
@@ -1812,6 +1837,7 @@ def cmd_result(command, ignore_fail = false, hide_result = false)
     }
     
     threads.each{|t| t.join() }
+    [stdout, stderr].each{|stream| stream.close()}
   end
   
   result.strip!()

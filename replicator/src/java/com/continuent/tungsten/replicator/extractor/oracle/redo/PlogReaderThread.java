@@ -29,6 +29,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,7 +44,13 @@ import com.continuent.tungsten.common.cache.LargeObjectScanner;
 import com.continuent.tungsten.common.cache.RawByteCache;
 import com.continuent.tungsten.replicator.ErrorNotification;
 import com.continuent.tungsten.replicator.ReplicatorException;
+import com.continuent.tungsten.replicator.datasource.SqlCommitSeqno;
+import com.continuent.tungsten.replicator.dbms.DBMSData;
+import com.continuent.tungsten.replicator.dbms.OneRowChange.ColumnSpec;
+import com.continuent.tungsten.replicator.dbms.OneRowChange.ColumnVal;
+import com.continuent.tungsten.replicator.dbms.RowChangeData;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
 
 /**
@@ -107,6 +114,8 @@ public class PlogReaderThread extends Thread
 
     private IncludePlog currentIncludePlog;
 
+    private ReplDBMSHeader lastEvent;
+
     /**
      * Defines information about so-called include plog, used by the LOAD
      * feature.
@@ -142,15 +151,20 @@ public class PlogReaderThread extends Thread
     }
 
     /**
-     * For start with no eventId, search a directory and find oldest (=lowest
-     * sequence) plog
+     * For start with no eventId, search a directory and find oldest (= lowest
+     * sequence) plog.
+     * 
+     * TODO Review : This is now done in reverse order : find
+     * the latest file with no gaps in the sequence of files and which is
+     * greater than the last .gz file (if any).
      * 
      * @param path Directory to search
      * @return first sequence found. Integer.MAX_VALUE if no file present at
      *         all.
+     * @throws ReplicatorException 
      */
     private static int findOldestPlogSequence(String path)
-            throws FileNotFoundException
+            throws FileNotFoundException, ReplicatorException
     {
         if (path == null)
         {
@@ -161,7 +175,6 @@ public class PlogReaderThread extends Thread
         if (logger.isDebugEnabled())
             logger.debug("findOldestPlogSequence: " + path);
 
-        int rtval = Integer.MAX_VALUE;
         File dir = new File(path);
         if (!dir.canRead())
         {
@@ -171,32 +184,84 @@ public class PlogReaderThread extends Thread
         {
             public boolean accept(File dir, String name)
             {
-                return name.toLowerCase().contains(".plog.");
+                String file = name.toLowerCase();
+                // TODO Review
+                // Skip .gz files as this could break the extraction
+                return file.contains(".plog."); // && !file.endsWith(".gz");
             }
         });
-        for (File mf : matchingFiles)
+
+        Arrays.sort(matchingFiles);
+        int minPlogSeq = Integer.MAX_VALUE;
+        for (int i = matchingFiles.length - 1; i >= 0; i--)
         {
-            String p = null;
-            try
+            File mf = matchingFiles[i];
+            if (minPlogSeq == Integer.MAX_VALUE && mf.getName().endsWith(".gz"))
             {
-                p = mf.getName();
-                p = p.substring(0, p.indexOf(".plog."));
-                int s = Integer.parseInt(p);
-                if (s < rtval)
+                // This should not happen : the last file here is obsolete !
+                throw new ReplicatorException(
+                        "Unable to identify last plog. Last file "
+                                + mf.getName()
+                                + "is obsolete. Unable to start extraction. Try resetting !");
+            }
+            else
+            {
+                // We reached the first obsolete file, return sequence number
+                // from previous normal plog file.
+                if (mf.getName().endsWith(".gz"))
                 {
-                    rtval = s;
+                    break;
+                }
+                // Handling first normal plog.
+                else if (minPlogSeq == Integer.MAX_VALUE)
+                {
+                    minPlogSeq = getPlogSequenceNumber(mf);
+                }
+                // Handling next plog files.
+                else
+                {
+                    int currentPlogSeq = getPlogSequenceNumber(mf);
+                    
+                    if(currentPlogSeq == minPlogSeq)
+                    {
+                        // Just another plog with same sequence number (and
+                        // different timestamp). Just check next file.
+                        continue;
+                    }
+                    else if (currentPlogSeq == minPlogSeq - 1)
+                    {
+                        // No gap
+                        minPlogSeq = currentPlogSeq;
+                    }
+                    else
+                        // Gap : just return the previous file, for which there
+                        // is no gap in the sequence
+                        break;
                 }
             }
-            catch (NumberFormatException e)
-            {
-                logger.warn(p + " is not really a time number");
-            }
-            catch (IndexOutOfBoundsException e)
-            {
-                logger.warn(p + " malformed, did not find .plog extension.");
-            }
         }
-        return rtval;
+        return minPlogSeq;
+    }
+
+    private static int getPlogSequenceNumber(File mf)
+    {
+        int s = 0;
+        String p = null;
+        try
+        {
+            p = mf.getName();
+            p = p.substring(0, p.indexOf(".plog."));
+            s = Integer.parseInt(p);
+        }
+        catch (NumberFormatException e)
+        {
+            logger.warn(p + " is not really a time number");
+        }
+        catch (IndexOutOfBoundsException e)
+        {
+            logger.warn(p + " malformed, did not find .plog extension.");
+        }
+        return s;
     }
 
     /**
@@ -224,7 +289,11 @@ public class PlogReaderThread extends Thread
         {
             public boolean accept(File dir, String name)
             {
-                return name.toLowerCase().startsWith(prefix);
+                String file = name.toLowerCase();
+                // TODO Review
+                // Skip .gz files as this breaks the extraction
+                return file.toLowerCase().startsWith(prefix)
+                        && !file.endsWith(".gz");
             }
         });
         long highestTime = 0;
@@ -275,7 +344,7 @@ public class PlogReaderThread extends Thread
         logger.info("File " + filename + " opened.");
         if (logger.isDebugEnabled())
         {
-            logger.info("Last processed event ID=" + this.lastProcessedEventId);
+            logger.debug("Last processed event ID=" + this.lastProcessedEventId);
         }
         logger.info("Open transactions=" + openTransactions.size());
         logger.info("Transaction cache statistics: " + cache.toString());
@@ -831,6 +900,11 @@ public class PlogReaderThread extends Thread
     private void runTask() throws InterruptedException, IOException,
             SerialException, ReplicatorException, SQLException
     {
+        // TODO Review
+        // Skip events is used to tell whether we should skip events when this starts up.
+    	// By default, this is off except if lastEvent was set.
+    	boolean skipEvents = false;
+    	
         // Ensure the replicator is registered with the redo reader.
         vmrrMgr.registerExtractor();
 
@@ -840,7 +914,16 @@ public class PlogReaderThread extends Thread
         long SCNAtSameSCN = 0;
 
         // See if we can find a restart position.
-        if (lastProcessedEventId != null)
+        if(lastEvent != null)
+        {
+            // TODO Review
+            // last event is set which means we are auto-repositionning from
+            // this last received event. We are going to skip events until we
+            // located this last one into the plogs
+            firstSequence = Integer.MAX_VALUE;
+            skipEvents = true;
+        }
+        else if (lastProcessedEventId != null)
         {
             firstSequence = setInternalLastEventId(lastProcessedEventId);
             if (logger.isDebugEnabled())
@@ -860,13 +943,16 @@ public class PlogReaderThread extends Thread
         }
 
         // If we don't have a plog ID we need to find one.
+        // TODO Review
+        // This looks like a bug in current code : 
+        // retries should be initialized outside of the loop 
+        int retries = 0;
         while (firstSequence == Integer.MAX_VALUE)
         {
-            int retries = 0;
             if (retries == 0)
             {
                 // Just print this once.
-                logger.info("Seeking oldest plog file to commence extraction");
+                logger.info("Seeking oldest plog file to start extraction");
             }
 
             // Find oldest plog; check for interrupt on thread
@@ -887,25 +973,7 @@ public class PlogReaderThread extends Thread
             retries++;
             Thread.sleep(sleepSizeInMilliseconds);
 
-            // Check for a dead redo reader at each health check interval.
-            if ((retries % healthCheckInterval) == 0)
-            {
-                logger.info(
-                        "No plog found, checking redo reader status: retries="
-                                + retries);
-                if (vmrrMgr.isRunning())
-                {
-                    // If it is running, do a health check.
-                    vmrrMgr.healthCheck();
-                }
-                else
-                {
-                    // If it is not running, try to restart.
-                    logger.warn(
-                            "Redo reader process appears to have failed; attempting restart");
-                    vmrrMgr.start();
-                }
-            }
+            checkRedoReaderState(retries);
         }
 
         // Get the starting plog file.
@@ -938,23 +1006,127 @@ public class PlogReaderThread extends Thread
                     {
                         r1 = readRawLCR();
 
-                        // Test this update to see if it is a change to the
-                        // Tungsten TREP_COMMIT_SEQNO table, which should
-                        // not be replicated.
-                        if (tungstenSchema != null)
+                        if (skipEvents)
                         {
+                            // TODO Review
+                            // We are skipping events. Check when we have DML
+                            // into TREP_COMMIT_SEQNO table whether it is the
+                            // expected searched event id.
                             if (tungstenSchema.equalsIgnoreCase(r1.tableOwner)
-                                    && "trep_commit_seqno"
-                                            .equalsIgnoreCase(r1.tableName))
+                                    && SqlCommitSeqno.TABLE_NAME
+                                            .equalsIgnoreCase(r1.tableName)
+                                    && (r1.type == PlogLCR.ETYPE_LCR_DATA)
+                                    && (r1.subtype != PlogLCR.ESTYPE_LCR_DDL))
                             {
-                                if (logger.isDebugEnabled())
+                                // Found a candidate.. Parse it and check
+                                // whether it is the expected one
+                                DBMSData dbmsData = PlogTransaction
+                                        .convertLCRtoDBMSDataDML(r1);
+                                if (dbmsData instanceof RowChangeData)
                                 {
-                                    logger.debug(
-                                            "Ignoring update to trep_commit_seqno: scn="
-                                                    + r1.LCRid);
+                                    RowChangeData data = (RowChangeData) dbmsData;
+                                    ArrayList<ColumnSpec> specs = data
+                                            .getRowChanges().get(0)
+                                            .getColumnSpec();
+                                    ColumnSpec spec;
+                                    int i;
+                                    for (i = 0; i < specs.size(); i++)
+                                    {
+                                        spec = specs.get(i);
+                                        if (spec.getName()
+                                                .equalsIgnoreCase("EVENTID"))
+                                        {
+                                            break;
+                                        }
+                                    }
+
+                                    if (i < specs.size())
+                                    {
+                                        ColumnVal columnVal = data
+                                                .getRowChanges().get(0)
+                                                .getColumnValues().get(0)
+                                                .get(i);
+                                        if (columnVal
+                                                .getValue() instanceof String)
+                                        {
+                                            String value = (String) columnVal
+                                                    .getValue();
+                                            if (value.equals(
+                                                    lastEvent.getEventId()))
+                                            {
+                                                logger.info("Searching for "
+                                                        + lastEvent.getEventId()
+                                                        + " - Found : "
+                                                        + r1);
+                                                r1 = null;
+                                                skipEvents = false;
+                                            }
+                                            else
+                                            {
+                                                // TODO Review
+                                            	// Check whether we can compare event id.
+                                                // If we did not find the event
+                                                // id and we are already too
+                                                // far, we should probably fail
+                                                // here!
+                                                // For now, just consider that
+                                                // if we did not find, we are
+                                                // not yet at the correct point.
+                                                r1 = null;
+                                                continue;
+                                            }                                            
+                                        }
+                                        else
+                                        {
+                                        	// TODO Review
+                                        	// CONT-1560
+                                            // If columnVal.getValue() was not a
+                                            // string (null for example), this
+                                            // was creating a transaction that
+                                            // would remain opened forever
+                                            r1 = null;
+                                            continue;                                            
+                                        }
+                                    }
+                                    else
+                                    {
+                                        r1 = null;
+                                        continue;                                            
+                                    }                                        
                                 }
+                            }
+                            else if (r1.type == PlogLCR.ETYPE_CONTROL)
+                            {
+                                break;
+                            }
+                            else
+                            {
+                                //logger.warn("Found type " + r1.type + " subtype " + r1.subtype + " - skipping.");
                                 r1 = null;
                                 continue;
+                            }
+                        }
+                        else
+                        {
+                            // Test this update to see if it is a change to the
+                            // Tungsten TREP_COMMIT_SEQNO table, which should
+                            // not be replicated.
+                            if (tungstenSchema != null)
+                            {
+                                if (tungstenSchema
+                                        .equalsIgnoreCase(r1.tableOwner)
+                                        && "trep_commit_seqno"
+                                                .equalsIgnoreCase(r1.tableName))
+                                {
+                                    if (logger.isDebugEnabled())
+                                    {
+                                        logger.debug(
+                                                "Ignoring update to trep_commit_seqno: scn="
+                                                        + r1.LCRid);
+                                    }
+                                    r1 = null;
+                                    continue;
+                                }
                             }
                         }
                     }
@@ -990,27 +1162,8 @@ public class PlogReaderThread extends Thread
                             }
                         }
 
-                        // Check for a dead redo reader at each health check
-                        // interval.
-                        if (retryCount > 0
-                                && (retryCount % healthCheckInterval) == 0)
-                        {
-                            logger.info(
-                                    "No new plog data found, checking redo reader status: retryCount="
-                                            + retryCount);
-                            if (vmrrMgr.isRunning())
-                            {
-                                // If it is running, do a health check.
-                                vmrrMgr.healthCheck();
-                            }
-                            else
-                            {
-                                // If it is not running, try to restart.
-                                logger.warn(
-                                        "Redo reader process appears to have failed; attempting restart");
-                                vmrrMgr.start();
-                            }
-                        }
+
+                        checkRedoReaderState(retryCount);
 
                         // Update retries and sleep.
                         retryCount++;
@@ -1019,7 +1172,10 @@ public class PlogReaderThread extends Thread
                             logger.debug("Wait for more data in plog.");
                     }
                 }
-
+                // TODO Review
+                // Set retry count to 0 to avoid misleading messages
+                retryCount = 0;
+                
                 // This is header information for the plog. We just read it to
                 // find out which features are enabled.
                 if (r1.type == PlogLCR.ETYPE_CONTROL
@@ -1047,7 +1203,7 @@ public class PlogReaderThread extends Thread
                     // used to provision full tables.
                     //
                     // Ifiles are not currently supported in the extractor, so
-                    // we just wailt for the end and return to the parent plog.
+                    // we just wait for the end and return to the parent plog.
                     if (r1.subtype == PlogLCR.ESTYPE_LCR_PLOG_IFILE)
                     {
                         // This is the header information, which we parse.
@@ -1163,9 +1319,8 @@ public class PlogReaderThread extends Thread
                             openTransactions.remove(r1.XID);
                             t.release();
                         }
-                        else
-                            if (t.commitSCN == restartEventCommitSCN
-                                    && t.XID.compareTo(restartEventXID) < 0)
+                        else if (t.commitSCN == restartEventCommitSCN
+                                && t.XID.compareTo(restartEventXID) < 0)
                         {
                             // We have a transaction at the same SCN *but* the
                             // XID is lower than the last XID that made it into
@@ -1183,9 +1338,8 @@ public class PlogReaderThread extends Thread
                             openTransactions.remove(r1.XID);
                             t.release();
                         }
-                        else
-                                if (t.commitSCN == restartEventCommitSCN
-                                        && t.XID.equals(restartEventXID))
+                        else if (t.commitSCN == restartEventCommitSCN
+                                && t.XID.equals(restartEventXID))
                         {
                             // We are looking at the last transaction that was
                             // committed upstream to the log.
@@ -1255,6 +1409,29 @@ public class PlogReaderThread extends Thread
             // this will be overwritten by parsing the header -
             // that is, if it's already in the file
             plogId++;
+        }
+    }
+
+    private void checkRedoReaderState(int retries) throws ReplicatorException
+    {
+        // Check for a dead redo reader at each health check interval.
+        if (retries > 0 && (retries % healthCheckInterval) == 0)
+        {
+            logger.info(
+                    "No plog found, checking redo reader status: retries="
+                            + retries);
+            if (vmrrMgr.isRunning())
+            {
+                // If it is running, do a health check.
+                vmrrMgr.healthCheck();
+            }
+            else
+            {
+                // If it is not running, try to restart.
+                logger.warn(
+                        "Redo reader process appears to have failed; attempting restart");
+                vmrrMgr.start();
+            }
         }
     }
 
@@ -1345,5 +1522,10 @@ public class PlogReaderThread extends Thread
      */
     public void prepare()
     {
+    }
+
+    public void setLastEvent(ReplDBMSHeader lastEvent)
+    {
+        this.lastEvent = lastEvent;
     }
 }

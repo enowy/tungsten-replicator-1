@@ -15,7 +15,7 @@
  * limitations under the License.
  *
  * Initial developer(s): Linas Virbalas
- * Contributor(s):
+ * Contributor(s): Stephane Giron
  */
 
 package com.continuent.tungsten.replicator.filter;
@@ -186,32 +186,52 @@ public class OptimizeUpdatesFilter implements Filter
         // Holds the list of columns that didn't change their values.
         ArrayList<ColumnSpec> columnsToRemove = new ArrayList<ColumnSpec>();
 
-        if (columns.size() != keys.size())
-            throw new ReplicatorException(
-                    "OptimizeUpdatesFilter cannot filter, because column and key count is different. "
-                            + "Make sure that it is defined before filters which remove keys (eg. PrimaryKeyFilter).");
+        if (columns.size() != keys.size() && logger.isDebugEnabled())
+        {
+            // Removing the constraint for same count of columns and keys.
+            // For each existing key, we will now check whether a matching value
+            // exists. If it does, then we compare pre and post value. We can
+            // then remove the value is it is equal to the key.
+            logger.debug(
+                    "Column and key counts are different. Checking only columns matching present keys.");
+        }
 
         // Iterate key values (column value count is the same or more).
         for (int k = 0; k < keys.size(); k++)
         {
             ColumnSpec keySpec = keys.get(k);
-            ColumnSpec colSpec = columns.get(k); // The candidate.
+            boolean valueExists = false;
+            int valIndex;
+            ColumnSpec colSpec = null;
+            for (valIndex = 0; valIndex < columns.size(); valIndex++)
+            {
+                colSpec = columns.get(valIndex);
+                if (colSpec.getIndex() == keySpec.getIndex())
+                {
+                   valueExists = true;
+                   break;
+                }
+            }
 
+            if (!valueExists)
+                continue;
+            
             // Iterate through multiple rows being updated.
             boolean columnStatic = true;
-            for (int row = 0; row < columnValues.size()
-                    || row < keyValues.size(); row++)
+            for (int row = 0; row < keyValues.size(); row++)
             {
                 ColumnVal keyValue = keyValues.get(row).get(k);
 
                 // Is corresponding column value different from key's
                 // (i.e. current)?
-                ColumnVal colValue = columnValues.get(row).get(k);
+                ColumnVal colValue = columnValues.get(row).get(valIndex);
                 if (!(keySpec.getType() == colSpec.getType()
-                        && keySpec.getIndex() == colSpec.getIndex() && ((keyValue
-                        .getValue() == null && colValue.getValue() == null) || (keyValue
-                        .getValue() != null && keyValue.getValue().equals(
-                        colValue.getValue())))))
+                        && keySpec.getIndex() == colSpec.getIndex()
+                        && ((keyValue.getValue() == null
+                                && colValue.getValue() == null)
+                                || (keyValue.getValue() != null
+                                        && keyValue.getValue()
+                                                .equals(colValue.getValue())))))
                 {
                     // Value is different, keep this column for update
                     // statement.

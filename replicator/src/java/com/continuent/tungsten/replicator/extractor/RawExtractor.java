@@ -22,6 +22,7 @@ package com.continuent.tungsten.replicator.extractor;
 
 import com.continuent.tungsten.replicator.ReplicatorException;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.plugin.ReplicatorPlugin;
 
 /**
@@ -44,6 +45,8 @@ public interface RawExtractor extends ReplicatorPlugin
      */
     public void setLastEventId(String eventId) throws ReplicatorException;
 
+    public void setLastEvent(ReplDBMSHeader header);
+    
     /**
      * Extract the next available DBMSEvent from the database log.
      * 

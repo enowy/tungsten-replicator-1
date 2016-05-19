@@ -119,7 +119,7 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
                 int max = authenticationInfo.getMaxWaitOnFailedLogin();
                 int increment = authenticationInfo
                         .getIncrementStepWaitOnFailedLogin();
-                int randomNum = getRandomInt(min, max, increment);
+                int randomNum = SecurityHelper.getRandomInt(min, max, increment);
 
                 // Sleep a random number of seconds = between min and max
                 logger.info(MessageFormat.format(
@@ -185,66 +185,6 @@ public class RealmJMXAuthenticator implements JMXAuthenticator
     public void setAuthenticationInfo(AuthenticationInfo authenticationInfo)
     {
         this.authenticationInfo = authenticationInfo;
-    }
-
-    /**
-     * Returns a psuedo-random number between min and max, inclusive. The
-     * difference between min and max can be at most
-     * <code>Integer.MAX_VALUE - 1</code>.
-     *
-     * @param min Minimim value
-     * @param max Maximim value. Must be greater than min.
-     * @return Integer between min and max, inclusive.
-     * @see java.util.Random#nextInt(int)
-     */
-    public static int getRandomInt(int min, int max, int incrementStep)
-    {
-        // Checks and validation
-        if (min < 0)
-            min = 0;
-        if (max < 0)
-            max = 0;
-        if (max < min)
-        {
-            // Invert max and min
-            logger.warn(MessageFormat.format(
-                    "{0} and {1} are inverted. You must specify values so that min <= max",
-                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
-                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
-            int tmpMin = max;
-            min = max;
-            max = tmpMin;
-        }
-        if (incrementStep <= 0)
-            incrementStep = 1;
-        if (incrementStep >= max - min && (max - min) > 0)
-        {
-            logger.warn(MessageFormat.format(
-                    "{0} is not coherent. {0} >= {1}-{2}",
-                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP,
-                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
-                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
-            incrementStep = 1;
-        }
-        if (max - min == 0)
-            return max;
-
-        // Usually this can be a field rather than a method variable
-        Random rand = new Random();
-
-        // nextInt is normally exclusive of the top value,
-        // so add 1 to make it inclusive
-        // int randomNum = rand.nextInt((max - min) + 1) + min;
-
-        Integer range = max - min;
-        int maxMultiplier = Double.valueOf(Math.floor(range / incrementStep))
-                .intValue();
-        int randomMultiplier = rand.nextInt(maxMultiplier);
-
-        int randomNumberWithIncrement = min
-                + (randomMultiplier * incrementStep);
-
-        return randomNumberWithIncrement;
     }
 
 }

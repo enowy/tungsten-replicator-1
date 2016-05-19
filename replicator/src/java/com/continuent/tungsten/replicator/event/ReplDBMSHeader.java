@@ -36,6 +36,12 @@ public interface ReplDBMSHeader
      * starting at 0 that denotes a single transaction.
      */
     public long getSeqno();
+    
+    /**
+     * Returns the last sequence number for a filtered event or -1 for other
+     * normal events
+     */
+    public long getLastSeqno();
 
     /**
      * Returns the event fragment number, a monotonically increasing whole

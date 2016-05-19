@@ -45,6 +45,7 @@ import com.continuent.tungsten.replicator.dbms.OneRowChange.ColumnVal;
 import com.continuent.tungsten.replicator.dbms.RowChangeData;
 import com.continuent.tungsten.replicator.dbms.RowChangeData.ActionType;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
 import com.continuent.tungsten.replicator.extractor.RawExtractor;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -675,6 +676,13 @@ public class OracleCDCExtractor implements RawExtractor
             InterruptedException
     {
         return null;
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 
 }

@@ -8,5 +8,5 @@ replicator.applier.dbms.user=${replicator.global.db.user}
 replicator.applier.dbms.password=${replicator.global.db.password}
 #replicator.applier.dbms.service=${replicator.applier.oracle.service}
 #replicator.applier.dbms.maxSQLLogLength=3000
-replicator.applier.dbms.getColumnMetadataFromDB=true
+replicator.applier.dbms.getColumnMetadataFromDB=false
 @{#(APPLIER.REPL_SVC_DATASOURCE_APPLIER_INIT_SCRIPT)}replicator.applier.dbms.initScript=@{APPLIER.REPL_SVC_DATASOURCE_APPLIER_INIT_SCRIPT}

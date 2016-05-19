@@ -69,6 +69,8 @@ doCopy() {
 # Tries to locate the command passed as first argument. If the command is not
 # found, exists with a comprehensive error message
 checkCommandExists() {
+# Disable exit on error for which, otherwise we can't trap it
+  set +e
   which $1 > /dev/null 2>&1
   if [ $? -eq 0 ]; then
     echo "# $1 found."
@@ -76,6 +78,7 @@ checkCommandExists() {
     echo "!!! Required $1 executable not found, please install it! Exiting."
     exit 1
   fi
+  set -e
 }
 
 # Removes the given 1st arg library pattern and copy from 2nd arg jar to

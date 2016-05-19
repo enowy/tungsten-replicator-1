@@ -142,4 +142,10 @@ public class ReplDBMSFilteredEvent extends ReplDBMSEvent
         return fragnoEnd;
     }
 
+    @Override
+    public long getLastSeqno()
+    {
+        return seqnoEnd;
+    }
+
 }

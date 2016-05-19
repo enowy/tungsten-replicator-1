@@ -20,6 +20,7 @@
 
 package com.continuent.tungsten.common.cache;
 
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +43,7 @@ public class RawByteInputStream extends InputStream
 
     // Input stream for reading from storage.
     private FileInputStream fileInput = null;
+    private BufferedInputStream input = null;
 
     RawByteInputStream(RawByteAllocator alloc)
     {
@@ -93,9 +95,10 @@ public class RawByteInputStream extends InputStream
             if (fileInput == null)
             {
                 fileInput = new FileInputStream(alloc.cacheFile);
+                input = new BufferedInputStream(fileInput);
             }
 
-            return fileInput.read();
+            return input.read();
         }
     }
 
@@ -168,6 +171,7 @@ public class RawByteInputStream extends InputStream
             if (fileInput == null)
             {
                 fileInput = new FileInputStream(alloc.cacheFile);
+                input = new BufferedInputStream(fileInput);
             }
             seek(target - alloc.memoryLength);
             skipped = target - nextByteIndex;
@@ -188,6 +192,9 @@ public class RawByteInputStream extends InputStream
         // Close file input if we were using it.
         if (fileInput != null)
             fileInput.close();
+        
+        if(input != null)
+            input.close();
     }
 
     // Seek to a particular position in storage.

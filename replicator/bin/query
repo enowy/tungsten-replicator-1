@@ -65,6 +65,7 @@ if [ ! -d "$REPLICATOR_LOG_DIR" ]; then
   exit 1
 fi
 JVM_OPTIONS="${JVM_OPTIONS} -Dreplicator.log.dir=$REPLICATOR_LOG_DIR" 
+JVM_OPTIONS="${JVM_OPTIONS} -Djava.security.egd=file:/dev/../dev/urandom"
 
 # Set RMI port. 
 if [ ! -z "$REPLICATOR_RMI_PORT" ]; then

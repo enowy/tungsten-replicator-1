@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLSocket;
@@ -191,7 +192,7 @@ public class SecurityHelper
 
     public static AuthenticationInfo loadAuthenticationInformation(
             TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         return loadAuthenticationInformation(null, true,
                 tungstenApplicationName);
@@ -217,7 +218,7 @@ public class SecurityHelper
     public static AuthenticationInfo loadAuthenticationInformation(
             String propertiesFileLocation, boolean doConsistencyChecks,
             TUNGSTEN_APPLICATION_NAME tungstenApplicationName)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         // Load properties and perform substitution
         TungstenProperties securityProperties = null;
@@ -258,7 +259,7 @@ public class SecurityHelper
             Integer incrementStepWaitOnFailedLogin = securityProperties.getInt(
                     SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP,
                     SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP_DEFAULT,
-                            false);
+                    false);
 
             // Always use custom Tungsten Authentication Realm
             // CONT-1348
@@ -351,22 +352,22 @@ public class SecurityHelper
                     .getString(security_truststore_location);
             truststoreLocation = (truststoreLocation != null
                     && StringUtils.isNotBlank(truststoreLocation))
-                    ? truststoreLocation
-                    : null;
+                            ? truststoreLocation
+                            : null;
             String truststorePassword = securityProperties
                     .getString(security_truststore_password);
             String clientKeystoreLocation = securityProperties.getString(
                     SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_LOCATION);
             clientKeystoreLocation = (clientKeystoreLocation != null
                     && StringUtils.isNotBlank(clientKeystoreLocation))
-                    ? clientKeystoreLocation
-                    : null;
+                            ? clientKeystoreLocation
+                            : null;
             String clientKeystorePassword = securityProperties.getString(
                     SecurityConf.HTTP_REST_API_CLIENT_KEYSTORE_PASSWORD);
             clientKeystorePassword = (clientKeystorePassword != null
                     && StringUtils.isNotBlank(clientKeystorePassword))
-                    ? clientKeystorePassword
-                    : null;
+                            ? clientKeystorePassword
+                            : null;
 
             String userName = securityProperties
                     .getString(SecurityConf.SECURITY_JMX_USERNAME, null, false);
@@ -418,7 +419,7 @@ public class SecurityHelper
             if (connector_alias_client_to_connector != null)
                 authInfo.getMapKeystoreAliasesForTungstenApplication().put(
                         SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CLIENT_TO_CONNECTOR,
-                                connector_alias_client_to_connector);
+                        connector_alias_client_to_connector);
             if (connector_alias_connector_to_db != null)
                 authInfo.getMapKeystoreAliasesForTungstenApplication().put(
                         SecurityConf.KEYSTORE_ALIAS_CONNECTOR_CONNECTOR_TO_DB,
@@ -444,17 +445,16 @@ public class SecurityHelper
     /**
      * Set system properties required for SSL and password management. Since
      * these settings are critical to correct operation we optionally log them.
-     * 
      * Configured cipher suites and protocols may only match partially with the
-     * ciphers and protocols supported by the SSL implementation being used.
-     * In system properties we only store ciphers and protocols which are both
+     * ciphers and protocols supported by the SSL implementation being used. In
+     * system properties we only store ciphers and protocols which are both
      * configured and supported.
      * 
      * @param authInfo Populated authentication information
      * @param verbose If true, log information
-     * @throws ConfigurationException 
-     * @throws GeneralSecurityException 
-     * @throws IOException 
+     * @throws ConfigurationException
+     * @throws GeneralSecurityException
+     * @throws IOException
      */
     private static void setSecurityProperties(AuthenticationInfo authInfo,
             boolean verbose) throws ConfigurationException
@@ -478,7 +478,7 @@ public class SecurityHelper
             SSLSocketFactory sf;
             try
             {
-                sf = (SSLSocketFactory)SSLSocketFactory.getDefault();
+                sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
             }
             catch (Exception e)
             {
@@ -487,16 +487,17 @@ public class SecurityHelper
                         + "underlying SSL implementation. " + e.getMessage());
             }
             /**
-             *  Find out which protocols and cipher suites are both specified in
-             *  cluster configuration and supported by the current, underlying 
-             *  SSL implementation. Set common protocols and cipher suites to
-             *  corresponding System properties which will be the only access
-             *  point to encryption information hereafter. 
+             * Find out which protocols and cipher suites are both specified in
+             * cluster configuration and supported by the current, underlying
+             * SSL implementation. Set common protocols and cipher suites to
+             * corresponding System properties which will be the only access
+             * point to encryption information hereafter.
              */
             setProtocolsToSystemProperties(authInfo, sf, verbose);
             setCipherSuitesToSystemProperties(authInfo, sf, verbose);
 
-            // There must be at least one protocol and cipher suite if encryption is used
+            // There must be at least one protocol and cipher suite if
+            // encryption is used
             if (SecurityHelper.getProtocols() == null)
             {
                 throw new ConfigurationException("Unable to find suitable "
@@ -770,7 +771,7 @@ public class SecurityHelper
      */
     public static List<String> getAliasesforKeystore(String keystoreLocation,
             String keystorePassword) throws KeyStoreException,
-            NoSuchAlgorithmException, CertificateException, IOException
+                    NoSuchAlgorithmException, CertificateException, IOException
     {
         Enumeration<String> enumAliases = null;
 
@@ -811,7 +812,7 @@ public class SecurityHelper
      */
     public static void checkAccessAndAliasesForKeystore(String storeLocation,
             String storePassword, boolean shouldNotBeEmpty)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         final String errorMessage = MessageFormat.format(
                 "Could not access or retrieve aliases from {0}", storeLocation);
@@ -824,7 +825,7 @@ public class SecurityHelper
             {
                 throw new ConfigurationException(MessageFormat.format(
                         "Keystore / Truststore does not contain any aliases: {0}",
-                                        storeLocation));
+                        storeLocation));
             }
         }
         catch (KeyStoreException e)
@@ -893,30 +894,34 @@ public class SecurityHelper
 
     public static void setCiphersAndProtocolsToSSLSocket(SSLSocket sslSocket,
             String[] enabledCiphers, String[] enabledProtocols)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         if (enabledCiphers != null && enabledCiphers.length > 0)
         {
             if (SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedCipherSuites(), enabledCiphers).length == 0)
+                    sslSocket.getSupportedCipherSuites(),
+                    enabledCiphers).length == 0)
             {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) cipher suites.");
+                throw new ConfigurationException(
+                        "SSLSocket doesn't support any "
+                                + "of the enabled (configured) cipher suites.");
             }
 
             // Enable ciphers which are both supported by socket service and
             // configured by user
             sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedCipherSuites(), enabledCiphers));            
+                    sslSocket.getSupportedCipherSuites(), enabledCiphers));
         }
-               
+
         if (enabledProtocols != null && enabledProtocols.length > 0)
         {
             if (SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedProtocols(), enabledProtocols).length == 0)
+                    sslSocket.getSupportedProtocols(),
+                    enabledProtocols).length == 0)
             {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) protocols.");
+                throw new ConfigurationException(
+                        "SSLSocket doesn't support any "
+                                + "of the enabled (configured) protocols.");
             }
             // Enable protocols which are both supported by socket and
             // configured by user.
@@ -927,7 +932,7 @@ public class SecurityHelper
 
     public static void setCiphersAndProtocolsToSSLSocket2(SSLSocket sslSocket,
             String[] enabledCiphers, String[] enabledProtocols)
-            throws ConfigurationException
+                    throws ConfigurationException
     {
         // Check that ciphers and protocols lists aren't empty
         if (enabledCiphers == null || enabledCiphers.length == 0)
@@ -943,8 +948,8 @@ public class SecurityHelper
 
         // Set cipher suites and protocols
         if (SecurityHelper.getMatchingStrings(
-            sslSocket.getSupportedCipherSuites(),
-            enabledCiphers).length == 0)
+                sslSocket.getSupportedCipherSuites(),
+                enabledCiphers).length == 0)
         {
             throw new ConfigurationException("SSLSocket doesn't support any "
                     + "of the enabled (configured) cipher suites.");
@@ -952,52 +957,49 @@ public class SecurityHelper
         // Enable ciphers which are both supported by socket service and
         // configured by user
         sslSocket.setEnabledCipherSuites(SecurityHelper.getMatchingStrings(
-                sslSocket.getSupportedCipherSuites(), enabledCiphers));            
-           
+                sslSocket.getSupportedCipherSuites(), enabledCiphers));
+
         if (SecurityHelper.getMatchingStrings(sslSocket.getSupportedProtocols(),
                 enabledProtocols).length == 0)
-            {
-                throw new ConfigurationException("SSLSocket doesn't support any "
-                        + "of the enabled (configured) protocols.");
-            }
-
-            // Enable protocols which are both supported by socket and
-            // configured by user.
-            sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
-                    sslSocket.getSupportedProtocols(), enabledProtocols));
+        {
+            throw new ConfigurationException("SSLSocket doesn't support any "
+                    + "of the enabled (configured) protocols.");
         }
 
-    /**
-     *  Find out which protocols are both configured and supported.
-     *  Set common ones to System properties from where 
-     *  (and only there) they are accessed.
+        // Enable protocols which are both supported by socket and
+        // configured by user.
+        sslSocket.setEnabledProtocols(SecurityHelper.getMatchingStrings(
+                sslSocket.getSupportedProtocols(), enabledProtocols));
+    }
 
+    /**
+     * Find out which protocols are both configured and supported. Set common
+     * ones to System properties from where (and only there) they are accessed.
+     * 
      * @param sf
      * @param verbose
      */
     private static void setProtocolsToSystemProperties(
-            AuthenticationInfo authInfo, 
-            SSLSocketFactory sf, 
-            boolean verbose)
+            AuthenticationInfo authInfo, SSLSocketFactory sf, boolean verbose)
     {
         String[] supportedProtocolsArray;
-        String [] configuredProtocolsArray;
-        String [] possibleProtocolsArray;
+        String[] configuredProtocolsArray;
+        String[] possibleProtocolsArray;
         SSLSocket ssl;
-        
+
         try
-        { 
+        {
             ssl = ((SSLSocket) sf.createSocket());
         }
         catch (IOException e)
         {
             logger.error("Failed to create SSLSocket. " + e.getMessage());
-            throw new RuntimeException("Unable to find out"
-                    + "the protocols supported by current "
-                    + "underlying SSL implementation.");
+            throw new RuntimeException(
+                    "Unable to find out" + "the protocols supported by current "
+                            + "underlying SSL implementation.");
         }
         supportedProtocolsArray = ssl.getSupportedProtocols();
-        
+
         if (supportedProtocolsArray.length == 0)
         {
             throw new RuntimeException("Reading supported protocols from "
@@ -1008,11 +1010,12 @@ public class SecurityHelper
         if (!authInfo.getEnabledProtocols().isEmpty())
         {
             // There are protocols specified in the configuration
-            configuredProtocolsArray = authInfo.getEnabledProtocols().toArray(new String [0]);
+            configuredProtocolsArray = authInfo.getEnabledProtocols()
+                    .toArray(new String[0]);
             // Find common protocols from configured and from supported lists
-            possibleProtocolsArray = SecurityHelper
-                    .getMatchingStrings(supportedProtocolsArray, configuredProtocolsArray);
-            
+            possibleProtocolsArray = SecurityHelper.getMatchingStrings(
+                    supportedProtocolsArray, configuredProtocolsArray);
+
             if (possibleProtocolsArray.length == 0)
             {
                 // We don't have any protocols in common. This is not good!
@@ -1020,12 +1023,13 @@ public class SecurityHelper
                         + "don't have anything in common. Encryption is not "
                         + "possible.";
                 StringBuffer sb = new StringBuffer(message).append("\n");
-                sb.append(String.format("SSL implementation supports these "
-                        + "cipher suites: %s\n",
+                sb.append(String.format(
+                        "SSL implementation supports these "
+                                + "cipher suites: %s\n",
                         StringUtils.join(supportedProtocolsArray, ",")));
                 sb.append(String.format(
                         "These were the configured protocols : %s\n",
-                                StringUtils.join(configuredProtocolsArray, ",")));
+                        StringUtils.join(configuredProtocolsArray, ",")));
                 logger.error(sb.toString());
                 throw new RuntimeException(message);
 
@@ -1043,27 +1047,25 @@ public class SecurityHelper
         // Set System properties for protocols
         setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLPROTOCOLS,
                 StringUtils.join(possibleProtocolsArray, ","), verbose);
-        setSystemProperty("https.protocols", 
+        setSystemProperty("https.protocols",
                 StringUtils.join(possibleProtocolsArray, "\n"), verbose);
     }
 
     /**
-     *  Find out which cipher suites are both configured and supported.
-     *  Set selected ones to System properties from where 
-     *  (and only there) they are accessed.
+     * Find out which cipher suites are both configured and supported. Set
+     * selected ones to System properties from where (and only there) they are
+     * accessed.
      * 
      * @param authInfo
      * @param sf
      * @param verbose
      */
     private static void setCipherSuitesToSystemProperties(
-            AuthenticationInfo authInfo,
-            SSLSocketFactory sf,
-            boolean verbose)
+            AuthenticationInfo authInfo, SSLSocketFactory sf, boolean verbose)
     {
-        String [] supportedCipherSuitesArray = sf.getDefaultCipherSuites();
-        String [] configuredCipherSuitesArray;
-        String [] possibleCipherSuitesArray;
+        String[] supportedCipherSuitesArray = sf.getDefaultCipherSuites();
+        String[] configuredCipherSuitesArray;
+        String[] possibleCipherSuitesArray;
 
         if (!authInfo.getEnabledCipherSuites().isEmpty())
         {
@@ -1073,17 +1075,18 @@ public class SecurityHelper
                     .toArray(new String[0]);
             possibleCipherSuitesArray = SecurityHelper.getMatchingStrings(
                     supportedCipherSuitesArray, configuredCipherSuitesArray);
-            
+
             if (possibleCipherSuitesArray.length == 0)
             {
                 // We don't have any cipher suites in common. This is not good!
                 String message = "Unable to find approved ciphers in the supported cipher suites on this JVM";
                 StringBuffer sb = new StringBuffer(message).append("\n");
-                sb.append(String.format("SSL implementation supported cipher suites: %s\n",
+                sb.append(String.format(
+                        "SSL implementation supported cipher suites: %s\n",
                         StringUtils.join(supportedCipherSuitesArray)));
                 sb.append(String.format(
                         "Approved cipher suites from security.properties: %s\n",
-                                StringUtils.join(configuredCipherSuitesArray)));
+                        StringUtils.join(configuredCipherSuitesArray)));
                 logger.error(sb.toString());
                 throw new RuntimeException(message);
             }
@@ -1091,8 +1094,8 @@ public class SecurityHelper
         else
         {
             /**
-             * Cipher suites aren't specified in configuration. Read 
-             * default cipher suites and use them.
+             * Cipher suites aren't specified in configuration. Read default
+             * cipher suites and use them.
              */
             possibleCipherSuitesArray = sf.getDefaultCipherSuites();
         }
@@ -1100,10 +1103,10 @@ public class SecurityHelper
         setSystemProperty(SecurityConf.SYSTEM_PROP_CLIENT_SSLCIPHERS,
                 StringUtils.join(possibleCipherSuitesArray, ","), verbose);
     }
-    
+
     /**
-     * Print whether JMX connections are encrypted and if so, used cipher
-     * suites and protocols
+     * Print whether JMX connections are encrypted and if so, used cipher suites
+     * and protocols
      * 
      * @param authInfo
      * @return
@@ -1137,11 +1140,11 @@ public class SecurityHelper
         }
         else
         {
-            sb.append("No password authentication\n");                        
+            sb.append("No password authentication\n");
         }
         return sb.toString();
     }
-    
+
     /**
      * Check that KeyStore and the keys inside have a common password.
      * 
@@ -1153,8 +1156,8 @@ public class SecurityHelper
      * @throws IOException
      */
     public static void checkKeyStorePasswords(String keystoreLocation,
-            KEYSTORE_TYPE keystoreType, String password,
-            String aliasToFind, String keyPassword) throws ConfigurationException,
+            KEYSTORE_TYPE keystoreType, String password, String aliasToFind,
+            String keyPassword) throws ConfigurationException,
                     GeneralSecurityException, IOException
     {
         String ksLocation;
@@ -1163,8 +1166,8 @@ public class SecurityHelper
         {
             ksLocation = keystoreLocation;
         }
-        else if (SecurityHelper.getKeyStoreLocation() != null 
-                        && !SecurityHelper.getKeyStoreLocation().isEmpty())
+        else if (SecurityHelper.getKeyStoreLocation() != null
+                && !SecurityHelper.getKeyStoreLocation().isEmpty())
         {
             ksLocation = SecurityHelper.getKeyStoreLocation();
         }
@@ -1198,19 +1201,19 @@ public class SecurityHelper
             String alias = (String) enumeration.nextElement();
             if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
                 aliasToFindIsFound = true;
-        
-        try
-        {
+
+            try
+            {
                 logger.debug(MessageFormat.format("Trying alias:{0}", alias));
                 Key key = ks.getKey(alias, keyPassword.toCharArray());
-        }
+            }
             catch (Exception e)
-        {
+            {
                 if (aliasToFind != null && alias.equalsIgnoreCase(aliasToFind))
                     listKeysWithWrongPassword.add(alias);
-                else if (aliasToFind==null)
+                else if (aliasToFind == null)
                     listKeysWithWrongPassword.add(alias);
-        }
+            }
 
         }
 
@@ -1228,6 +1231,113 @@ public class SecurityHelper
                     strListKeysWithWrongPassword));
         }
 
+    }
+
+    /**
+     * Does a random sleep on a failed login attempt. Sleep duration depends on
+     * parameters defined in security.properties
+     * 
+     * @param authenticationInfo
+     * @throws ConfigurationException
+     */
+    public static void doRandomSleepOnFailedLoginAttempt(
+            AuthenticationInfo authenticationInfo)
+    {
+        try
+        {
+            // Load security properties
+            if (authenticationInfo == null)
+            {
+                    authenticationInfo = SecurityHelper
+                            .loadAuthenticationInformation();   
+            }
+            // Generate a random number between
+            // security.randomWaitOnFailedLogin.min and
+            // security.randomWaitOnFailedLogin.max
+            int min = authenticationInfo.getMinWaitOnFailedLogin();
+            int max = authenticationInfo.getMaxWaitOnFailedLogin();
+            int increment = authenticationInfo
+                    .getIncrementStepWaitOnFailedLogin();
+            int randomNum = SecurityHelper.getRandomInt(min, max, increment);
+
+            // Sleep a random number of seconds = between min and max
+            logger.info(MessageFormat.format(
+                    "Invalid credentials. Sleeping (ms): {0,number,#}",
+                    randomNum));
+            if (randomNum > 0)
+                Thread.sleep(randomNum);
+
+        }
+        catch (InterruptedException e)
+        {
+            logger.error(MessageFormat.format("Could not sleep !: {0}", e));
+        }
+        catch (ConfigurationException e)
+        {
+            logger.error(MessageFormat.format(
+                    "Could not get security information. Will use default values: {0}",
+                    e));
+        }
+    }
+
+    /**
+     * Returns a psuedo-random number between min and max, inclusive. The
+     * difference between min and max can be at most
+     * <code>Integer.MAX_VALUE - 1</code>.
+     *
+     * @param min Minimim value
+     * @param max Maximim value. Must be greater than min.
+     * @return Integer between min and max, inclusive.
+     * @see java.util.Random#nextInt(int)
+     */
+    public static int getRandomInt(int min, int max, int incrementStep)
+    {
+        // Checks and validation
+        if (min < 0)
+            min = 0;
+        if (max < 0)
+            max = 0;
+        if (max < min)
+        {
+            // Invert max and min
+            logger.warn(MessageFormat.format(
+                    "{0} and {1} are inverted. You must specify values so that min <= max",
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
+            int tmpMin = max;
+            min = max;
+            max = tmpMin;
+        }
+        if (incrementStep <= 0)
+            incrementStep = 1;
+        if (incrementStep >= max - min && (max - min) > 0)
+        {
+            logger.warn(MessageFormat.format(
+                    "{0} is not coherent. {0} >= {1}-{2}",
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_INCREMENT_STEP,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MIN,
+                    SecurityConf.SECURITY_RANDOM_WAIT_ON_FAILED_LOGIN_MAX));
+            incrementStep = 1;
+        }
+        if (max - min == 0)
+            return max;
+
+        // Usually this can be a field rather than a method variable
+        Random rand = new Random();
+
+        // nextInt is normally exclusive of the top value,
+        // so add 1 to make it inclusive
+        // int randomNum = rand.nextInt((max - min) + 1) + min;
+
+        Integer range = max - min;
+        int maxMultiplier = Double.valueOf(Math.floor(range / incrementStep))
+                .intValue();
+        int randomMultiplier = rand.nextInt(maxMultiplier);
+
+        int randomNumberWithIncrement = min
+                + (randomMultiplier * incrementStep);
+
+        return randomNumberWithIncrement;
     }
 
     public static void testSetSecurityProperties(AuthenticationInfo authInfo,

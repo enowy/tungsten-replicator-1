@@ -2119,6 +2119,15 @@ class HostServiceControlType < ConfigurePrompt
       systemctl = nil
     end
     
+    if systemctl == nil
+      # Catch instances where `systemctl` is not in $PATH
+      begin
+        systemctl = cmd_result("ls /usr/bin/systemctl")
+      rescue CommandError
+        systemctl = nil
+      end
+    end
+    
     begin
       service = which("service")
     rescue CommandError

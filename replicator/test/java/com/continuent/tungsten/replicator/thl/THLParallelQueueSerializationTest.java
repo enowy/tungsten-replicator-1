@@ -1,6 +1,6 @@
 /**
  * VMware Continuent Tungsten Replicator
- * Copyright (C) 2015 VMware, Inc. All rights reserved.
+ * Copyright (C) 2015,2016 VMware, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import com.continuent.tungsten.replicator.conf.ReplicatorMonitor;
 import com.continuent.tungsten.replicator.conf.ReplicatorRuntime;
 import com.continuent.tungsten.replicator.event.ReplDBMSEvent;
 import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
+import com.continuent.tungsten.replicator.event.ReplOptionParams;
 import com.continuent.tungsten.replicator.management.MockEventDispatcher;
 import com.continuent.tungsten.replicator.management.MockOpenReplicatorContext;
 import com.continuent.tungsten.replicator.pipeline.Pipeline;
@@ -59,15 +60,16 @@ import com.continuent.tungsten.replicator.thl.log.LogConnection;
  */
 public class THLParallelQueueSerializationTest
 {
-    private static Logger             logger = Logger.getLogger(THLParallelQueueSerializationTest.class);
+    private static Logger             logger = Logger
+            .getLogger(THLParallelQueueSerializationTest.class);
     private static TungstenProperties testProperties;
 
     // Each test uses this pipeline and runtime.
-    private Pipeline                  pipeline;
-    private ReplicatorRuntime         runtime;
+    private Pipeline          pipeline;
+    private ReplicatorRuntime runtime;
 
     // Test helper instance.
-    private THLParallelQueueHelper    helper = new THLParallelQueueHelper();
+    private THLParallelQueueHelper helper = new THLParallelQueueHelper();
 
     /** Define a commit action to introduce delay into commit operations. */
     class RandomCommitAction implements CommitAction
@@ -107,7 +109,8 @@ public class THLParallelQueueSerializationTest
         if (testPropertiesName == null)
         {
             testPropertiesName = "test.properties";
-            logger.info("Setting test.properties file name to default: test.properties");
+            logger.info(
+                    "Setting test.properties file name to default: test.properties");
         }
 
         // Load properties file.
@@ -254,7 +257,8 @@ public class THLParallelQueueSerializationTest
         // 1 as we just want to confirm that serialization counts are
         // increasing.
         TungstenProperties conf = helper.generateTHLParallelPipeline(
-                "testMultiChannelSerialization", channelCount, 50, 1000, false);
+                "testMultiChannelStratification", channelCount, 50, 1000,
+                false);
         runtime = new ReplicatorRuntime(conf, new MockOpenReplicatorContext(),
                 ReplicatorMonitor.getInstance());
         runtime.configure();
@@ -307,8 +311,8 @@ public class THLParallelQueueSerializationTest
         committed.get(30, TimeUnit.SECONDS);
 
         int actualSerialized = getSerializationCount(tpq);
-        Assert.assertEquals("Checking expected serialization count",
-                serialized, actualSerialized);
+        Assert.assertEquals("Checking expected serialization count", serialized,
+                actualSerialized);
 
         // Read through the events in the serialized queue and ensure they
         // are properly stratified. Basically the serialized #UNKNOWN
@@ -331,7 +335,8 @@ public class THLParallelQueueSerializationTest
                 {
                     Assert.assertEquals(
                             "Checking preceding events for serialized seqno="
-                                    + seqno, channelCount - 1, dbHash.size());
+                                    + seqno,
+                            channelCount - 1, dbHash.size());
                 }
 
                 // Prepare for the next round of unordered updates on shards
@@ -357,6 +362,146 @@ public class THLParallelQueueSerializationTest
                 }
             }
         }
+    }
+
+    /**
+     * Verify that transactions marked unsafe for block commit correctly
+     * serialize across threads.
+     */
+    @Test
+    public void testLaggingUnsafeForBlockCommit() throws Exception
+    {
+        logger.info("##### testLaggingUnsafeForBlockCommit #####");
+        int maxEvents = 100;
+        int channelCount = 5;
+
+        // Set up and prepare pipeline. We set the channel count to
+        // 1 as we just want to confirm that serialization counts are
+        // increasing.
+        TungstenProperties conf = helper.generateTHLParallelPipeline(
+                "testLaggingUnsafeForBlockCommit", channelCount, 50, 1000,
+                false);
+        runtime = new ReplicatorRuntime(conf, new MockOpenReplicatorContext(),
+                ReplicatorMonitor.getInstance());
+        runtime.configure();
+        runtime.prepare();
+        pipeline = runtime.getPipeline();
+        pipeline.start(new MockEventDispatcher());
+
+        // Fetch references to stores.
+        THL thl = (THL) pipeline.getStore("thl");
+        THLParallelQueue tpq = (THLParallelQueue) pipeline
+                .getStore("thl-queue");
+        InMemoryTransactionalQueue mq = (InMemoryTransactionalQueue) pipeline
+                .getStore("multi-queue");
+
+        // Add a commit action to randomize the time to commit. This
+        // will stimulate race conditions if there is bad coordination
+        // between serialized and non-serialized events.
+        RandomCommitAction ca = new RandomCommitAction(200);
+        mq.setCommitAction(ca);
+
+        // Write events where every channelCount events is #UNKNOWN, thereby
+        // forcing serialization.
+        int serialized = 0;
+        LogConnection conn = thl.connect(false);
+        for (int i = 0; i < maxEvents; i++)
+        {
+            // Generate the event.
+            String shardId;
+            int id = (i + 1) % channelCount;
+            if (id == 0)
+            {
+                shardId = "#UNKNOWN";
+                serialized++;
+            }
+            else
+            {
+                shardId = "db" + id;
+            }
+
+            // Write same to the log.
+            ReplDBMSEvent rde = helper.createEvent(i, shardId);
+            if ("#UNKNOWN".equals(shardId))
+            {
+                // Do nothing
+            }
+            else
+            {
+                // Mark normal shards as unsafe for block commit.
+                rde.getDBMSEvent().setMetaDataOption(
+                        ReplOptionParams.UNSAFE_FOR_BLOCK_COMMIT, "");
+            }
+            THLEvent thlEvent = new THLEvent(rde.getSourceId(), rde);
+            conn.store(thlEvent, false);
+            conn.commit();
+        }
+        thl.disconnect(conn);
+
+        // Wait for the last event to commit and then ensure we
+        // serialized the expected number of times.
+        Future<ReplDBMSHeader> committed = pipeline
+                .watchForCommittedSequenceNumber(maxEvents - 1, false);
+        committed.get(30, TimeUnit.SECONDS);
+
+        int actualSerialized = getSerializationCount(tpq);
+        Assert.assertEquals("Checking expected serialization count", serialized,
+                actualSerialized);
+
+        // Read through the events in the serialized queue and ensure they
+        // are properly stratified. Basically the serialized #UNKNOWN
+        // shards must be in total order, between them the db0 to dbN shards
+        // can come in any order.
+        Map<String, Long> dbHash = new HashMap<String, Long>();
+        long lastSerializedSeqno = -1;
+        for (int i = 0; i < maxEvents; i++)
+        {
+            ReplDBMSEvent rde2 = mq.get();
+            long seqno = rde2.getSeqno();
+            String shardId = rde2.getShardId();
+            String unsafe = rde2.getDBMSEvent().getMetadataOptionValue(
+                    ReplOptionParams.UNSAFE_FOR_BLOCK_COMMIT);
+
+            logger.info("Read event: seqno=" + seqno + " shardId=" + shardId
+                    + " unsafe-for-block-commit=" + (unsafe != null));
+            if (shardId.equals("#UNKNOWN"))
+            {
+                // If we are on a serialized shard there must be a transaction
+                // for every other channel in the hash map unless we are on the
+                // first iteration.
+                if (i > 0)
+                {
+                    Assert.assertEquals(
+                            "Checking preceding events for serialized seqno="
+                                    + seqno,
+                            channelCount - 1, dbHash.size());
+                }
+
+                // Prepare for the next round of unordered updates on shards
+                lastSerializedSeqno = seqno;
+                dbHash.clear();
+            }
+            else
+            {
+                // Must be an unserialized shard. Ensure it is within
+                // channelCount -1 positions of the last serialized seqno.
+                if (seqno <= lastSerializedSeqno
+                        || seqno > lastSerializedSeqno + channelCount - 1)
+                {
+                    throw new Exception(
+                            "Serialization violation; non-serialized event "
+                                    + "not within range of serialized event: lastSerializedSeqno="
+                                    + lastSerializedSeqno
+                                    + " non-serialized event seqno=" + seqno);
+                }
+                else
+                {
+                    dbHash.put(rde2.getShardId(), seqno);
+                }
+            }
+        }
+        
+        logger.info("Completed!");
     }
 
     /**
@@ -493,8 +638,8 @@ public class THLParallelQueueSerializationTest
 
         // Check the serialization count.
         int actualSerialized = getSerializationCount(tpq);
-        Assert.assertEquals("Checking expected serialization count",
-                serialized, actualSerialized);
+        Assert.assertEquals("Checking expected serialization count", serialized,
+                actualSerialized);
     }
 
     /**
@@ -553,8 +698,9 @@ public class THLParallelQueueSerializationTest
                 // #UNKNOWN events should serialize
                 serialized++;
             }
-            else if ("".equals(shardId)
-                    && (lastShardId == null || !lastShardId.equals(shardId)))
+            else
+                if ("".equals(shardId) && (lastShardId == null
+                        || !lastShardId.equals(shardId)))
             {
                 // Empty strings should always serialize.
                 serialized++;
@@ -578,8 +724,8 @@ public class THLParallelQueueSerializationTest
 
         // Read events and get serialization.
         int actualSerialized = getSerializationCount(tpq);
-        Assert.assertEquals("Checking expected serialization count",
-                serialized, actualSerialized);
+        Assert.assertEquals("Checking expected serialization count", serialized,
+                actualSerialized);
 
         // Read through the events and ensure all are present.
         int count = 0;
@@ -591,8 +737,8 @@ public class THLParallelQueueSerializationTest
             String shardId = rde2.getShardId();
             if (logger.isDebugEnabled())
             {
-                logger.debug("Read event: seqno=" + seqno + " shardId="
-                        + shardId);
+                logger.debug(
+                        "Read event: seqno=" + seqno + " shardId=" + shardId);
             }
             count++;
 
@@ -606,8 +752,9 @@ public class THLParallelQueueSerializationTest
             else
             {
                 // This should not be unknown.
-                Assert.assertFalse("Did not expect an unknown event: seqno="
-                        + seqno + " shardId=" + shardId,
+                Assert.assertFalse(
+                        "Did not expect an unknown event: seqno=" + seqno
+                                + " shardId=" + shardId,
                         "#UNKNOWN".equals(shardId));
             }
         }

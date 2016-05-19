@@ -309,6 +309,18 @@ public class MySQLDatabase extends AbstractDatabase
         }
     }
 
+    
+    /**
+     * {@inheritDoc}
+     * @see com.continuent.tungsten.replicator.database.AbstractDatabase#close()
+     */
+    @Override
+    public void close()
+    {
+        super.close();
+        this.sessionLevelLoggingSuppressed = false;
+    }
+
     /**
      * This should not be called for MySQL but we have a version of it anyway
      * because it's better not to have broken code. This will default to the

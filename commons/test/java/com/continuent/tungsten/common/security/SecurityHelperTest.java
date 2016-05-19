@@ -888,40 +888,40 @@ public class SecurityHelperTest extends TestCase
     public void testRealmJMXAuthenticatorRandomNumberGenerator()
     {
         // 0 value -> 0
-        int randomNumber = RealmJMXAuthenticator.getRandomInt(0, 0, 0);
+        int randomNumber = SecurityHelper.getRandomInt(0, 0, 0);
         assertTrue(randomNumber == 0);
 
         // negative values -> 0
-        randomNumber = RealmJMXAuthenticator.getRandomInt(-1, -10, 1);
+        randomNumber = SecurityHelper.getRandomInt(-1, -10, 1);
         assertTrue(randomNumber == 0);
 
         // One negative value -> 0 and other value
-        randomNumber = RealmJMXAuthenticator.getRandomInt(-10, 2, 1);
+        randomNumber = SecurityHelper.getRandomInt(-10, 2, 1);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 randomNumber >= 0 && randomNumber <= 2);
 
         // inverted min and max -> revert values
-        randomNumber = RealmJMXAuthenticator.getRandomInt(5, 2, 1);
+        randomNumber = SecurityHelper.getRandomInt(5, 2, 1);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 randomNumber <= 5 && randomNumber >= 2);
 
         // steps of 100
-        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 100);
+        randomNumber = SecurityHelper.getRandomInt(500, 3000, 100);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 (randomNumber - 500) % 100 == 0);
 
         // steps of 15
-        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 15);
+        randomNumber = SecurityHelper.getRandomInt(500, 3000, 15);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 (randomNumber - 500) % 15 == 0);
 
         // step of 0 -> step of 1
-        randomNumber = RealmJMXAuthenticator.getRandomInt(500, 3000, 0);
+        randomNumber = SecurityHelper.getRandomInt(500, 3000, 0);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 randomNumber >= 500 && randomNumber <= 3000);
 
         // step > max-min
-        randomNumber = RealmJMXAuthenticator.getRandomInt(0, 10, 11);
+        randomNumber = SecurityHelper.getRandomInt(0, 10, 11);
         assertTrue(MessageFormat.format("randomNumber={0}", randomNumber),
                 randomNumber >= 0 && randomNumber <= 10);
 

@@ -546,8 +546,8 @@ public class JdbcApplier implements RawApplier
 
     protected int bindColumnValues(PreparedStatement prepStatement,
             ArrayList<OneRowChange.ColumnVal> values, int startBindLoc,
-            ArrayList<OneRowChange.ColumnSpec> specs, boolean skipNulls)
-                    throws SQLException
+            ArrayList<OneRowChange.ColumnSpec> specs, boolean skipNulls,
+            String sourceDbmsType) throws SQLException
     {
         int bindLoc = startBindLoc; /*
                                      * prepared stmt variable index starts from
@@ -564,7 +564,7 @@ public class JdbcApplier implements RawApplier
                 if (conn.nullsBoundDifferently(specs.get(idx)))
                     continue;
             }
-            setObject(prepStatement, bindLoc, value, specs.get(idx));
+            setObject(prepStatement, bindLoc, value, specs.get(idx), sourceDbmsType);
 
             bindLoc += 1;
         }
@@ -572,7 +572,7 @@ public class JdbcApplier implements RawApplier
     }
 
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            OneRowChange.ColumnVal value, ColumnSpec columnSpec)
+            OneRowChange.ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType)
                     throws SQLException
     {
         // By default, type is not used. If specific operations have to be done,
@@ -985,7 +985,7 @@ public class JdbcApplier implements RawApplier
         return false;
     }
 
-    protected void applyOneRowChangePrepared(OneRowChange oneRowChange)
+    protected void applyOneRowChangePrepared(OneRowChange oneRowChange, String sourceDbmsType)
             throws ReplicatorException
     {
         PreparedStatement prepStatement = null;
@@ -1038,7 +1038,7 @@ public class JdbcApplier implements RawApplier
                 if (columnValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(prepStatement,
-                            columnValues.get(row), bindLoc, columns, false);
+                            columnValues.get(row), bindLoc, columns, false, sourceDbmsType);
                 }
                 /* bind key values */
                 // Do not try to bind key values, which have been added to make
@@ -1048,7 +1048,7 @@ public class JdbcApplier implements RawApplier
                         && keyValues.size() > 0)
                 {
                     bindLoc = bindColumnValues(prepStatement,
-                            keyValues.get(row), bindLoc, key, true);
+                            keyValues.get(row), bindLoc, key, true, sourceDbmsType);
                 }
 
                 try
@@ -1157,7 +1157,7 @@ public class JdbcApplier implements RawApplier
     {
         try
         {
-            if (getColumnInformationFromDB)
+            if (needsColumnNames(oneRowChange) || getColumnInformationFromDB)
             {
                 int colCount = fillColumnNames(oneRowChange);
                 if (colCount <= 0)
@@ -1171,6 +1171,24 @@ public class JdbcApplier implements RawApplier
         {
             logger.error("column name information could not be retrieved");
         }
+    }
+    
+    private boolean needsColumnNames(OneRowChange oneRowChange)
+    {
+        // If there is column specification, check if the name is
+        // already defined
+        if (oneRowChange.getColumnSpec().size() > 0)
+            return (oneRowChange.getColumnSpec().get(0).getName() == null
+                    || oneRowChange.getColumnSpec().get(0).getName()
+                            .length() == 0);
+
+        // Else check the key specification
+        if (oneRowChange.getKeySpec().size() > 0)
+            return (oneRowChange.getKeySpec().get(0).getName() == null
+                    || oneRowChange.getKeySpec().get(0).getName()
+                            .length() == 0);
+
+        return true;
     }
 
     protected String logFailedRowChangeSQL(String stmt,
@@ -1287,9 +1305,10 @@ public class JdbcApplier implements RawApplier
      * 
      * @param data Row change data, containing changes on one or more tables
      * @param options Metadata options for this transaction fragment
+     * @param sourceDbmsType TODO
      */
     protected void applyRowChangeData(RowChangeData data,
-            List<ReplOption> options) throws ReplicatorException
+            List<ReplOption> options, String sourceDbmsType) throws ReplicatorException
     {
         if (options != null)
         {
@@ -1342,7 +1361,7 @@ public class JdbcApplier implements RawApplier
 
         for (OneRowChange row : data.getRowChanges())
         {
-            applyOneRowChangePrepared(row);
+            applyOneRowChangePrepared(row, sourceDbmsType);
         }
     }
 
@@ -1441,7 +1460,9 @@ public class JdbcApplier implements RawApplier
                     if (dataElem instanceof RowChangeData)
                     {
                         applyRowChangeData((RowChangeData) dataElem,
-                                event.getOptions());
+                                event.getOptions(),
+                                event.getMetadataOptionValue(
+                                        ReplOptionParams.DBMS_TYPE));
                         continue;
                     }
 
@@ -1822,7 +1843,7 @@ public class JdbcApplier implements RawApplier
      * 
      * @throws SQLException if a problem occurs.
      */
-    private void commitTransaction() throws SQLException
+    protected void commitTransaction() throws SQLException
     {
         try
         {
@@ -1847,7 +1868,7 @@ public class JdbcApplier implements RawApplier
      * 
      * @throws SQLException if a problem occurs.
      */
-    private void rollbackTransaction() throws SQLException
+    protected void rollbackTransaction() throws SQLException
     {
         try
         {

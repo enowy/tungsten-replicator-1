@@ -55,6 +55,7 @@ import com.continuent.tungsten.replicator.dbms.RowIdData;
 import com.continuent.tungsten.replicator.dbms.StatementData;
 import com.continuent.tungsten.replicator.event.DBMSEmptyEvent;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.event.ReplOption;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
 import com.continuent.tungsten.replicator.extractor.ExtractorException;
@@ -100,6 +101,7 @@ public class MySQLExtractor implements RawExtractor
     private int                             relayLogRetention         = 3;
     private String                          relayLogDir               = null;
     private int                             serverId                  = 1;
+    private int                             binlogReadTimeout         = 120;
 
     private static long                     binlogPositionMaxLength   = 10;
     BinlogReader                            binlogPosition            = null;
@@ -322,6 +324,22 @@ public class MySQLExtractor implements RawExtractor
         bufferSize = size;
     }
 
+    /**
+     * @return the binlogReadTimeout
+     */
+    public int getBinlogReadTimeout()
+    {
+        return binlogReadTimeout;
+    }
+
+    /**
+     * @param binlogReadTimeout the binlogReadTimeout to set
+     */
+    public void setBinlogReadTimeout(int binlogReadTimeout)
+    {
+        this.binlogReadTimeout = binlogReadTimeout;
+    }
+
     // Reads the next log from the file.
     private LogEvent processFile(BinlogReader position)
             throws ReplicatorException, InterruptedException
@@ -381,7 +399,7 @@ public class MySQLExtractor implements RawExtractor
             // Read from the log.
             LogEvent event = LogEvent.readLogEvent(runtime, position,
                     descriptionEvent, parseStatements, useBytesForStrings,
-                    prefetchSchemaNameLDI);
+                    prefetchSchemaNameLDI, binlogReadTimeout);
 
             if (event instanceof FormatDescriptionLogEvent)
             {
@@ -1334,17 +1352,16 @@ public class MySQLExtractor implements RawExtractor
 
             String binlogFileIndex = eventId.substring(0, colonIndex);
 
-            int binlogOffset;
+            long binlogOffset;
 
             if (semicolonIndex != -1)
             {
-                binlogOffset = Integer.valueOf(eventId.substring(
-                        colonIndex + 1, semicolonIndex));
+                binlogOffset = Long.valueOf(
+                        eventId.substring(colonIndex + 1, semicolonIndex));
             }
             else
             {
-                binlogOffset = Integer.valueOf(eventId
-                        .substring(colonIndex + 1));
+                binlogOffset = Long.valueOf(eventId.substring(colonIndex + 1));
             }
 
             // We tolerate the event ID with or without the binlog prefix.
@@ -1389,6 +1406,9 @@ public class MySQLExtractor implements RawExtractor
         nativeSlaveTakeover = context.nativeSlaveTakeover();
         if (nativeSlaveTakeover)
             logger.info("Native slave takeover is enabled");
+
+        logger.info("Using binlog read timeout of " + binlogReadTimeout
+                + " seconds.");
 
         // Prepare accordingly based on whether we are replicating from a master
         // or MySQL slave relay logs.
@@ -1620,17 +1640,42 @@ public class MySQLExtractor implements RawExtractor
 
     private void checkInnoDBSupport(Database conn) throws ReplicatorException
     {
+        boolean hasInnoDB = true;
         Statement st = null;
         ResultSet rs = null;
         try
         {
+            String sql;
+
             st = conn.createStatement();
-            rs = st.executeQuery("show variables like 'have_innodb'");
-            if (!rs.next()
-                    || rs.getString(2).compareToIgnoreCase("disabled") == 0)
+            sql = "show variables like 'have_innodb'";
+            rs = st.executeQuery(sql);
+            if (rs.next())
             {
-                logger.warn("Warning! InnoDB support does not seem to be activated (check mysql have_innodb variable)");
+                if (rs.getString(2).compareToIgnoreCase("disabled") == 0)
+                {
+                    hasInnoDB = false;
+                }
             }
+            else
+            {
+                rs.close();
+                if (conn.findTable("information_schema", "engines") != null)
+                {
+                    rs = st.executeQuery(
+                            "select IF(SUPPORT, 'DEFAULT', 'YES') as Value  from information_schema.engines where engine='InnoDB'");
+                    if (!(rs.next() && rs.getString("Value").equals("YES")))
+                        hasInnoDB = false;
+                }
+                else
+                    hasInnoDB = false;
+            }
+
+            if (!hasInnoDB)
+                logger.warn(
+                        "Warning! InnoDB support does not seem to be activated or cannot be checked.");
+            else
+                logger.info("InnoDB support seems to be activated");
         }
         catch (SQLException e)
         {
@@ -1934,5 +1979,12 @@ public class MySQLExtractor implements RawExtractor
     public void setPrefetchSchemaNameLDI(boolean prefetchSchemaNameLDI)
     {
         this.prefetchSchemaNameLDI = prefetchSchemaNameLDI;
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 }

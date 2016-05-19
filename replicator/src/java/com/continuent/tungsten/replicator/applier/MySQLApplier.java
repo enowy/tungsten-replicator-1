@@ -277,7 +277,7 @@ public class MySQLApplier extends JdbcApplier
      */
     @Override
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            ColumnVal value, ColumnSpec columnSpec) throws SQLException
+            ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType) throws SQLException
     {
 
         int type = columnSpec.getType();
@@ -338,10 +338,10 @@ public class MySQLApplier extends JdbcApplier
     /**
      * {@inheritDoc}
      * 
-     * @see com.continuent.tungsten.replicator.applier.JdbcApplier#applyOneRowChangePrepared(com.continuent.tungsten.replicator.dbms.OneRowChange)
+     * @see com.continuent.tungsten.replicator.applier.JdbcApplier#applyOneRowChangePrepared(com.continuent.tungsten.replicator.dbms.OneRowChange, String)
      */
     @Override
-    protected void applyOneRowChangePrepared(OneRowChange oneRowChange)
+    protected void applyOneRowChangePrepared(OneRowChange oneRowChange, String sourceDbmsType)
             throws ReplicatorException
     {
         // Optimize events is a binary for now. In future we may do so when
@@ -356,7 +356,7 @@ public class MySQLApplier extends JdbcApplier
                 executePreparedStatement(oneRowChange,
                         prepareOptimizedInsertStatement(oneRowChange),
                         oneRowChange.getColumnSpec(),
-                        oneRowChange.getColumnValues());
+                        oneRowChange.getColumnValues(), sourceDbmsType);
                 return;
             }
             else
@@ -391,7 +391,7 @@ public class MySQLApplier extends JdbcApplier
                             prepareOptimizedDeleteStatement(oneRowChange,
                                     keyName),
                             oneRowChange.getKeySpec(),
-                            oneRowChange.getKeyValues());
+                            oneRowChange.getKeyValues(), sourceDbmsType);
                     return;
                 }
                 else if (logger.isDebugEnabled())
@@ -401,7 +401,7 @@ public class MySQLApplier extends JdbcApplier
                                     + oneRowChange.getTableName());
             }
         // No optimization found, let's run the unoptimized statement form.
-        super.applyOneRowChangePrepared(oneRowChange);
+        super.applyOneRowChangePrepared(oneRowChange, sourceDbmsType);
     }
 
     /**
@@ -479,10 +479,11 @@ public class MySQLApplier extends JdbcApplier
 
     /**
      * Execute a single prepared statement.
+     * @param sourceDbmsType 
      */
     private void executePreparedStatement(OneRowChange oneRowChange,
             StringBuffer stmt, ArrayList<ColumnSpec> spec,
-            ArrayList<ArrayList<ColumnVal>> values) throws ApplierException
+            ArrayList<ArrayList<ColumnVal>> values, String sourceDbmsType) throws ApplierException
     {
         PreparedStatement prepStatement = null;
         try
@@ -497,7 +498,7 @@ public class MySQLApplier extends JdbcApplier
             for (ArrayList<ColumnVal> oneRowValues : values)
             {
                 bindLoc = bindColumnValues(prepStatement, oneRowValues, bindLoc,
-                        spec, false);
+                        spec, false, sourceDbmsType);
             }
 
             try

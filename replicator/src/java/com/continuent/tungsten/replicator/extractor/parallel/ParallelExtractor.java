@@ -36,6 +36,7 @@ import com.continuent.tungsten.replicator.datasource.UniversalDataSource;
 import com.continuent.tungsten.replicator.dbms.StatementData;
 import com.continuent.tungsten.replicator.event.DBMSEmptyEvent;
 import com.continuent.tungsten.replicator.event.DBMSEvent;
+import com.continuent.tungsten.replicator.event.ReplDBMSHeader;
 import com.continuent.tungsten.replicator.event.ReplOptionParams;
 import com.continuent.tungsten.replicator.extractor.RawExtractor;
 import com.continuent.tungsten.replicator.plugin.PluginContext;
@@ -333,5 +334,12 @@ public class ParallelExtractor implements RawExtractor
         {
             this.chunkDefinitionFile = chunkDefinitionFile;
         }
+    }
+
+    @Override
+    public void setLastEvent(ReplDBMSHeader header)
+    {
+        // TODO Auto-generated method stub
+        
     }
 }

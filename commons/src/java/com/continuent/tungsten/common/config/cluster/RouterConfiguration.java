@@ -121,6 +121,8 @@ public class RouterConfiguration extends ClusterConfiguration
     private int               routerGatewayPort                              = Integer
                                                                                      .parseInt(ConfigurationConstants.TR_GW_PORT_DEFAULT);
     private String            c3p0JMXUrl                                     = "service:jmx:rmi:///jndi/rmi://localhost:3100/jmxrmi";
+    /** When disconnected from managers, time to wait before going "on hold" (not accepting new connections but letting current ones finish) */
+    private int               delayBeforeOnHoldIfNoManager                  = ConfigurationConstants.DELAY_BEFORE_ONHOLD_IF_NO_MANAGER_DEFAULT;
     /** When disconnected from managers, time to wait before going offline */
     private int               delayBeforeOfflineIfNoManager                  = ConfigurationConstants.DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_DEFAULT;
     /**
@@ -590,6 +592,16 @@ public class RouterConfiguration extends ClusterConfiguration
         c3p0JMXUrl = url;
     }
 
+    public int getDelayBeforeOnHoldIfNoManager()
+    {
+        return delayBeforeOnHoldIfNoManager;
+    }
+
+    public void setDelayBeforeOnHoldIfNoManager(int delayBeforeOnHoldIfNoManager)
+    {
+        this.delayBeforeOnHoldIfNoManager = delayBeforeOnHoldIfNoManager;
+    }
+
     public int getDelayBeforeOfflineIfNoManager()
     {
         return delayBeforeOfflineIfNoManager;
@@ -704,18 +716,8 @@ public class RouterConfiguration extends ClusterConfiguration
                             / 60000 + "min).");
 
         }
-        if (getDelayBeforeOfflineIfNoManager() <= 0
-                || getDelayBeforeOfflineIfNoManager() > ConfigurationConstants.DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_MAX)
-        {
-            throw new ConfigurationException(
-                    "Detected invalid delayBeforeOfflineIfNoManager of "
-                            + getDelayBeforeOfflineIfNoManager()
-                            + "ms in router.properties. It must be positive and lower than "
-                            + ConfigurationConstants.DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_MAX
-                            + " ("
-                            + ConfigurationConstants.DELAY_BEFORE_OFFLINE_IF_NO_MANAGER_MAX
-                            / 60 + "min).");
-        }
+        // CONT-1485: we no longer put constraints on the delayBeforeOffline
+        
         if (getGatewayConnectTimeoutMs() <= 0
                 || getGatewayConnectTimeoutMs() >= ConfigurationConstants.GATEWAY_CONNECT_TIMEOUT_MS_MAX)
         {

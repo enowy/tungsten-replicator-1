@@ -252,11 +252,11 @@ public class MySQLDrizzleApplier extends MySQLApplier
 
     @Override
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            ColumnVal value, ColumnSpec columnSpec) throws SQLException
+            ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType) throws SQLException
     {
         if (value.getValue() == null)
         {
-            super.setObject(prepStatement, bindLoc, value, columnSpec);
+            super.setObject(prepStatement, bindLoc, value, columnSpec, sourceDbmsType);
         }
         else if (columnSpec.getType() == Types.DOUBLE)
         {
@@ -358,6 +358,6 @@ public class MySQLDrizzleApplier extends MySQLApplier
             prepStatement.setString(bindLoc, hexdump(bytes));
         }
         else
-            super.setObject(prepStatement, bindLoc, value, columnSpec);
+            super.setObject(prepStatement, bindLoc, value, columnSpec, sourceDbmsType);
     }
 }

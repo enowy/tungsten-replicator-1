@@ -831,6 +831,12 @@ public abstract class AbstractDatabase implements Database
             dbConn.setAutoCommit(autoCommit);
     }
 
+    @Override
+    public boolean isAutoCommit() throws SQLException
+    {
+        return dbConn.getAutoCommit();
+    }
+
     /**
      * {@inheritDoc}
      * 

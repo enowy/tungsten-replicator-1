@@ -52,7 +52,7 @@ public class PostgreSQLApplier extends JdbcApplier
      */
     @Override
     protected void setObject(PreparedStatement prepStatement, int bindLoc,
-            ColumnVal value, ColumnSpec columnSpec) throws SQLException
+            ColumnVal value, ColumnSpec columnSpec, String sourceDbmsType) throws SQLException
     {
         if (columnSpec.getType() == Types.BLOB && columnSpec.isBlob())
         {
