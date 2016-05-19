@@ -76,6 +76,7 @@ Tungsten Replicator is supported by an active community.  You can find us in the
 ##9 CONTRIBUTIONS
 
 Active communities contribute code and we're happy to consider yours. To be involved, please email [MC Brown](mailto:mcb@vmware.com)
+For any questions about the CLA process, please refer to our [FAQ](https://cla.vmware.com/faq).
 
 ##10 PROBLEMS
 
