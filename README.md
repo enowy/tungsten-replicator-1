@@ -21,7 +21,7 @@ This software is released under the Apache 2.0 license, a copy of which is locat
 
 To build a replicator, follow the steps shown below to obtain the source and build. 
 
-       git clone https://github.com/vmware/tungsten-replicator
+       git clone https://github.com/continuent/tungsten-replicator
        cd tungsten-replicator/builder
        ./build.sh
 
@@ -38,7 +38,7 @@ Currently there are no builds from the new code available, they will be made ava
 
 ##5 DOCUMENTATION
 
-Documentation for Tungsten Replicator is located [on the VMware website]( http://pubs.vmware.com/continuent/tungsten-replicator-5.0-oss/).
+Documentation for Tungsten Replicator is located [on the Continuent Documentation website](http://docs.continuent.com/tungsten-replicator-5.0-oss/index.html).
 
 ##6 INSTALLATION
 
@@ -75,12 +75,11 @@ Tungsten Replicator is supported by an active community.  You can find us in the
 
 ##9 CONTRIBUTIONS
 
-Active communities contribute code and we're happy to consider yours. To be involved, please email [MC Brown](mailto:mcb@vmware.com)
-For any questions about the CLA process, please refer to our [FAQ](https://cla.vmware.com/faq).
+Active communities contribute code and we're happy to consider yours. To be involved, please email [MC Brown](mailto:mc.brown@continuent.com)
 
 ##10 PROBLEMS
 
 This is open source software. Check the wiki, issues list, and mailing lists to get help.  
 VMware also offers commercial products based on Tungsten Replicator.  See the 
-[VMware Continuent](http://www.vmware.com/products/continuent) 
+[Continuent](http://www.continuent.com/solutions) 
 products page for more information. 
